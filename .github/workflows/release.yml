@@ -1,0 +1,53 @@
+name: Build e Release Windows x64
+
+on:
+  push:
+    branches: [main]
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-windows-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Instalar LLVM
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang lld python3
+      - name: Validar versão
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            TAG="$GITHUB_REF_NAME"
+          else
+            TAG="v8.9.0"
+          fi
+          echo "RELEASE_TAG=$TAG" >> "$GITHUB_ENV"
+          python3 scripts/check_version.py "$TAG"
+      - name: Compilar executável Windows x64
+        run: python3 scripts/build.py
+      - name: Publicar versão estável (somente se ainda não existe)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "Release $RELEASE_TAG já existe. Nada foi substituído."
+            exit 0
+          fi
+          gh release create "$RELEASE_TAG" \
+            dist/Callas_Optimizer_Windows_x64.exe \
+            dist/SHA256SUMS.txt \
+            --target "$GITHUB_SHA" \
+            --title "Callas Optimizer $RELEASE_TAG" \
+            --notes-file CHANGELOG.md \
+            --latest

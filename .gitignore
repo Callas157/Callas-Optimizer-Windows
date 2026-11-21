@@ -1,0 +1,6 @@
+__pycache__/
+*.obj
+scripts/assets.c
+*.tmp
+*.log
+.DS_Store
