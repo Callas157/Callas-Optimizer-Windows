@@ -4,3 +4,4 @@ scripts/assets.c
 *.tmp
 *.log
 .DS_Store
+dist/

@@ -1,13 +1,19 @@
-# Histórico de versões
+# Callas Optimizer Windows — Historico de versoes
 
-## v8.9.0 — Windows Edition com atualização pelo GitHub
+## v8.9.1 — Correcao de confiabilidade do atualizador
 
-- Novo sistema de atualização: verifica releases estáveis ao abrir a interface.
-- Janela de confirmação nativa, sem atualização forçada.
-- Validação SHA-256 com digest publicado pela API oficial do GitHub.
-- Download, backup da versão anterior e reinicialização do aplicativo.
-- Botão **VERIFICAR UPDATE** e opção de atualização no menu lateral.
-- Repositório próprio do Callas Optimizer, com identidade visual para Windows.
-- Mantido o motor BAT com correções da linha **8.8**.
+- O aplicativo permanece aberto durante o download e a verificacao de um update.
+- O download so solicita fechar a interface apos comparar SHA-256, tamanho e formato PE64.
+- A copia de atualizacao e preparada na pasta do executavel antes de fechar a GUI.
+- Erro de download ou falta de permissao cancela a atualizacao sem fechar o aplicativo atual.
+- O processo de atualizacao mantem backup, recuperacao em caso de falha e logs de diagnostico.
+- O status de verificacao passa a ser isolado por processo para reduzir conflitos.
+- A rotina de Releases utiliza VERSION e testes automatizados, sem fixar uma versao antiga.
+- Mantidas as 13 funcoes e a Limpeza Total corrigida da linha 8.8.
 
-**Observação:** Compilação validada em ambiente Linux; execução no Windows 11 e fluxo de update via Release ainda dependem de teste real.
+**Testes:** compilacao Windows x64 e verificacoes estaticas realizadas; instalacao e atualizacao completa ainda exigem teste real em Windows 11.
+
+## v8.9.0 — Interface Windows e atualizador inicial
+
+- Interface grafica Win32 com 13 opcoes e instaladores Brave/NVIDIA.
+- Confirmacao para updates via GitHub Releases e verificacao SHA-256.

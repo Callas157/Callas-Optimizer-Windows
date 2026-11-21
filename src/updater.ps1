@@ -1,105 +1,146 @@
-# Callas Optimizer - atualizacao de versoes estaveis via GitHub Releases.
-# Nao instala nada sem confirmacao na interface grafica.
-[CmdletBinding(DefaultParameterSetName = 'Check')]
+# Callas Optimizer - GitHub Releases stable updater.
+# A janela principal permanece aberta ate o download e a verificacao terminarem.
+[CmdletBinding(DefaultParameterSetName='Check')]
 param(
-    [Parameter(Mandatory = $true, ParameterSetName = 'Check')][switch]$Check,
-    [Parameter(Mandatory = $true, ParameterSetName = 'Install')][switch]$Install,
-    [Parameter(Mandatory = $true)][string]$CurrentVersion,
-    [Parameter(Mandatory = $true, ParameterSetName = 'Check')][string]$StatusFile,
-    [Parameter(Mandatory = $true, ParameterSetName = 'Install')][string]$Target,
-    [Parameter(Mandatory = $true, ParameterSetName = 'Install')][int]$WaitPid
+    [Parameter(Mandatory=$true, ParameterSetName='Check')][switch]$Check,
+    [Parameter(Mandatory=$true, ParameterSetName='Install')][switch]$Install,
+    [Parameter(Mandatory=$true)][string]$CurrentVersion,
+    [Parameter(Mandatory=$true)][string]$StatusFile,
+    [Parameter(Mandatory=$true, ParameterSetName='Install')][string]$Target,
+    [Parameter(Mandatory=$true, ParameterSetName='Install')][ValidateRange(1,2147483647)][int]$WaitPid
 )
 
-$ErrorActionPreference = 'Stop'
-$ProgressPreference = 'SilentlyContinue'
-$Repository = 'Callas157/Callas-Optimizer-Windows'
-$AssetName = 'Callas_Optimizer_Windows_x64.exe'
-$ApiUrl = 'https://api.github.com/repos/' + $Repository + '/releases/latest'
-$LogFolder = Join-Path $env:LOCALAPPDATA 'CallasTeck'
-$LogPath = Join-Path $LogFolder 'atualizacoes.log'
-New-Item -ItemType Directory -Path $LogFolder -Force | Out-Null
-[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+$ErrorActionPreference='Stop'
+$ProgressPreference='SilentlyContinue'
+$Repository='Callas157/Callas-Optimizer-Windows'
+$AssetName='Callas_Optimizer_Windows_x64.exe'
+$ApiUrl='https://api.github.com/repos/'+$Repository+'/releases/latest'
+$HomeFolder=Join-Path $env:LOCALAPPDATA 'CallasTeck'
+$LogPath=Join-Path $HomeFolder 'atualizacoes.log'
+New-Item -ItemType Directory -Path $HomeFolder -Force | Out-Null
+[Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12
 
-function Write-Log([string]$message) {
-    try { Add-Content -LiteralPath $LogPath -Encoding UTF8 -Value ('[{0}] {1}' -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $message) } catch {}
+function Log([string]$message) {
+    try { Add-Content -LiteralPath $LogPath -Encoding UTF8 -Value ('[{0}] {1}' -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'),$message) } catch {}
 }
-function Write-Status([string]$status) {
-    if (-not $Check) { return }
-    $dir = Split-Path -Parent $StatusFile
-    New-Item -ItemType Directory -Path $dir -Force | Out-Null
-    $tmp = $StatusFile + '.' + [guid]::NewGuid().ToString('N') + '.tmp'
-    [System.IO.File]::WriteAllText($tmp, $status, [System.Text.Encoding]::ASCII)
+function Status([string]$value) {
+    $dir=Split-Path -Parent $StatusFile
+    if (-not (Test-Path -LiteralPath $dir -PathType Container)) { throw 'Pasta do status indisponivel.' }
+    $tmp=$StatusFile+'.'+[guid]::NewGuid().ToString('N')+'.tmp'
+    [IO.File]::WriteAllText($tmp,$value,[Text.Encoding]::ASCII)
     Move-Item -LiteralPath $tmp -Destination $StatusFile -Force
 }
-function Get-LatestVersion {
-    $headers = @{ 'User-Agent' = 'CallasOptimizer-Updater'; 'Accept' = 'application/vnd.github+json' }
-    $release = Invoke-RestMethod -Uri $ApiUrl -Headers $headers -TimeoutSec 15
-    if ($release.draft -or $release.prerelease) { throw 'Release nao-estavel recusada.' }
-    $tag = [string]$release.tag_name
-    if ($tag -cnotmatch '^v[0-9]+\.[0-9]+\.[0-9]+$') { throw 'Tag de versao invalida.' }
-    $version = [version]$tag.Substring(1)
-    $asset = @($release.assets | Where-Object { $_.name -ceq $AssetName -and $_.state -eq 'uploaded' } | Select-Object -First 1)
-    if ($asset.Count -ne 1) { throw 'EXE ausente na release.' }
-    $expectedUrl = 'https://github.com/' + $Repository + '/releases/download/' + $tag + '/' + $AssetName
-    if ([string]$asset[0].browser_download_url -cne $expectedUrl) { throw 'URL do executavel inesperada.' }
-    $digest = [string]$asset[0].digest
-    if ($digest -cnotmatch '^sha256:[0-9a-fA-F]{64}$') { throw 'Release sem SHA-256 confiavel. Atualizacao cancelada.' }
-    return @{ Tag = $tag; Version = $version; Url = $expectedUrl; SHA256 = $digest.Substring(7).ToUpperInvariant() }
+function Get-Latest {
+    $headers=@{'User-Agent'='CallasOptimizer-Updater'; 'Accept'='application/vnd.github+json'}
+    $release=Invoke-RestMethod -Uri $ApiUrl -Headers $headers -TimeoutSec 20
+    if ($release.draft -or $release.prerelease) { throw 'Release nao-estavel.' }
+    $tag=[string]$release.tag_name
+    if ($tag -cnotmatch '^v[0-9]+\.[0-9]+\.[0-9]+$') { throw 'Tag invalida.' }
+    $asset=@($release.assets | Where-Object { $_.name -ceq $AssetName -and $_.state -eq 'uploaded' })
+    if ($asset.Count -ne 1) { throw 'Release sem executavel unico.' }
+    $expected='https://github.com/'+$Repository+'/releases/download/'+$tag+'/'+$AssetName
+    if ([string]$asset[0].browser_download_url -cne $expected) { throw 'URL da release inesperada.' }
+    if ([string]$asset[0].digest -cnotmatch '^sha256:[0-9a-fA-F]{64}$') { throw 'Release sem digest SHA-256.' }
+    if ([long]$asset[0].size -lt 10000 -or [long]$asset[0].size -gt 100MB) { throw 'Tamanho de executavel inesperado.' }
+    return @{Tag=$tag; Version=[version]$tag.Substring(1); Url=$expected; SHA256=([string]$asset[0].digest).Substring(7).ToUpperInvariant(); Size=[long]$asset[0].size}
+}
+function Confirm-WindowsExe([string]$path) {
+    $f=[IO.File]::OpenRead($path)
+    try {
+        if ($f.Length -lt 1024) { throw 'Executavel invalido.' }
+        $r=New-Object IO.BinaryReader($f)
+        if ($r.ReadUInt16() -ne 0x5A4D) { throw 'EXE sem cabecalho MZ.' }
+        $f.Position=0x3C
+        $offset=$r.ReadInt32()
+        if ($offset -le 0 -or $offset -ge ($f.Length-24)) { throw 'Cabecalho PE invalido.' }
+        $f.Position=$offset
+        if ($r.ReadUInt32() -ne 0x00004550 -or $r.ReadUInt16() -ne 0x8664) { throw 'Arquivo nao e um PE Windows x64.' }
+    } finally { $f.Dispose() }
+}
+function Download-Verified([hashtable]$latest,[string]$staged) {
+    for($attempt=1;$attempt -le 3;$attempt++) {
+        try {
+            if (Test-Path -LiteralPath $staged) { Remove-Item -LiteralPath $staged -Force }
+            Invoke-WebRequest -Uri $latest.Url -Headers @{'User-Agent'='CallasOptimizer-Updater'} -UseBasicParsing -TimeoutSec 120 -OutFile $staged
+            break
+        } catch {
+            Log ('Download tentativa '+$attempt+': '+$_.Exception.Message)
+            if ($attempt -eq 3) { throw }
+            Start-Sleep -Seconds (2*$attempt)
+        }
+    }
+    $file=Get-Item -LiteralPath $staged
+    if ($file.Length -ne $latest.Size) { throw 'Tamanho baixado diferente da Release.' }
+    $hash=(Get-FileHash -LiteralPath $staged -Algorithm SHA256).Hash.ToUpperInvariant()
+    if ($hash -cne $latest.SHA256) { throw 'Falha na validacao SHA-256.' }
+    Confirm-WindowsExe $staged
+    Log ('Download e validacao PE64/SHA256 concluidos para '+$latest.Tag)
 }
 try {
-    $latest = Get-LatestVersion
+    if ($CurrentVersion -cnotmatch '^[0-9]+\.[0-9]+\.[0-9]+$') { throw 'Versao local invalida.' }
+    $latest=Get-Latest
     if ($latest.Version -le [version]$CurrentVersion) {
-        Write-Log ('Sem atualizacao: local ' + $CurrentVersion + ', GitHub ' + $latest.Tag)
-        Write-Status 'CURRENT'
-        if ($Install) { Write-Host 'Voce ja usa a versao mais recente.' }
+        Log ('Atualizado: '+$CurrentVersion+', ultima release '+$latest.Tag)
+        Status 'CURRENT'
         exit 0
     }
     if ($Check) {
-        Write-Log ('Versao disponivel: ' + $latest.Tag)
-        Write-Status ('AVAILABLE|' + $latest.Tag)
+        Log ('Atualizacao disponivel: '+$latest.Tag)
+        Status ('AVAILABLE|'+$latest.Tag)
         exit 0
     }
-
-    # Fluxo de instalacao iniciado somente apos clique do usuario no pop-up nativo.
-    $fullTarget = [System.IO.Path]::GetFullPath($Target)
-    if (-not (Test-Path -LiteralPath $fullTarget -PathType Leaf) -or [System.IO.Path]::GetExtension($fullTarget) -ine '.exe') {
-        throw 'Executavel original nao localizado.'
-    }
-    $stageDir = Join-Path $LogFolder 'updates'
+    $fullTarget=[IO.Path]::GetFullPath($Target)
+    if (([IO.Path]::GetExtension($fullTarget) -ine '.exe') -or -not (Test-Path -LiteralPath $fullTarget -PathType Leaf)) { throw 'Executavel original nao encontrado.' }
+    $targetDir=Split-Path -Parent $fullTarget
+    $stageDir=Join-Path $HomeFolder 'updates'
     New-Item -ItemType Directory -Path $stageDir -Force | Out-Null
-    $staged = Join-Path $stageDir ($latest.Tag + '-' + $AssetName)
-    Write-Host ('Baixando atualizacao ' + $latest.Tag + ' do repositorio oficial...') -ForegroundColor Cyan
-    Invoke-WebRequest -Uri $latest.Url -Headers @{ 'User-Agent' = 'CallasOptimizer-Updater' } -UseBasicParsing -TimeoutSec 180 -OutFile $staged
-    if ((Get-Item -LiteralPath $staged).Length -lt 10000) { throw 'Executavel incompleto.' }
-    $actual = (Get-FileHash -LiteralPath $staged -Algorithm SHA256).Hash.ToUpperInvariant()
-    if ($actual -cne $latest.SHA256) { throw 'SHA-256 nao confere com o registro oficial do GitHub. Atualizacao bloqueada.' }
-    Write-Log ('Hash SHA-256 validado: ' + $latest.Tag)
-    Write-Host 'Download validado. Aguardando o aplicativo fechar...' -ForegroundColor Cyan
-
-    $process = Get-Process -Id $WaitPid -ErrorAction SilentlyContinue
-    if ($process) { Wait-Process -Id $WaitPid -Timeout 45 -ErrorAction Stop }
-    Start-Sleep -Milliseconds 700
-    $backup = $fullTarget + '.backup-' + (Get-Date -Format 'yyyyMMdd-HHmmss')
-    Move-Item -LiteralPath $fullTarget -Destination $backup -ErrorAction Stop
+    $staged=Join-Path $stageDir ([guid]::NewGuid().ToString('N')+'.exe')
+    $neighbor=Join-Path $targetDir ('.callas-update-'+[guid]::NewGuid().ToString('N')+'.exe')
+    $backup=$fullTarget+'.backup-'+(Get-Date -Format 'yyyyMMdd-HHmmss')
+    $originalMoved=$false
+    $ready=$false
     try {
-        Copy-Item -LiteralPath $staged -Destination $fullTarget -ErrorAction Stop
-        Start-Process -FilePath $fullTarget -ErrorAction Stop
-        Write-Log ('Atualizado de ' + $CurrentVersion + ' para ' + $latest.Tag + '. Backup: ' + $backup)
-        Write-Host ('Atualizacao concluida: ' + $latest.Tag) -ForegroundColor Green
+        Download-Verified $latest $staged
+        # Copiar para a mesma unidade antes de solicitar o encerramento.
+        # Se nao houver permissao de escrita, o programa antigo fica aberto.
+        Copy-Item -LiteralPath $staged -Destination $neighbor -ErrorAction Stop
+        Confirm-WindowsExe $neighbor
+        Status 'READY'
+        $ready=$true
+        Log ('Arquivo pronto; aguardando fechamento do PID '+$WaitPid)
+        $process=Get-Process -Id $WaitPid -ErrorAction SilentlyContinue
+        if ($process) { Wait-Process -Id $WaitPid -Timeout 45 -ErrorAction Stop }
+        Start-Sleep -Milliseconds 250
+        Move-Item -LiteralPath $fullTarget -Destination $backup -ErrorAction Stop
+        $originalMoved=$true
+        Move-Item -LiteralPath $neighbor -Destination $fullTarget -ErrorAction Stop
+        $new=Start-Process -FilePath $fullTarget -PassThru -ErrorAction Stop
+        Start-Sleep -Seconds 2
+        $new.Refresh()
+        if ($new.HasExited) { throw 'Nova versao encerrou imediatamente; recuperando a anterior.' }
+        Log ('Atualizacao '+$CurrentVersion+' -> '+$latest.Tag+' concluida. Backup: '+$backup)
+        # Preservar os dois backups mais recentes desta instalacao.
+        Get-ChildItem -LiteralPath $targetDir -Filter ([IO.Path]::GetFileName($fullTarget)+'.backup-*') -File -ErrorAction SilentlyContinue |
+          Sort-Object LastWriteTime -Descending | Select-Object -Skip 2 |
+          Remove-Item -Force -ErrorAction SilentlyContinue
     } catch {
-        if (Test-Path -LiteralPath $fullTarget) { Remove-Item -LiteralPath $fullTarget -Force -ErrorAction SilentlyContinue }
-        Move-Item -LiteralPath $backup -Destination $fullTarget -Force -ErrorAction Stop
-        Write-Log ('Falha apos download. Executavel antigo restaurado: ' + $_.Exception.Message)
+        Log ('Falha na etapa de instalacao: '+$_.Exception.Message)
+        if ($originalMoved) {
+            try {
+                if (Test-Path -LiteralPath $fullTarget) { Remove-Item -LiteralPath $fullTarget -Force -ErrorAction Stop }
+                Move-Item -LiteralPath $backup -Destination $fullTarget -Force -ErrorAction Stop
+                Start-Process -FilePath $fullTarget -ErrorAction Stop | Out-Null
+                Log 'Rollback concluido; aplicativo anterior reaberto.'
+            } catch { Log ('ERRO CRITICO no rollback: '+$_.Exception.Message+'; backup em '+$backup) }
+        }
         throw
+    } finally {
+        Remove-Item -LiteralPath $staged -Force -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath $neighbor -Force -ErrorAction SilentlyContinue
     }
 } catch {
-    Write-Log ('ERRO: ' + $_.Exception.Message)
-    if ($Check) {
-        Write-Status 'ERROR'
-        exit 1
-    }
-    Write-Host ('Falha na atualizacao: ' + $_.Exception.Message) -ForegroundColor Red
-    Write-Host 'Nenhuma versao nao verificada foi instalada. Confira se o EXE esta em uma pasta com permissao de escrita.' -ForegroundColor Yellow
-    Read-Host 'Pressione ENTER para fechar' | Out-Null
+    Log ('ERRO: '+$_.Exception.Message)
+    if ($Install) { Write-Host ('Falha de atualizacao: '+$_.Exception.Message) -ForegroundColor Red }
+    try { Status 'ERROR' } catch { Log ('Nao foi possivel gravar status: '+$_.Exception.Message) }
     exit 1
 }

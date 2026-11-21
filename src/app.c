@@ -1,4 +1,4 @@
-/* Callas Optimizer V8.9.0 - GUI Win32 nativa x64, sem runtime externo.
+/* Callas Optimizer V8.9.1 - GUI Win32 nativa x64, sem runtime externo.
  * Compilado sem CRT para PE64 com clang/LLVM. Fonte editavel incluso.
  */
 typedef unsigned char BYTE;
@@ -164,6 +164,7 @@ static HCURSOR cursor_arrow,cursor_hand;
 static HFONT font36,font24,font20,font16,font14,font13,font12,font13b;
 static int selected=0, mousex=-1,mousey=-1, win11=1, hover=-1;
 static int update_pending=0,update_manual=0, update_ticks=0;
+static int update_install_pending=0,update_install_ticks=0;
 static WCHAR folder[560],enginepath[640],bravepath[640],nvidiapath[640],extpath[640],undopath[640],updaterpath[640],statuspath[640];
 static const WCHAR* names[14]={
  L"PAINEL INICIAL",L"Modo Gamer",L"Remover Microsoft Edge",L"Windows Update",L"Rede e DNS",L"Privacidade / Telemetria",L"Reparar sistema",L"Limpeza total",L"Menu classico Win11",L"Desligamento",L"WinUtil",L"Atualizar aplicativo",L"Ponto de restauracao",L"Restaurar padroes"};
@@ -216,7 +217,7 @@ static void paint(HDC dc,int W,int H){
  txt(dc,L"CALLAS OPTIMIZER",94,16,360,36,font24,RGB2(247,250,255),0);
  txt(dc,L"CENTRAL DE MANUTENCAO   /   WINDOWS 11",96,52,472,24,font12,RGB2(140,157,187),0);
  rounded(dc,W-185,25,140,38,18,RGB2(28,39,60),RGB2(54,76,107));
- txt(dc,L"VERSAO   8.9.0",W-172,24,113,40,font13b,RGB2(100,169,255),1);
+ txt(dc,L"VERSAO   8.9.1",W-172,24,113,40,font13b,RGB2(100,169,255),1);
  button(dc,W-410,25,205,38,L"VERIFICAR UPDATE",0,ishover(W-410,25,W-205,63));
  fill(dc,282,92,2,H-92,RGB2(39,49,70));
  txt(dc,L"FERRAMENTAS",25,112,225,30,font13b,RGB2(122,146,184),0);
@@ -241,6 +242,7 @@ static void paint(HDC dc,int W,int H){
  txt(dc,L"OPERACOES DE MANUTENCAO",rightx+22,267,innerW-30,24,font12,RGB2(105,154,220),0);
  button(dc,rightx+20,304,330,47,selected?L"EXECUTAR OPCAO SELECIONADA":L"ABRIR MENU COMPLETO",1,ishover(rightx+20,304,rightx+350,351));
  button(dc,rightx+365,304,innerW-385,47,L"ABRIR MENU ORIGINAL",0,ishover(rightx+365,304,W-27,351));
+ if(update_install_pending)txt(dc,L"ATUALIZACAO: baixando e validando (nao feche o programa)",rightx,368,innerW,20,font12,RGB2(120,205,174),0);
  txt(dc,L"INSTALADORES OFICIAIS",rightx,386,innerW,30,font13b,RGB2(114,163,230),0);
  int half=(innerW-16)/2;
  rounded(dc,rightx,422,half,194,22,RGB2(21,32,49),RGB2(48,67,95));
@@ -283,7 +285,7 @@ static BOOL prepare_assets(void){
  buildpath(extpath,L"extensions.ps1");
  buildpath(undopath,L"undo_extensions.ps1");
  buildpath(updaterpath,L"updater.ps1");
- buildpath(statuspath,L"updater.status");
+ { WCHAR n[32]; wnum(n,(int)GetCurrentProcessId()); buildpath(statuspath,L"updater-"); wappend(statuspath,n); wappend(statuspath,L".status"); }
  return writeasset(enginepath,asset_engine,asset_engine_size)
     &&writeasset(bravepath,asset_brave,asset_brave_size)
     &&writeasset(nvidiapath,asset_nvidia,asset_nvidia_size)
@@ -323,13 +325,13 @@ static void launch_ps(const WCHAR* path){
  if((ULONG_PTR)rc<=32)MessageBoxW(mainwin,L"PowerShell nao abriu. Confira sua instalacao do Windows.",L"Falha",MB_OK|MB_ICONERROR);
 }
 static void begin_update_check(int manual){
- if(update_pending)return;
+ if(update_pending||update_install_pending)return;
  update_manual=manual;update_pending=1;update_ticks=0;
  DeleteFileW(statuspath);
  WCHAR args[1024];
  wcopy(args,L"-NoLogo -NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File \"");
  wappend(args,updaterpath);
- wappend(args,L"\" -Check -CurrentVersion 8.9.0 -StatusFile \"");
+ wappend(args,L"\" -Check -CurrentVersion 8.9.1 -StatusFile \"");
  wappend(args,statuspath);wappend(args,L"\"");
  HINSTANCE rc=ShellExecuteW(mainwin,L"open",L"powershell.exe",args,folder,SW_HIDE);
  if((ULONG_PTR)rc<=32){
@@ -338,20 +340,36 @@ static void begin_update_check(int manual){
  }else SetTimer(mainwin,83,1200,NULL);
 }
 static void install_update(void){
+ if(update_install_pending)return;
  static WCHAR own[600];if(!GetModuleFileNameW(NULL,own,600))return;
+ DeleteFileW(statuspath);
  static WCHAR args[1600];WCHAR pid[24];
  wnum(pid,(int)GetCurrentProcessId());
  wcopy(args,L"-NoLogo -NoProfile -ExecutionPolicy Bypass -File \"");
  wappend(args,updaterpath);
- wappend(args,L"\" -Install -CurrentVersion 8.9.0 -Target \"");
+ wappend(args,L"\" -Install -CurrentVersion 8.9.1 -Target \"");
  wappend(args,own);wappend(args,L"\" -WaitPid ");wappend(args,pid);
- HINSTANCE rc=ShellExecuteW(mainwin,L"open",L"powershell.exe",args,folder,SW_SHOWNORMAL);
+ wappend(args,L" -StatusFile \"");wappend(args,statuspath);wappend(args,L"\"");
+ HINSTANCE rc=ShellExecuteW(mainwin,L"open",L"powershell.exe",args,folder,SW_HIDE);
  if((ULONG_PTR)rc<=32){
   MessageBoxW(mainwin,L"Nao foi possivel iniciar o atualizador.",L"Falha de atualizacao",MB_OK|MB_ICONERROR);
  }else{
-  /* Libera o EXE para que o processo de atualizacao possa substitui-lo. */
-  ExitProcess(0);
+  update_install_pending=1; update_install_ticks=0;
+  SetTimer(mainwin,84,1200,NULL);
+  InvalidateRect(mainwin,NULL,FALSE);
  }
+}
+static void poll_update_install(void){
+ if(!update_install_pending)return;
+ if(++update_install_ticks>300){KillTimer(mainwin,84);update_install_pending=0;InvalidateRect(mainwin,NULL,FALSE);
+  MessageBoxW(mainwin,L"A atualizacao excedeu o tempo esperado. Confira o log em AppData\\Local\\CallasTeck.",L"Atualizacao",MB_OK|MB_ICONWARNING);return;}
+ HANDLE f=CreateFileW(statuspath,GENERIC_READ,3,NULL,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,NULL);
+ if(f==INVALID_HANDLE_VALUE)return;
+ char raw[100];DWORD n=0;BOOL ok=ReadFile(f,raw,sizeof(raw)-1,&n,NULL);CloseHandle(f);
+ if(!ok||n<3)return;raw[n]=0;KillTimer(mainwin,84);update_install_pending=0;
+ if(raw[0]=='R'&&raw[1]=='E'&&raw[2]=='A'){ExitProcess(0);}
+ InvalidateRect(mainwin,NULL,FALSE);
+ MessageBoxW(mainwin,L"Falha ao baixar ou verificar a nova versao. O aplicativo atual foi mantido. Consulte AppData\\Local\\CallasTeck\\atualizacoes.log.",L"Atualizacao cancelada",MB_OK|MB_ICONWARNING);
 }
 static void poll_update(void){
  if(!update_pending)return;
@@ -407,6 +425,7 @@ static void do_click(int x,int y){
 static LRESULT WINAPI WindowProc(HWND hwnd,UINT m,WPARAM w,LPARAM l){
  if(m==WM_ERASEBKGND)return 1;
  if(m==WM_TIMER&&w==83){poll_update();return 0;}
+ if(m==WM_TIMER&&w==84){poll_update_install();return 0;}
  if(m==WM_PAINT){PAINTSTRUCT ps;HDC dc=BeginPaint(hwnd,&ps);RECT r;GetClientRect(hwnd,&r);int W=r.right-r.left,H=r.bottom-r.top;
   HDC mem=CreateCompatibleDC(dc);HBITMAP bmp=CreateCompatibleBitmap(dc,W,H);HGDIOBJ old=SelectObject(mem,bmp);
   paint(mem,W,H);BitBlt(dc,0,0,W,H,mem,0,0,SRCCOPY);SelectObject(mem,old);DeleteObject(bmp);DeleteDC(mem);EndPaint(hwnd,&ps);return 0;
@@ -430,9 +449,9 @@ void WINAPI mainCRTStartup(void){
  font12=CreateFontW(13,0,0,0,500,0,0,0,1,0,0,0,0,L"Segoe UI");
  detect_windows();
  WNDCLASSEXW wc={0};wc.cbSize=sizeof(wc);wc.style=CS_HREDRAW|CS_VREDRAW;wc.lpfnWndProc=(void*)WindowProc;wc.hInstance=mod;
- wc.hCursor=cursor_arrow;wc.lpszClassName=L"CallasOptimizerDesktop89";
+ wc.hCursor=cursor_arrow;wc.lpszClassName=L"CallasOptimizerDesktop891";
  if(!RegisterClassExW(&wc)){ExitProcess(1);}
- mainwin=CreateWindowExW(0,wc.lpszClassName,L"Callas Optimizer 8.9.0 | Windows Edition",WS_OVERLAPPED|WS_CAPTION|WS_SYSMENU|WS_MINIMIZEBOX,80,60,1116,804,NULL,NULL,mod,NULL);
+ mainwin=CreateWindowExW(0,wc.lpszClassName,L"Callas Optimizer 8.9.1 | Windows Edition",WS_OVERLAPPED|WS_CAPTION|WS_SYSMENU|WS_MINIMIZEBOX,80,60,1116,804,NULL,NULL,mod,NULL);
  if(!mainwin){ExitProcess(2);}
  BOOL assetsok=prepare_assets();
  if(!assetsok)MessageBoxW(mainwin,L"Nao foi possivel preparar os arquivos locais. Verifique as permissoes de escrita em AppData\\Local\\CallasTeck.",L"Problema com arquivos",MB_OK|MB_ICONERROR);

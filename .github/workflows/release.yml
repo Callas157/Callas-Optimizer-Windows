@@ -1,17 +1,16 @@
-name: Build e Release Windows x64
+name: Testar e publicar Callas Optimizer Windows
 
 on:
   push:
     branches: [main]
-    tags:
-      - 'v*.*.*'
+    tags: ['v*.*.*']
   workflow_dispatch:
 
 permissions:
   contents: write
 
 concurrency:
-  group: release-windows-${{ github.ref }}
+  group: callas-release-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -19,29 +18,36 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Instalar LLVM
+      - name: Instalar toolchain LLVM
         run: |
           sudo apt-get update
           sudo apt-get install -y clang lld python3
-      - name: Validar versão
+      - name: Selecionar versao e validar consistencia
         shell: bash
         run: |
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
             TAG="$GITHUB_REF_NAME"
           else
-            TAG="v8.9.0"
+            TAG="v$(tr -d '\r\n' < VERSION)"
           fi
           echo "RELEASE_TAG=$TAG" >> "$GITHUB_ENV"
           python3 scripts/check_version.py "$TAG"
-      - name: Compilar executável Windows x64
+      - name: Testes de integridade
+        run: python3 -m unittest discover -s tests -v
+      - name: Compilar Windows x64
         run: python3 scripts/build.py
-      - name: Publicar versão estável (somente se ainda não existe)
+      - name: Verificar binario e hash publicado
+        shell: bash
+        run: |
+          python3 scripts/verify_build.py
+          (cd dist && sha256sum --check SHA256SUMS.txt)
+      - name: Criar release estavel quando a versao for nova
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            echo "Release $RELEASE_TAG já existe. Nada foi substituído."
+            echo "Release $RELEASE_TAG ja existe; publique uma nova versao para distribuir mudancas."
             exit 0
           fi
           gh release create "$RELEASE_TAG" \

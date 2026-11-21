@@ -39,9 +39,9 @@ O aplicativo consulta somente a rota oficial:
 
 `https://api.github.com/repos/Callas157/Callas-Optimizer-Windows/releases/latest`
 
-Uma versão **`v8.9.1`** é considerada nova em relação à **`8.9.0`**. Release em rascunho/pré-lançamento e arquivos sem SHA-256 verificável são recusados. A confirmação é feita em janela nativa, a instalação exige aceite, e não é baixado nem executado código via link arbitrário.
+Uma versão **`v8.9.2`** é considerada nova em relação à **`8.9.1`**. Release em rascunho/pré-lançamento e arquivos sem SHA-256 verificável são recusados. A confirmação é feita em janela nativa, a instalação exige aceite e o aplicativo antigo permanece aberto enquanto o download é verificado. A troca do executável só começa após validar tamanho, hash SHA-256 e formato PE64 x64. Se houver erro ou falta de permissão, o aplicativo antigo permanece disponível; existe backup e tentativa de restauração se a substituição falhar.
 
-**Publicação de versões:** envie o código ao repositório e crie uma tag `vX.Y.Z`. O GitHub Actions compila e publica o `.exe` e o arquivo `SHA256SUMS.txt`. A versão no código precisa corresponder à tag. Somente releases publicadas e estáveis aparecem para os usuários.
+**Publicação de versões:** atualize o arquivo `VERSION` (ex.: `8.9.2`) e as constantes em `src/app.c` e envie as mudanças para `main`. O GitHub Actions valida o número da versão, compila e publica uma nova Release estável com `.exe` e `SHA256SUMS.txt`; uma versão já publicada nunca é sobrescrita. Opcionalmente, tags `vX.Y.Z` também são aceitas e precisam corresponder a `VERSION`. Somente releases publicadas e estáveis aparecem para os usuários.
 
 ## Compatibilidade
 
@@ -58,7 +58,9 @@ Uma versão **`v8.9.1`** é considerada nova em relação à **`8.9.0`**. Releas
 - `src/Callas_Optimizer_V8_8_GUI_Engine.bat`: operações de manutenção.
 - `src/install_*.ps1`, `src/extensions.ps1`, `src/undo_extensions.ps1`: instaladores e configurações.
 - `assets/banner.jpg`: identidade visual.
-- `scripts/build.py`: build reproduzível de executável Windows x64 com LLVM Clang + lld-link.
+- `scripts/build.py`: build de executável Windows x64 com LLVM Clang + lld-link.
+- `scripts/verify_build.py` e `tests/`: verificação PE64/SHA256 e contratos do atualizador.
+- `VERSION`: número único da próxima Release.
 - `.github/workflows/release.yml`: publicação automática a partir de tags.
 - `dist/`: executável pronto e SHA256SUMS.
 
@@ -68,7 +70,7 @@ Compile com `python3 scripts/build.py` num ambiente com `clang`, `lld-link` e Py
 
 **As rotinas de manutenção alteram configurações do sistema.** Leia as confirmações, crie um ponto de restauração e mantenha backups. A instalação do Brave por política local pode exibir “Gerenciado pela organização” e pode ser desfeita pela interface. A atualização automática **não significa instalação silenciosa**: o usuário sempre decide.
 
-**Estado de testes:** compilação Win64 e recursos embutidos verificados; execução real no Windows 11 e atualização ponta a ponta com release publicada ainda precisam de teste.
+**Estado de testes:** compilação Win64 e recursos embutidos verificados; execução real no Windows 11, UAC e atualização ponta a ponta ainda precisam de teste. Não existe garantia absoluta contra perda de energia durante a troca de arquivos; o backup é mantido para recuperação.
 
 ---
 
