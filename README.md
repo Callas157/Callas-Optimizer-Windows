@@ -1,77 +1,89 @@
 <div align="center">
-  <img src="assets/banner.jpg" alt="Callas Optimizer - Windows Edition" width="100%" />
+  <img src="assets/banner.jpg" alt="Callas Optimizer — Windows Edition" width="100%" />
 
 # Callas Optimizer — Windows Edition
 
-**Central gráfica de otimização, manutenção e preparação do Windows.**
+**Central de manutenção para Windows 11, com interface gráfica em Python/Qt e atualizações pelo GitHub Releases.**
 
-**Windows 11 Pro • Enterprise • IoT Enterprise LTSC** · x64 · Interface nativa · Atualizações via GitHub Releases
+[![Release](https://img.shields.io/github/v/release/Callas157/Callas-Optimizer-Windows?logo=github)](https://github.com/Callas157/Callas-Optimizer-Windows/releases/latest)
+[![Windows 11](https://img.shields.io/badge/Windows-11%20x64-1976FF?logo=windows11&logoColor=white)](#compatibilidade)
+[![Python + Qt](https://img.shields.io/badge/GUI-Python%20%2B%20Qt-2868b2)](#desenvolvimento)
 
-[![Latest release](https://img.shields.io/github/v/release/Callas157/Callas-Optimizer-Windows?display_name=tag&logo=github)](https://github.com/Callas157/Callas-Optimizer-Windows/releases/latest)
-[![Windows](https://img.shields.io/badge/Windows-11%20x64-1684FF?logo=windows11&logoColor=white)](#compatibilidade)
-[![Source](https://img.shields.io/badge/código-fonte-disponível-3C8DFF)](#desenvolvimento)
-
-**[Baixar versão mais recente](https://github.com/Callas157/Callas-Optimizer-Windows/releases/latest)**
+**[Baixar a versão estável mais recente](https://github.com/Callas157/Callas-Optimizer-Windows/releases/latest)**
 </div>
 
-## O que faz
+## O que mudou na versão 8.9.2
 
-O Callas Optimizer reúne, numa interface escura com detalhes azuis, as ferramentas do script Callas Optimizer 8.8, com destaque para a **Limpeza Total**, modo gamer, rede/DNS, privacidade, reparo do Windows, opções de restauração e mais.
+A interface fixa anterior foi substituída por uma nova aplicação **Python + PySide6 (Qt)**. Agora ela possui **maximizar, redimensionamento livre, barras de rolagem, páginas individuais para as 13 opções** e layout de aplicativos que se adapta à largura da janela.
 
-- **Brave Browser:** baixa instalador de origem oficial, valida assinatura digital e permite configuração de SteamDB e Bonjourr (políticas reversíveis do navegador).
-- **NVIDIA App:** baixa o aplicativo de origem oficial e valida assinatura digital. Não altera drivers automaticamente.
-- **Atualizador:** ao abrir, consulta em segundo plano o [GitHub Releases](https://github.com/Callas157/Callas-Optimizer-Windows/releases), compara a versão local com a última release estável e mostra pop-up **dentro do aplicativo** perguntando se deseja atualizar. Também tem botão **VERIFICAR UPDATE**.
-- **Instalação segura:** somente após o usuário aceitar, baixa o novo executável, valida **SHA-256** publicado pela API de assets do GitHub, guarda uma cópia da versão anterior e reinicia. Se a substituição falhar, tenta restaurar o backup.
-- **Logs:** `%LOCALAPPDATA%\CallasTeck\atualizacoes.log`.
+- **Início:** visão geral e atalhos para tarefas frequentes.
+- **Limpeza Total (7):** executa nativamente na interface, com escopo selecionável, cancelamento, contagem de arquivos e espaço recuperado, sem travar o aplicativo. Não segue links simbólicos e ignora arquivos bloqueados.
+- **Programas:** ícones vetoriais reais do Brave e NVIDIA App, com instalação oficial e gerenciamento reversível de extensões SteamDB / Bonjourr.
+- **Atualizações (11):** consulta a última Release estável; ao encontrar versão nova, pede sua confirmação. Baixa o EXE, valida o tamanho, cabeçalho PE64 e hash SHA-256, cria backup e somente então fecha para substituir e reiniciar.
+- **Registros:** visualização dos logs das operações na interface.
+- **Ferramentas 1–6, 8–10, 12–13:** mantidas sem mudar o funcionamento do motor BAT **8.8** (uma janela de console ainda é aberta para os submenus antigos). Elas serão migradas progressivamente para a nova UI.
 
-## Como instalar
+## Windows e requisitos
 
-1. Abra [Releases](https://github.com/Callas157/Callas-Optimizer-Windows/releases/latest).
-2. Baixe **`Callas_Optimizer_Windows_x64.exe`**.
-3. Guarde numa pasta com permissão de gravação (por exemplo, `Documentos\Callas Optimizer`) e execute com duplo clique.
-4. Para operações administrativas, autorize o UAC quando solicitado.
+**Prioridade:** Windows 11 x64 Pro, Enterprise e IoT Enterprise LTSC. Windows 10 e ARM64 não são alvos testados.
 
-> O instalador gráfico **não precisa de WinGet**, útil em instalações IoT Enterprise LTSC. Os comandos avançados do mecanismo BAT continuam abrindo console separado. O executável não possui assinatura de código própria; o SmartScreen pode alertar. **Não desative proteções do Windows para executá-lo.**
+O executável é standalone: não é necessário instalar Python ou Qt. A primeira execução extrai os scripts de manutenção para `%LOCALAPPDATA%\CallasTeck`. A compilação inclui somente dependências usadas pelo projeto.
 
-## Como funcionam as atualizações
+1. Abra **[Releases](https://github.com/Callas157/Callas-Optimizer-Windows/releases/latest)**.
+2. Baixe `Callas_Optimizer_Windows_x64.exe`.
+3. Guarde em uma pasta **com permissão de gravação**, por exemplo `Documentos\Callas Optimizer`.
+4. Execute com duplo clique. Funções administrativas solicitam UAC quando necessário.
 
-O aplicativo consulta somente a rota oficial:
+> O aplicativo ainda não tem assinatura digital própria; o SmartScreen pode alertar. **Não desative proteções do Windows para executá-lo.** Verifique a origem e o SHA-256 publicado na Release.
 
-`https://api.github.com/repos/Callas157/Callas-Optimizer-Windows/releases/latest`
+## Como funciona a atualização
 
-Uma versão **`v8.9.2`** é considerada nova em relação à **`8.9.1`**. Release em rascunho/pré-lançamento e arquivos sem SHA-256 verificável são recusados. A confirmação é feita em janela nativa, a instalação exige aceite e o aplicativo antigo permanece aberto enquanto o download é verificado. A troca do executável só começa após validar tamanho, hash SHA-256 e formato PE64 x64. Se houver erro ou falta de permissão, o aplicativo antigo permanece disponível; existe backup e tentativa de restauração se a substituição falhar.
+Consulta: `https://api.github.com/repos/Callas157/Callas-Optimizer-Windows/releases/latest`
 
-**Publicação de versões:** atualize o arquivo `VERSION` (ex.: `8.9.2`) e as constantes em `src/app.c` e envie as mudanças para `main`. O GitHub Actions valida o número da versão, compila e publica uma nova Release estável com `.exe` e `SHA256SUMS.txt`; uma versão já publicada nunca é sobrescrita. Opcionalmente, tags `vX.Y.Z` também são aceitas e precisam corresponder a `VERSION`. Somente releases publicadas e estáveis aparecem para os usuários.
+- O usuário pode verificar manualmente ou permitir verificação ao abrir.
+- **Nunca atualiza sem perguntar.** A versão antiga permanece aberta durante o download e validação.
+- Só encerra a interface quando a nova versão está pronta para substituir o executável.
+- Mantém até dois backups recentes e tenta restaurar uma versão funcional quando o processo falha.
+- Logs do atualizador em `%LOCALAPPDATA%\CallasTeck\atualizacoes.log`.
+- O EXE publicado deve ter **100 MiB ou menos** para continuar compatível com atualizadores das versões 8.9.0/8.9.1.
 
-## Compatibilidade
-
-- **Principal:** Windows 11 x64 (Pro, Enterprise, IoT Enterprise LTSC).
-- **Windows 10 x64:** não foi validado; aviso exibido na inicialização.
-- **ARM64:** não validado.
-- A primeira versão com atualização automática é **8.9.0**; o motor de manutenção preserva as correções da versão **8.8**.
-- Atualização no mesmo caminho exige permissão de escrita. Se o `.exe` estiver em `Program Files`, pode ser necessário movê-lo para uma pasta do usuário ou realizar a atualização com privilégios apropriados.
+A troca requer permissão para escrever na pasta do executável. Ao usar uma pasta protegida como `Program Files`, mova o programa para a pasta do usuário ou ajuste permissões com cuidado.
 
 ## Desenvolvimento
 
-- `src/app.c`: interface nativa Win32.
-- `src/updater.ps1`: consulta à API, validação de SHA-256 e substituição com backup.
-- `src/Callas_Optimizer_V8_8_GUI_Engine.bat`: operações de manutenção.
-- `src/install_*.ps1`, `src/extensions.ps1`, `src/undo_extensions.ps1`: instaladores e configurações.
-- `assets/banner.jpg`: identidade visual.
-- `scripts/build.py`: build de executável Windows x64 com LLVM Clang + lld-link.
-- `scripts/verify_build.py` e `tests/`: verificação PE64/SHA256 e contratos do atualizador.
-- `VERSION`: número único da próxima Release.
-- `.github/workflows/release.yml`: publicação automática a partir de tags.
-- `dist/`: executável pronto e SHA256SUMS.
+- `src/app.py`: interface Qt, navegação, atualização, programas, páginas e logs.
+- `src/cleaner.py`: rotina de limpeza nativa, sem seguir links.
+- `src/updater.ps1`: atualização por GitHub Releases, SHA-256 e recuperação.
+- `src/Callas_Optimizer_V8_8_GUI_Engine.bat`: compatibilidade com as funções avançadas anteriores.
+- `src/install_brave.ps1`, `src/install_nvidia.ps1`, `src/extensions.ps1` e `src/undo_extensions.ps1`: instaladores e configurações.
+- `assets/icons/`: ícones SVG do Callas, Brave e NVIDIA; `callas.ico.b64` é convertido no build para o ícone da janela do Windows.
+- `requirements-build.txt`: dependências do ambiente de compilação.
+- `scripts/build.py`: PyInstaller no **Windows x64**; o executável fica em `dist/`.
+- `scripts/check_version.py`, `scripts/verify_build.py`, `tests/`: integridade, proteção contra erros e testes de interface.
+- `.github/workflows/release.yml`: constrói, testa e publica a versão `VERSION` em Release estável quando tudo passa.
 
-Compile com `python3 scripts/build.py` num ambiente com `clang`, `lld-link` e Python 3. Os arquivos de importação WinAPI necessários estão em `importlibs/`.
+O código pode ser desenvolvido e testado em Windows usando Python 3.12:
 
-## Cuidados importantes
+```powershell
+py -3.12 -m pip install -r requirements-build.txt
+py -3.12 -m unittest discover -s tests -v
+py -3.12 src\app.py
+```
 
-**As rotinas de manutenção alteram configurações do sistema.** Leia as confirmações, crie um ponto de restauração e mantenha backups. A instalação do Brave por política local pode exibir “Gerenciado pela organização” e pode ser desfeita pela interface. A atualização automática **não significa instalação silenciosa**: o usuário sempre decide.
+Para gerar o executável, `py -3.12 scripts\build.py` em uma máquina Windows x64.
 
-**Estado de testes:** compilação Win64 e recursos embutidos verificados; execução real no Windows 11, UAC e atualização ponta a ponta ainda precisam de teste. Não existe garantia absoluta contra perda de energia durante a troca de arquivos; o backup é mantido para recuperação.
+### Licenças e identidade visual
+
+- Qt for Python / PySide6-Essentials: distribuição segundo os termos LGPLv3/GPL/comercial aplicáveis. O projeto disponibiliza o código, instruções de build e bibliotecas Qt dinâmicas empacotadas pelo PyInstaller. Respeite as condições da licença ao redistribuir.
+- Os ícones de marca **Brave** e **NVIDIA** usam os caminhos vetoriais do projeto [Simple Icons](https://github.com/simple-icons/simple-icons) (CC0 para os desenhos). As marcas permanecem pertencentes aos respectivos titulares e não indicam afiliação ou endosso.
+- Os instaladores Brave/NVIDIA são obtidos de fornecedores oficiais e validados por assinatura de editor; o aplicativo não redistribui seus instaladores.
+
+## Avisos e testes
+
+A limpeza deve ser usada com os aplicativos fechados. Arquivos bloqueados são ignorados; opções de limpeza adicionais exigem confirmação. Não se promete eliminar todos os temporários do sistema nem recuperar dados apagados.
+
+**Testes:** há testes de código e de interface sem exibição no pipeline Windows. Execução real com permissões UAC e atualização ponta a ponta em Windows 11 devem ser verificadas antes de considerar a versão plenamente validada.
 
 ---
 
-**Callas Optimizer — Windows Edition** · Projeto separado do **Callas OS (Linux)**. Nenhum arquivo do Callas OS faz parte deste repositório.
+**Projeto independente:** `Callas157/Callas-Optimizer-Windows`. O repositório `Callas157/arch-install` (Callas OS Linux) não é modificado.

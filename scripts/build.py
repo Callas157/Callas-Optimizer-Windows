@@ -1,35 +1,44 @@
 #!/usr/bin/env python3
-"""Compila executavel Win64 standalone com clang/lld-link, no CRT Microsoft."""
+"""Gera Callas Optimizer Windows x64 via PyInstaller em runner Windows.
+
+O EXE conserva o nome do canal de atualizacao v8.9.x. Tamanho maximo
+100 MiB para compatibilidade com updater existente nas versoes antigas.
+"""
+from __future__ import annotations
+
+import base64
+import hashlib
+import os
 from pathlib import Path
-import subprocess, hashlib, shutil, sys
-root = Path(__file__).resolve().parents[1]
-src = root/'src'
-items = [
- ('engine','Callas_Optimizer_V8_8_GUI_Engine.bat'),
- ('brave','install_brave.ps1'),
- ('nvidia','install_nvidia.ps1'),
- ('ext','extensions.ps1'),
- ('undo','undo_extensions.ps1'),
- ('updater','updater.ps1'),
-]
-assets=root/'scripts'/'assets.c'
-with assets.open('w') as f:
- f.write('typedef unsigned char BYTE;\ntypedef unsigned int DWORD;\n')
- for sym,n in items:
-  data=(src/n).read_bytes()
-  f.write('const BYTE asset_'+sym+'[] = {\n')
-  for k in range(0,len(data),24): f.write('  '+','.join(str(b) for b in data[k:k+24])+',\n')
-  f.write('};\nconst DWORD asset_'+sym+'_size = '+str(len(data))+';\n')
-clang=shutil.which('clang')
-linker=shutil.which('lld-link')
-if not clang or not linker: sys.exit('clang e lld-link sao necessarios')
-for srcpath,obj in [(src/'app.c',root/'scripts'/'app.obj'),(assets,root/'scripts'/'assets.obj')]:
- subprocess.run([clang,'-target','x86_64-pc-windows-msvc','-fms-extensions','-ffreestanding','-fno-builtin','-fno-stack-protector','-c',str(srcpath),'-o',str(obj)],check=True)
-root.joinpath('dist').mkdir(exist_ok=True)
-exe=root/'dist'/'Callas_Optimizer_Windows_x64.exe'
-cmd=[linker,'/subsystem:windows','/entry:mainCRTStartup','/nodefaultlib','/machine:x64','/out:'+str(exe),str(root/'scripts'/'app.obj'),str(root/'scripts'/'assets.obj')]
-cmd+=list(map(str,(root/'importlibs').glob('*.lib')))
-subprocess.run(cmd,check=True)
-h=hashlib.sha256(exe.read_bytes()).hexdigest()
-(root/'dist'/'SHA256SUMS.txt').write_text(f'{h}  {exe.name}\n')
-print('Executavel:',exe,exe.stat().st_size,'bytes\nSHA256:',h)
+import subprocess
+import sys
+
+ROOT = Path(__file__).resolve().parents[1]
+if os.name != 'nt':
+    raise SystemExit('O executavel Windows deve ser compilado em Windows x64 (GitHub Actions).')
+
+icon_b64 = ROOT / 'assets/icons/callas.ico.b64'
+icon_file = ROOT / 'assets/icons/callas.ico'
+icon_file.write_bytes(base64.b64decode(icon_b64.read_text(encoding='ascii')))
+
+source = ROOT / 'src'
+args = [sys.executable, '-m', 'PyInstaller', '--noconfirm', '--clean',
+        '--onefile', '--windowed', '--noupx',
+        '--name', 'Callas_Optimizer_Windows_x64', '--icon', str(icon_file),
+        '--hidden-import', 'PySide6.QtSvg',
+        '--distpath', str(ROOT / 'dist'),
+        '--workpath', str(ROOT / 'build'),
+        '--specpath', str(ROOT / 'build')]
+for file in ('Callas_Optimizer_V8_8_GUI_Engine.bat', 'updater.ps1', 'install_brave.ps1',
+             'install_nvidia.ps1', 'extensions.ps1', 'undo_extensions.ps1'):
+    args += ['--add-data', f'{source / file}{os.pathsep}runtime']
+args += ['--add-data', f'{ROOT / "assets/icons"}{os.pathsep}assets/icons']
+args += [str(source / 'app.py')]
+subprocess.run(args, cwd=ROOT, check=True)
+exe = ROOT / 'dist/Callas_Optimizer_Windows_x64.exe'
+size = exe.stat().st_size
+if size > 100 * 1024 * 1024:
+    raise SystemExit(f'EXE de {size} bytes ultrapassa o limite de 100 MiB do updater da versao 8.9.1.')
+sha = hashlib.sha256(exe.read_bytes()).hexdigest()
+(ROOT / 'dist/SHA256SUMS.txt').write_text(f'{sha}  {exe.name}\n', encoding='ascii')
+print(f'PE64 Windows: {exe.name} ({size} bytes) SHA256={sha}')

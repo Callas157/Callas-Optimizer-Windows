@@ -15,45 +15,57 @@ concurrency:
 
 jobs:
   build-release:
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
+    timeout-minutes: 35
     steps:
-      - uses: actions/checkout@v4
-      - name: Instalar toolchain LLVM
+      - name: Baixar fontes
+        uses: actions/checkout@v4
+      - name: Preparar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          architecture: 'x64'
+          cache: pip
+          cache-dependency-path: requirements-build.txt
+      - name: Instalar dependencias do desktop e builder
+        run: python -m pip install -r requirements-build.txt
+      - name: Selecionar e validar versao
+        shell: pwsh
         run: |
-          sudo apt-get update
-          sudo apt-get install -y clang lld python3
-      - name: Selecionar versao e validar consistencia
-        shell: bash
+          $tag = if ($env:GITHUB_REF -like 'refs/tags/v*') { $env:GITHUB_REF_NAME } else { 'v' + (Get-Content VERSION -Raw).Trim() }
+          "RELEASE_TAG=$tag" >> $env:GITHUB_ENV
+          python scripts/check_version.py $tag
+      - name: Rodar testes de seguranca e funcionamento
+        run: python -m unittest discover -s tests -v
+      - name: Teste de interface Qt sem tela
+        shell: pwsh
+        env:
+          QT_QPA_PLATFORM: offscreen
+          CALLAS_SMOKE: '1'
+        run: python tests/smoke_gui.py
+      - name: Gerar aplicativo Windows x64
+        run: python scripts/build.py
+      - name: Verificar executavel e hash
+        shell: pwsh
         run: |
-          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
-            TAG="$GITHUB_REF_NAME"
-          else
-            TAG="v$(tr -d '\r\n' < VERSION)"
-          fi
-          echo "RELEASE_TAG=$TAG" >> "$GITHUB_ENV"
-          python3 scripts/check_version.py "$TAG"
-      - name: Testes de integridade
-        run: python3 -m unittest discover -s tests -v
-      - name: Compilar Windows x64
-        run: python3 scripts/build.py
-      - name: Verificar binario e hash publicado
-        shell: bash
-        run: |
-          python3 scripts/verify_build.py
-          (cd dist && sha256sum --check SHA256SUMS.txt)
-      - name: Criar release estavel quando a versao for nova
+          python scripts/verify_build.py
+          $record = (Get-Content dist/SHA256SUMS.txt -Raw).Trim().Split(' ', [StringSplitOptions]::RemoveEmptyEntries)
+          $hash = (Get-FileHash dist/Callas_Optimizer_Windows_x64.exe -Algorithm SHA256).Hash
+          if ($hash -ne $record[0].ToUpperInvariant()) { throw 'Hash de pacote divergente' }
+      - name: Publicar Release estavel (se nova)
+        shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
-        shell: bash
         run: |
-          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            echo "Release $RELEASE_TAG ja existe; publique uma nova versao para distribuir mudancas."
+          gh release view $env:RELEASE_TAG *> $null
+          if ($LASTEXITCODE -eq 0) {
+            Write-Output "Release $env:RELEASE_TAG ja publicada. Nao sobrescrever."
             exit 0
-          fi
-          gh release create "$RELEASE_TAG" \
-            dist/Callas_Optimizer_Windows_x64.exe \
-            dist/SHA256SUMS.txt \
-            --target "$GITHUB_SHA" \
-            --title "Callas Optimizer $RELEASE_TAG" \
-            --notes-file CHANGELOG.md \
+          }
+          gh release create $env:RELEASE_TAG `
+            dist/Callas_Optimizer_Windows_x64.exe `
+            dist/SHA256SUMS.txt `
+            --target $env:GITHUB_SHA `
+            --title "Callas Optimizer $env:RELEASE_TAG" `
+            --notes-file CHANGELOG.md `
             --latest

@@ -57,6 +57,19 @@ function Confirm-WindowsExe([string]$path) {
         if ($r.ReadUInt32() -ne 0x00004550 -or $r.ReadUInt16() -ne 0x8664) { throw 'Arquivo nao e um PE Windows x64.' }
     } finally { $f.Dispose() }
 }
+function Move-Retry([string]$source,[string]$destination) {
+    # PyInstaller onefile mantem um processo supervisor vivo por instantes
+    # apos a janela fechar. Aguarda a liberacao do arquivo com limite.
+    for($i=0; $i -lt 60; $i++) {
+        try {
+            Move-Item -LiteralPath $source -Destination $destination -ErrorAction Stop
+            return
+        } catch {
+            if ($i -eq 59) { throw }
+            Start-Sleep -Milliseconds 500
+        }
+    }
+}
 function Download-Verified([hashtable]$latest,[string]$staged) {
     for($attempt=1;$attempt -le 3;$attempt++) {
         try {
@@ -111,9 +124,9 @@ try {
         $process=Get-Process -Id $WaitPid -ErrorAction SilentlyContinue
         if ($process) { Wait-Process -Id $WaitPid -Timeout 45 -ErrorAction Stop }
         Start-Sleep -Milliseconds 250
-        Move-Item -LiteralPath $fullTarget -Destination $backup -ErrorAction Stop
+        Move-Retry $fullTarget $backup
         $originalMoved=$true
-        Move-Item -LiteralPath $neighbor -Destination $fullTarget -ErrorAction Stop
+        Move-Retry $neighbor $fullTarget
         $new=Start-Process -FilePath $fullTarget -PassThru -ErrorAction Stop
         Start-Sleep -Seconds 2
         $new.Refresh()
