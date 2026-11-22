@@ -12,6 +12,15 @@
 **[Baixar a versão estável mais recente](https://github.com/Callas157/Callas-Optimizer-Windows/releases/latest)**
 </div>
 
+## v8.9.5 — Correção da DLL Python e interface em português
+- Corrigido empacotamento para PyInstaller `--onedir` instalado com Python/Qt e dependências permanentes em `Program Files` (evita extração `_MEI` a cada abertura).
+- Instalador inclui a pasta `_internal`, e testes falham se `python312.dll` ou PySide6 estiverem ausentes.
+- Teste automatizado executa **o aplicativo instalado** no Windows antes de publicar a Release.
+- Perguntas de atualização e manutenção usam botões explícitos **Sim / Não** em PT-BR.
+- Barra lateral ampliada e com ícones SVG uniformes, em vez de caracteres pequenos.
+- Mantida somente a versão Setup para download.
+- O alerta de SmartScreen ainda pode aparecer sem assinatura digital.
+
 ## v8.9.4 — Ícone corrigido na Área de Trabalho e no menu Iniciar
 
 O instalador agora copia `CallasOptimizer.ico` para a pasta do aplicativo e os atalhos usam **IconFilename explícito**, sem depender da extração do ícone do executável. A identificação AppUserModelID é igual à usada pelo Qt, para consistência na barra de tarefas. Um teste de instalação real no Windows verifica destino e ícone dos atalhos durante o GitHub Actions.

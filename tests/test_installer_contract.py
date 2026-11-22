@@ -35,5 +35,7 @@ class InstallerTests(unittest.TestCase):
     def test_workflow(self):
         self.assertIn('Testar instalacao e icones dos atalhos no Windows', W)
         self.assertIn('IconLocation', W)
+        self.assertIn('O aplicativo INSTALADO nao abriu', W)
+        self.assertIn('--self-test', W)
         for t in ('windows-latest','Inno Setup 6','Callas_Optimizer_Setup_x64.exe'):
             self.assertIn(t,W)

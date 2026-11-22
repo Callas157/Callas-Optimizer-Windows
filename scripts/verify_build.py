@@ -6,8 +6,10 @@ import struct
 
 root = Path(__file__).resolve().parents[1]
 dist = root / 'dist'
-app = dist / 'Callas_Optimizer_Windows_x64.exe'  # interno ao Setup
-setup = dist / 'Callas_Optimizer_Setup_x64.exe'  # unico download
+app = dist / 'Callas_Optimizer_Windows_x64' / 'Callas_Optimizer_Windows_x64.exe'  # interno ao Setup
+setup = dist / 'Callas_Optimizer_Setup_x64.exe'
+assert (app.parent / '_internal' / 'python312.dll').is_file(), 'Runtime Python 3.12 ausente'
+assert (app.parent / '_internal' / 'PySide6').is_dir(), 'Bibliotecas Qt ausentes'  # unico download
 
 for path, installer in ((app, False), (setup, True)):
     data = path.read_bytes()

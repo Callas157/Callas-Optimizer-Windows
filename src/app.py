@@ -1,4 +1,4 @@
-"""Callas Optimizer Windows 8.9.4 — Atalhos Windows com icone proprio.
+"""Callas Optimizer Windows 8.9.5 — Runtime instalado e interface PT-BR.
 
 Python/PySide6. Operacoes legadas ainda reutilizam o BAT original, mas
 limpeza, atualizacoes, navegacao e painel de logs sao controles nativos.
@@ -28,7 +28,7 @@ from PySide6.QtWidgets import (
 
 from cleaner import clean_folders, empty_recycle_bin, format_size, known_temp_folders
 
-APP_VERSION = "8.9.4"
+APP_VERSION = "8.9.5"
 REPO = "Callas157/Callas-Optimizer-Windows"
 PROJECT_URL = f"https://github.com/{REPO}"
 LEGACY_SCRIPT = "Callas_Optimizer_V8_8_GUI_Engine.bat"
@@ -98,7 +98,7 @@ QPushButton:hover { background: #2e4469; border-color: #628acd; }
 QPushButton:disabled { color: #72849e; background: #1a283e; border-color: #2a3a54; }
 QPushButton#Primary { background: #1d67ed; border: 1px solid #368aff; }
 QPushButton#Primary:hover { background: #337dff; }
-QPushButton#Nav { background: transparent; border: none; border-radius: 9px; padding: 10px 12px; text-align: left; color: #aebed6; font-size: 12px; }
+QPushButton#Nav { background: transparent; border: none; border-radius: 9px; padding: 10px 12px; text-align: left; color: #aebed6; font-size: 14px; }
 QPushButton#Nav:hover { background: #1e304d; color: white; }
 QPushButton#Nav:checked { background: #1d3e71; color: #fff; border-left: 3px solid #4390ff; }
 QScrollArea { border: none; background: transparent; }
@@ -205,6 +205,20 @@ def start_script(name: str) -> None:
                       "-File", str(path)], cwd=str(DATA_DIR), creationflags=flags)
 
 
+
+def confirmar(parent, titulo: str, mensagem: str, padrao_sim: bool = False) -> bool:
+    """Caixa de confirmacao PT-BR independente do pacote de traducoes Qt."""
+    caixa = QMessageBox(parent)
+    caixa.setWindowTitle(titulo)
+    caixa.setText(mensagem)
+    caixa.setIcon(QMessageBox.Icon.Question)
+    botao_sim = caixa.addButton("Sim", QMessageBox.ButtonRole.YesRole)
+    botao_nao = caixa.addButton("Não", QMessageBox.ButtonRole.NoRole)
+    caixa.setDefaultButton(botao_sim if padrao_sim else botao_nao)
+    caixa.exec()
+    return caixa.clickedButton() is botao_sim
+
+
 class CleanerThread(QThread):
     progress = Signal(str)
     complete = Signal(object)
@@ -226,6 +240,50 @@ class CleanerThread(QThread):
                 stats.skipped += 1
                 self.progress.emit(f"Não foi possível esvaziar a lixeira: {e}")
         self.complete.emit(stats)
+
+
+NAV_ICONS = {
+    "home": "⌂", "gamer": "⚡", "edge": "◇", "windows_update": "↻",
+    "network": "◎", "privacy": "◈", "repair": "✚", "clean": "♻",
+    "classic": "▤", "shutdown": "⏻", "winutil": "▣",
+    "updates": "↓", "restore_point": "✦", "restore": "↩",
+    "programs": "▦", "logs": "≡", "about": "ⓘ",
+}
+
+
+def menu_icon(route: str) -> QIcon:
+    """Ícones vetoriais monocromáticos com traçado consistente."""
+    # Ícones com fundo próprio, independentes das fontes de emojis do Windows.
+    paths = {
+        "home": '<path d="M3 11 12 3l9 8v10h-7v-7h-4v7H3z"/>',
+        "gamer": '<path d="M5 12h14l2 7-5-2-2-2h-4l-2 2-5 2z"/><path d="M8 12V9m-2 1h4m7 0h.01"/>',
+        "edge": '<circle cx="12" cy="12" r="9"/><path d="M5 16c3-7 12-7 14-2M8 19l4-5"/>',
+        "windows_update": '<path d="M20 11a8 8 0 0 0-14-5L4 8m0-5v5h5M4 13a8 8 0 0 0 14 5l2-2m0 5v-5h-5"/>',
+        "network": '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c5 5 5 13 0 18M12 3c-5 5-5 13 0 18"/>',
+        "privacy": '<path d="M12 2 4 6v6c0 6 4 9 8 10 4-1 8-4 8-10V6z"/><path d="m9 12 2 2 4-4"/>',
+        "repair": '<path d="m4 20 9-9M14 3a5 5 0 0 0 6 6l-6 6-5-5zM3 21l4-1"/>',
+        "clean": '<path d="M6 3h12M9 3v3h6V3M5 7h14l-1 14H6zM10 10v8m4-8v8"/>',
+        "classic": '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M8 9v11"/>',
+        "shutdown": '<path d="M12 2v10M6 5a9 9 0 1 0 12 0"/>',
+        "winutil": '<path d="M4 4h16v16H4zM4 9h16m-10 0v11"/>',
+        "updates": '<path d="M12 3v13m-5-5 5 5 5-5M4 20h16"/>',
+        "restore_point": '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2M7 6 5 4"/>',
+        "restore": '<path d="M4 10h10a6 6 0 1 1-6 9M4 10l4-4M4 10l4 4"/>',
+        "programs": '<rect x="3" y="3" width="8" height="8" rx="1"/><rect x="13" y="3" width="8" height="8" rx="1"/><rect x="3" y="13" width="8" height="8" rx="1"/><rect x="13" y="13" width="8" height="8" rx="1"/>',
+        "logs": '<path d="M4 6h16M4 12h16M4 18h16"/>',
+        "about": '<circle cx="12" cy="12" r="9"/><path d="M12 10v7M12 7h.01"/>',
+    }
+    markup = paths.get(route, paths["about"])
+    svg = ('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" '
+           'fill="none" stroke="#8ec3ff" stroke-width="1.7" '
+           'stroke-linecap="round" stroke-linejoin="round">' + markup + '</svg>')
+    renderer = QSvgRenderer(QByteArray(svg.encode("utf-8")))
+    pixmap = QPixmap(64, 64)
+    pixmap.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(pixmap)
+    renderer.render(painter)
+    painter.end()
+    return QIcon(pixmap)
 
 
 def label(text: str, kind: str = "Muted", wrap: bool = True) -> QLabel:
@@ -280,7 +338,7 @@ class MainWindow(QMainWindow):
         root_layout.addWidget(self.splitter)
         self._sidebar()
         self._main_area()
-        self.splitter.setSizes([247, 950])
+        self.splitter.setSizes([300, 900])
         self.splitter.setStretchFactor(0, 0)
         self.splitter.setStretchFactor(1, 1)
         self.goto("home")
@@ -297,8 +355,8 @@ class MainWindow(QMainWindow):
     def _sidebar(self):
         sidebar = QFrame()
         sidebar.setObjectName("Sidebar")
-        sidebar.setMinimumWidth(200)
-        sidebar.setMaximumWidth(290)
+        sidebar.setMinimumWidth(245)
+        sidebar.setMaximumWidth(365)
         shell = QVBoxLayout(sidebar)
         shell.setContentsMargins(15, 19, 12, 14)
         shell.setSpacing(14)
@@ -329,7 +387,10 @@ class MainWindow(QMainWindow):
             heading.setContentsMargins(8, 15, 0, 6)
             nav.addWidget(heading)
             for route, title, glyph in entries:
-                btn = action_button(f"{glyph}    {title}", lambda _=False, key=route: self.goto(key))
+                btn = action_button(title, lambda _=False, key=route: self.goto(key))
+                btn.setIcon(menu_icon(route))
+                btn.setIconSize(QSize(23, 23))
+                btn.setMinimumHeight(47)
                 btn.setObjectName("Nav")
                 btn.setCheckable(True)
                 self.nav_group.addButton(btn)
@@ -590,9 +651,7 @@ class MainWindow(QMainWindow):
         safety = "Esta opção pode alterar serviços e configurações do Windows."
         if option == 2:
             safety = "A remoção do Edge pode afetar aplicativos e componentes do Windows."
-        if QMessageBox.question(self, "Confirmar operação", safety + "\n\nAbrir o motor de manutenção?",
-                                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                                QMessageBox.StandardButton.No) != QMessageBox.StandardButton.Yes:
+        if not confirmar(self, "Confirmar operação", safety + "\n\nAbrir a ferramenta de manutenção?"):
             return
         try:
             start_admin_bat(option)
@@ -601,9 +660,7 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "Falha ao iniciar", str(e))
 
     def ps_action(self, script: str, name: str):
-        if QMessageBox.question(self, "Confirmar operação", f"Abrir a ferramenta {name}?",
-                                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                                QMessageBox.StandardButton.Yes) != QMessageBox.StandardButton.Yes:
+        if not confirmar(self, "Confirmar operação", f"Abrir a ferramenta {name}?", True):
             return
         try:
             start_script(script)
@@ -624,9 +681,7 @@ class MainWindow(QMainWindow):
             windows_temp = Path(os.environ.get("SystemRoot", r"C:\Windows")) / "Temp"
             selection.extend([p for p in known_temp_folders(True) if p == windows_temp.resolve()])
         selection = list(dict.fromkeys(selection))
-        if QMessageBox.question(self, "Confirmar limpeza", "Remover arquivos temporários selecionados e, se marcado, esvaziar a Lixeira?\nArquivos em uso serão ignorados.",
-                                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                                QMessageBox.StandardButton.No) != QMessageBox.StandardButton.Yes:
+        if not confirmar(self, "Confirmar limpeza", "Remover arquivos temporários selecionados e, se marcado, esvaziar a Lixeira?\nArquivos em uso serão ignorados."):
             return
         self.clean_output.clear()
         self.clean_output.appendPlainText("Iniciando limpeza...")
@@ -728,10 +783,8 @@ class MainWindow(QMainWindow):
                 self.stop_update_timer()
                 release = status.split("|", 1)[1]
                 self.update_note.setText("Disponível: " + release)
-                if QMessageBox.question(self, "Atualização disponível",
-                                        f"Nova versão encontrada: {release}\nVersão instalada: {APP_VERSION}\n\nDeseja baixar e atualizar agora?",
-                                        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                                        QMessageBox.StandardButton.Yes) == QMessageBox.StandardButton.Yes:
+                if confirmar(self, "Atualização disponível",
+                         f"Nova versão encontrada: {release}\nVersão instalada: {APP_VERSION}\n\nDeseja baixar e atualizar agora?", True):
                     self.install_update()
                 return
         if self.updater_process and self.updater_process.poll() is not None:
@@ -821,6 +874,19 @@ class MainWindow(QMainWindow):
 
 
 def main():
+    if "--self-test" in sys.argv:
+        os.environ["QT_QPA_PLATFORM"] = "offscreen"
+        # Exercita runtime Python/Qt empacotado, imports e assets apos instalacao.
+        qtapp = QApplication([])
+        qtapp.setStyleSheet(STYLE)
+        w = MainWindow()
+        qtapp.processEvents()
+        if "clean" not in w.pages or "programs" not in w.pages:
+            raise RuntimeError("Navegacao incompleta")
+        w.goto("clean")
+        w.goto("programs")
+        w.close()
+        return 0
     if os.name != "nt":
         # Os testes de layout com QT_QPA_PLATFORM=offscreen tambem podem rodar fora do Windows.
         if os.environ.get("QT_QPA_PLATFORM") != "offscreen":

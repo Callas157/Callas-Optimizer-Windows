@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """Gera Callas Optimizer Windows x64 via PyInstaller em runner Windows.
 
-O EXE conserva o nome do canal de atualizacao v8.9.x. Tamanho maximo
-100 MiB para compatibilidade com updater existente nas versoes antigas.
+Apenas instalador: pasta do app com DLLs (onedir), evitando extracao _MEI a cada abertura.
 """
 from __future__ import annotations
 
@@ -24,7 +23,7 @@ assert icon_file.read_bytes()[:4] == b'\x00\x00\x01\x00', 'Arquivo ICO invalido'
 
 source = ROOT / 'src'
 args = [sys.executable, '-m', 'PyInstaller', '--noconfirm', '--clean',
-        '--onefile', '--windowed', '--noupx',
+        '--onedir', '--contents-directory', '_internal', '--windowed', '--noupx',
         '--name', 'Callas_Optimizer_Windows_x64', '--icon', str(icon_file),
         '--hidden-import', 'PySide6.QtSvg',
         '--distpath', str(ROOT / 'dist'),
@@ -36,7 +35,9 @@ for file in ('Callas_Optimizer_V8_8_GUI_Engine.bat', 'updater.ps1', 'install_bra
 args += ['--add-data', f'{ROOT / "assets/icons"}{os.pathsep}assets/icons']
 args += [str(source / 'app.py')]
 subprocess.run(args, cwd=ROOT, check=True)
-exe = ROOT / 'dist/Callas_Optimizer_Windows_x64.exe'
+exe = ROOT / 'dist/Callas_Optimizer_Windows_x64/Callas_Optimizer_Windows_x64.exe'
+assert (exe.parent / '_internal' / 'python312.dll').is_file(), 'python312.dll nao incluido no pacote'
+assert (exe.parent / '_internal' / 'PySide6').is_dir(), 'Qt nao incluido no pacote'
 size = exe.stat().st_size
 if size > 100 * 1024 * 1024:
     raise SystemExit(f'EXE de {size} bytes ultrapassa o limite de 100 MiB do updater da versao 8.9.1.')

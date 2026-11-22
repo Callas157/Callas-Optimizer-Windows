@@ -33,7 +33,7 @@ Name: "brazilianportuguese"; MessagesFile: "compiler:Languages\BrazilianPortugue
 [Tasks]
 Name: "desktopicon"; Description: "Criar atalho na area de trabalho"; GroupDescription: "Atalhos:"; Flags: unchecked
 [Files]
-Source: "..\dist\{#MyAppExe}"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\dist\Callas_Optimizer_Windows_x64\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\assets\icons\callas.ico"; DestDir: "{app}"; DestName: "CallasOptimizer.ico"; Flags: ignoreversion
 Source: "installed.marker"; DestDir: "{app}"; Flags: ignoreversion
 [Icons]

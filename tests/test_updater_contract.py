@@ -14,7 +14,7 @@ class UpdateContract(unittest.TestCase):
         ast.parse((ROOT / 'src/cleaner.py').read_text(encoding='utf-8'))
     def test_supported_features(self):
         for name in ('QSplitter', 'QStackedWidget', 'QScrollArea', 'resizeEvent', 'QMainWindow',
-                     '"Brave Browser", "brave"', '"NVIDIA App", "nvidia"', 'CleanerThread', 'QMessageBox.question'):
+                     '"Brave Browser", "brave"', '"NVIDIA App", "nvidia"', 'CleanerThread', 'confirmar(self,'):
             self.assertIn(name, APP)
     def test_version_contract(self):
         ver = (ROOT / 'VERSION').read_text().strip()

@@ -72,6 +72,17 @@ jobs:
           $ico = Join-Path $dest 'CallasOptimizer.ico'
           if (-not (Test-Path -LiteralPath $app -PathType Leaf)) { throw 'Executavel instalado ausente' }
           if (-not (Test-Path -LiteralPath $ico -PathType Leaf)) { throw 'Arquivo ICO instalado ausente' }
+          $runtime = Join-Path $dest '_internal\python312.dll'
+          if (-not (Test-Path -LiteralPath $runtime -PathType Leaf)) { throw 'Python312.dll nao instalado' }
+          $qt = Join-Path $dest '_internal\PySide6'
+          if (-not (Test-Path -LiteralPath $qt -PathType Container)) { throw 'Qt nao instalado' }
+          $env:QT_QPA_PLATFORM = 'offscreen'
+          $env:CALLAS_SMOKE = '1'
+          $previous = $env:PYTHONHOME
+          Remove-Item Env:PYTHONHOME -ErrorAction SilentlyContinue
+          $smoke = Start-Process -FilePath $app -ArgumentList '--self-test' -Wait -PassThru
+          if ($smoke.ExitCode -ne 0) { throw "O aplicativo INSTALADO nao abriu (codigo $($smoke.ExitCode))" }
+          if ($previous) { $env:PYTHONHOME = $previous }
           Add-Type -AssemblyName System.Drawing
           $icon = [System.Drawing.Icon]::new($ico)
           try { if ($icon.Width -lt 16) { throw 'ICO instalado invalido' } }
