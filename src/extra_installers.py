@@ -7,14 +7,19 @@ from ctypes import wintypes
 import os
 from pathlib import Path
 import re
+import ssl
 import subprocess
 import tempfile
 import urllib.parse
 import urllib.request
+import urllib.error
+
+import truststore
 
 ROOT = Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "CallasTeck" / "Downloads"
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 SUCCESS_CODES = {0, 1641, 3010}
+CHATGPT_PACKAGE = "OpenAI.Codex_2p2nqsd0c76g0"
 
 CATALOG = {
     "brave": {
@@ -87,8 +92,16 @@ CATALOG = {
         "url": "https://www.wisecleaner.com/index.php?product=wise-program-uninstaller&r=download-product%2Flatest-version",
         "website": "https://www.wisecleaner.com/wise-program-uninstaller.html",
         "hosts": {"downloads.wisecleaner.com", "www.wisecleaner.com", "www.wisecleaner.eu"},
-        "publisher": r"Lespeed Technology(?: Co\.?,?)? Ltd\.?",
+        "publisher": r"(?:Lespeed Technology(?: Co\.?,?)?|WiseCleaner Technology Co\.,) Ltd\.?",
         "filename": "WPUSetup.exe",
+    },
+    "chatgpt": {
+        "name": "ChatGPT com Codex",
+        "url": "https://get.microsoft.com/installer/download/9PLM9XGG6VKS?cid=website_cta_psi",
+        "website": "https://chatgpt.com/download/",
+        "hosts": {"get.microsoft.com"},
+        "publisher": r"Microsoft Corporation",
+        "filename": "ChatGPTSetup.exe",
     },
 }
 
@@ -113,6 +126,10 @@ PROGRAM_PATHS = {
 
 def official_website(app_id: str) -> str:
     return CATALOG[app_id]["website"]
+
+
+def program_key(app_id: str) -> str:
+    return "chatgpt" if app_id == "codex" else app_id
 
 
 def _safe_https(url: str, hosts: set[str]) -> bool:
@@ -179,9 +196,17 @@ def verify_authenticode(path: Path, publisher_regex: str) -> str:
     return signer
 
 
-def installed_program(app_id: str) -> Path | None:
+def installed_program(app_id: str) -> Path | str | None:
     if os.name != "nt":
         return None
+    if app_id == "chatgpt":
+        count = wintypes.UINT()
+        length = wintypes.UINT()
+        # A primeira consulta enumera apenas o tamanho necessário para o usuário atual.
+        error = ctypes.windll.kernel32.GetPackagesByPackageFamily(
+            CHATGPT_PACKAGE, ctypes.byref(count), None, ctypes.byref(length), None,
+        )
+        return f"shell:AppsFolder\\{CHATGPT_PACKAGE}!App" if error == 122 and count.value else None
     if app_id == "steam":
         import winreg
         try:
@@ -205,6 +230,14 @@ def installed_program(app_id: str) -> Path | None:
                 return max(found, key=version)
             return found[0]
     return None
+
+
+def open_program(target: Path | str) -> None:
+    if isinstance(target, str):
+        explorer = _system_program("cmd.exe").parent.parent / "explorer.exe"
+        subprocess.Popen([str(explorer), target], creationflags=NO_WINDOW, shell=False)
+    else:
+        os.startfile(str(target))
 
 
 def winget_path() -> Path:
@@ -385,13 +418,25 @@ def _check_nvidia_gpu() -> None:
 
 def _download_setup(app, executable: Path, notify) -> None:
     notify("Baixando…", -1)
-    opener = urllib.request.build_opener(_OfficialRedirects(app["hosts"]))
+    context = truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    opener = urllib.request.build_opener(
+        urllib.request.HTTPSHandler(context=context),
+        _OfficialRedirects(app["hosts"]),
+    )
     request = urllib.request.Request(app["url"], headers={"User-Agent": "CallasOptima"})
     maximum = 512 * 1024 * 1024
     magic = bytes.fromhex("D0CF11E0A1B11AE1") if executable.suffix == ".msi" else b"MZ"
     size = 0
     last_progress = -1
-    with opener.open(request, timeout=45) as response:
+    try:
+        response = opener.open(request, timeout=45)
+    except urllib.error.URLError as exc:
+        if isinstance(exc.reason, ssl.SSLCertVerificationError):
+            host = urllib.parse.urlsplit(app["url"]).hostname
+            raise RuntimeError(f"O Windows não conseguiu validar o certificado HTTPS de {host}. "
+                               "O download foi interrompido.") from exc
+        raise
+    with response:
         if not _safe_https(response.geturl(), app["hosts"]):
             raise RuntimeError("URL final do download não é do fornecedor oficial.")
         total = int(response.headers.get("Content-Length") or 0)

@@ -1,30 +1,30 @@
 """Dois cartões para ChatGPT e Codex, um só aplicativo oficial e sem acesso implícito a dados."""
 import ast
-import re
 from pathlib import Path
+import sys
 from xml.etree import ElementTree
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "src"))
+from extra_installers import CATALOG, _safe_https, program_key
 
 class OpenAIProgramsTest(unittest.TestCase):
-    def test_official_download_only(self):
+    def test_both_cards_use_the_in_app_downloader(self):
         gui=(ROOT/'src/app.py').read_text(encoding='utf-8')
         ast.parse(gui)
         for item in ('self.chatgpt_card', 'self.codex_card',
-                     'open_openai_download("ChatGPT")', 'open_openai_download("Codex")',
-                     'https://chatgpt.com/download/', 'https://learn.chatgpt.com/pt-BR/docs/quickstart'):
+                     'self.install_extra("chatgpt")', 'self.install_extra("codex")',
+                     'https://learn.chatgpt.com/pt-BR/docs/quickstart'):
             self.assertIn(item, gui)
-        action=gui.split('    def open_openai_download(',1)[1].split('    def install_extra(',1)[0]
-        self.assertNotIn('subprocess', action)
-        self.assertNotIn('Start-Process', action)
-        self.assertNotIn('RunAs', action)
-        self.assertNotIn('openai.api_key', action)
 
     def test_two_cards_but_one_installer(self):
-        gui=(ROOT/'src/app.py').read_text(encoding='utf-8')
-        self.assertEqual(gui.count('webbrowser.open("https://chatgpt.com/download/")'), 1)
-        self.assertIn('Não é necessário instalar dois aplicativos.', gui)
+        self.assertEqual(program_key("codex"), program_key("chatgpt"))
+        self.assertNotIn("codex", CATALOG)
+        package = CATALOG["chatgpt"]
+        self.assertTrue(_safe_https(package["url"], {"get.microsoft.com"}))
+        self.assertIn("/installer/download/9PLM9XGG6VKS", package["url"])
+        self.assertEqual(package["publisher"], "Microsoft Corporation")
 
     def test_vector_icons(self):
         for name in ('chatgpt', 'codex'):

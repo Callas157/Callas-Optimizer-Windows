@@ -15,6 +15,12 @@
 **[Baixar a versão estável mais recente](https://github.com/Callas157/Callas-Optimizer-Windows/releases/latest)**
 </div>
 
+## v8.9.18 — Downloads da Central de Programas
+
+- Os downloads HTTPS usam a cadeia de confiança nativa do Windows. O Callas continua conferindo o domínio, o arquivo e a assinatura Authenticode antes de abrir o instalador.
+- Spotify mantém a fonte oficial. Wise Program Uninstaller aceita o certificado atual do fabricante.
+- ChatGPT e Codex baixam na Central o mesmo instalador oficial para Windows, com progresso nos dois cartões e detecção do aplicativo instalado. O instalador da Microsoft pode usar componentes da Store.
+
 ## v8.9.17 — Interface Fênix, instalações e atualização do Callas
 
 - **Painel Fênix:** acompanhe CPU, RAM e espaço livre. Clean, Boost, Repair, Apps, Drivers e Atualizar abrem suas seções na mesma janela, com cartões que se reorganizam conforme a largura disponível.

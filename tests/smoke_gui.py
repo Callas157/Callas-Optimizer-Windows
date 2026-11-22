@@ -56,6 +56,17 @@ with patch("app.installed_program", return_value=Path("Discord.exe")):
     assert primary.text() == "Abrir" and bar.isHidden()
     win.program_updates_done({"discord"}, False)
     assert not upgrade.isHidden() and upgrade.text() == "Atualizar"
+win.installing_program = "chatgpt"
+win.show_program_progress("Baixando…", 38)
+for key in ("chatgpt", "codex"):
+    primary, _, bar, status = win.program_controls[key]
+    assert primary.isHidden() and not bar.isHidden() and bar.value() == 38
+    assert status.text() == "Baixando…"
+with patch("app.installed_program", return_value="shell:AppsFolder\\ChatGPT!App"):
+    win.extra_installer_done(True, "", "chatgpt")
+    for key in ("chatgpt", "codex"):
+        primary, _, bar, _ = win.program_controls[key]
+        assert bar.isHidden() and primary.text() == "Abrir"
 for route in ("home", "clean", "gamer", "repair", "programs", "drivers", "updates"):
     win.goto(route)
     assert win.stack.currentWidget() is win.pages[route]

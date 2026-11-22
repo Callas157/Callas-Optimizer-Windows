@@ -27,10 +27,10 @@ from cleaner import clean_folders, empty_recycle_bin, format_size, known_temp_fo
 from windows_actions import ACTIONS, BY_ROUTE, HOME as ACTION_HOME, worker as run_windows_action
 from extra_installers import (
     CATALOG as EXTRA_APPS, available_upgrades, download_and_open, installed_program,
-    official_website, powershell_env, powershell_path, upgrade_program,
+    official_website, open_program, powershell_env, powershell_path, program_key, upgrade_program,
 )
 
-APP_VERSION = "8.9.17"
+APP_VERSION = "8.9.18"
 REPO = "Callas157/Callas-Optimizer-Windows"
 PROJECT_URL = f"https://github.com/{REPO}"
 DATA_DIR = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "CallasTeck"
@@ -921,7 +921,7 @@ class MainWindow(QMainWindow):
         title_row.addLayout(names, 1)
         content.addLayout(title_row)
         primary = action_button(action_title, action, True)
-        if icon not in EXTRA_APPS:
+        if program_key(icon) not in EXTRA_APPS:
             content.addWidget(primary)
             return outer
         actions = QHBoxLayout()
@@ -964,12 +964,12 @@ class MainWindow(QMainWindow):
             lambda: self.install_extra("spotify"))
         self.chatgpt_card = self._program_card(
             "ChatGPT", "chatgpt", "Chat, Work e Codex no aplicativo oficial para Windows",
-            "OBTER APP OFICIAL",
-            lambda: self.open_openai_download("ChatGPT"))
+            "Instalar",
+            lambda: self.install_extra("chatgpt"))
         self.codex_card = self._program_card(
-            "Codex", "codex", "Trabalhe em projetos e arquivos locais com sua autorização",
-            "OBTER APP COM CODEX",
-            lambda: self.open_openai_download("Codex"))
+            "Codex", "codex", "Incluído no mesmo aplicativo do ChatGPT para Windows",
+            "Instalar",
+            lambda: self.install_extra("codex"))
         self.discord_card = self._program_card(
             "Discord", "discord", "Conversas, comunidades e voz", "BAIXAR INSTALADOR",
             lambda: self.install_extra("discord"))
@@ -1163,29 +1163,6 @@ class MainWindow(QMainWindow):
             self.native_timer = None
             QMessageBox.warning(self, "Tempo limite", "A tarefa excedeu o tempo previsto. Consulte os registros.")
 
-    def open_openai_download(self, requested: str):
-        # ChatGPT, Work e Codex pertencem ao mesmo aplicativo oficial para Windows.
-        # Apenas abre a página do fabricante, sem instaladores espelhados, API keys,
-        # login capturado ou acesso automático a arquivos da máquina.
-        if requested not in ("ChatGPT", "Codex"):
-            return
-        message = (
-            f"Obter {requested} pelo site oficial da OpenAI?\n\n"
-            "O aplicativo ChatGPT para Windows já inclui Chat, Work e Codex. "
-            "Não é necessário instalar dois aplicativos.\n\n"
-            "O acesso a arquivos locais é configurado dentro do aplicativo oficial, "
-            "quando você escolher um projeto ou pasta."
-        )
-        if not confirmar(self, "Download oficial da OpenAI", message, True):
-            return
-        if not webbrowser.open("https://chatgpt.com/download/"):
-            QMessageBox.warning(
-                self, "Abrir download",
-                "Não foi possível abrir o navegador. Acesse https://chatgpt.com/download/"
-            )
-        else:
-            self.status_message("Página oficial de ChatGPT e Codex aberta no navegador.")
-
     def configure_brave_extensions(self, undo: bool):
         if self.update_mode == "install" or (self.extensions_job and self.extensions_job.isRunning()):
             return
@@ -1207,13 +1184,14 @@ class MainWindow(QMainWindow):
         self.status_message("Extensões do Brave: concluído." if ok else "Extensões do Brave: falha.")
 
     def refresh_program_cards(self):
+        installed = {key: installed_program(key) is not None for key in EXTRA_APPS}
         for app_id, (primary, upgrade, _, _) in self.program_controls.items():
-            installed = installed_program(app_id) is not None
-            primary.setText("Abrir" if installed else "Instalar")
-            primary.setVisible(self.installing_program != app_id)
+            key = program_key(app_id)
+            primary.setText("Abrir" if installed[key] else "Instalar")
+            primary.setVisible(self.installing_program != key)
             primary.setEnabled(not self.installing_program)
-            upgrade.setVisible(installed and app_id in self.upgradeable_programs
-                               and self.installing_program != app_id)
+            upgrade.setVisible(installed[key] and key in self.upgradeable_programs
+                               and self.installing_program != key)
             upgrade.setEnabled(not self.installing_program)
 
     def check_program_updates(self, automatic=False):
@@ -1249,6 +1227,7 @@ class MainWindow(QMainWindow):
             self.program_updates_status.show()
 
     def install_extra(self, app_id: str, upgrade: bool = False):
+        app_id = program_key(app_id)
         if self.installing_program or (self.extra_installer and self.extra_installer.isRunning()):
             return
         if self.update_mode == "install" and self.updater_process:
@@ -1257,7 +1236,7 @@ class MainWindow(QMainWindow):
         name = EXTRA_APPS[app_id]["name"]
         if not upgrade and (installed := installed_program(app_id)):
             try:
-                os.startfile(str(installed))
+                open_program(installed)
                 self.status_message(f"{name} aberto.")
             except OSError as exc:
                 QMessageBox.warning(self, "Falha ao abrir", str(exc))
@@ -1279,30 +1258,32 @@ class MainWindow(QMainWindow):
     def show_program_progress(self, message: str, percent: int):
         if self.installing_program is None:
             return
-        primary, upgrade, progress, status = self.program_controls[self.installing_program]
-        primary.hide()
-        upgrade.hide()
-        progress.setRange(0, 0 if percent < 0 else 100)
-        if percent >= 0:
-            progress.setValue(percent)
-        progress.show()
-        status.setText(message)
-        status.show()
+        for card, (primary, upgrade, progress, status) in self.program_controls.items():
+            if program_key(card) != self.installing_program:
+                continue
+            primary.hide()
+            upgrade.hide()
+            progress.setRange(0, 0 if percent < 0 else 100)
+            if percent >= 0:
+                progress.setValue(percent)
+            progress.show()
+            status.setText(message)
+            status.show()
 
     def extra_installer_done(self, ok: bool, message: str, app_id: str):
         name = EXTRA_APPS[app_id]["name"]
-        primary, _, progress, status = self.program_controls[app_id]
         self.installing_program = None
-        progress.hide()
-        primary.show()
         installed = installed_program(app_id)
         if ok:
             self.upgradeable_programs.discard(app_id)
             message = "Pronto para abrir." if installed else (
                 "O instalador terminou. O programa ainda não foi localizado; "
                 "revise a instalação do fabricante.")
-        status.setText(message)
-        status.show()
+        for card, (_, _, progress, status) in self.program_controls.items():
+            if program_key(card) == app_id:
+                progress.hide()
+                status.setText(message)
+                status.show()
         self.refresh_program_cards()
         self.status_message(f"{name}: {message}")
         try:

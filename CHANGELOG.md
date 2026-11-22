@@ -1,3 +1,9 @@
+## v8.9.18 — Downloads da Central de Programas
+
+- Validação HTTPS pela cadeia de confiança do Windows, com mensagem específica quando o certificado não é aceito.
+- Identificação do novo editor Authenticode do Wise Program Uninstaller.
+- ChatGPT e Codex compartilham o download e o progresso do instalador oficial, com detecção do pacote instalado.
+
 ## v8.9.17 — Painel Fênix e instalações na interface
 
 - Painel inicial com métricas reais de CPU, RAM e armazenamento, além das seis rotas na mesma janela.

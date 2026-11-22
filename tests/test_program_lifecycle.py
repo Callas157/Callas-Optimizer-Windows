@@ -1,5 +1,6 @@
 from pathlib import Path
 import subprocess
+import ssl
 import sys
 import unittest
 from unittest.mock import Mock, patch
@@ -9,6 +10,20 @@ import extra_installers as installers
 
 
 class ProgramLifecycleTest(unittest.TestCase):
+    def test_downloader_uses_windows_trust_and_preserves_hostname_checks(self):
+        import truststore
+        with patch.object(installers.urllib.request, "build_opener") as build:
+            build.return_value.open.side_effect = OSError("sentinel")
+            with self.assertRaisesRegex(OSError, "sentinel"):
+                installers._download_setup(installers.CATALOG["spotify"], Path("SpotifySetup.exe"),
+                                           lambda *_: None)
+        handlers = build.call_args.args
+        https = next(handler for handler in handlers
+                     if isinstance(handler, installers.urllib.request.HTTPSHandler))
+        self.assertIsInstance(https._context, truststore.SSLContext)
+        self.assertTrue(https._context.check_hostname)
+        self.assertEqual(https._context.verify_mode, ssl.CERT_REQUIRED)
+
     def test_steam_retries_elevation_only_when_windows_requires_it(self):
         error = OSError("elevation required")
         error.winerror = 740
