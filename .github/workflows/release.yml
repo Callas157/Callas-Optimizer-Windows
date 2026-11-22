@@ -61,21 +61,52 @@ jobs:
           if (-not (Test-Path "dist/Callas_Optimizer_Setup_x64.exe")) { throw "Setup nao gerado" }
       - name: Validar executaveis e hashes
         run: python scripts/verify_build.py
-      - name: Publicar Release estavel (se nova)
+      - name: Publicar somente Setup na Release
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release view $env:RELEASE_TAG *> $null
           if ($LASTEXITCODE -eq 0) {
-            Write-Output "Release $env:RELEASE_TAG ja publicada. Nao sobrescrever."
+            # Release existente: preservar o Setup ja publicado, recalcular checksum
+            # usando o digest do asset existente (builds repetidos podem diferir).
+            $release = gh api "repos/$env:GITHUB_REPOSITORY/releases/tags/$env:RELEASE_TAG" | ConvertFrom-Json
+            if ($LASTEXITCODE -ne 0) { throw 'Nao foi possivel ler release existente' }
+            $setups = @($release.assets | Where-Object { $_.name -ceq 'Callas_Optimizer_Setup_x64.exe' })
+            if ($setups.Count -ne 1) { throw 'Release existente sem Setup unico' }
+            $digest = [string]$setups[0].digest
+            if ($digest -cnotmatch '^sha256:([0-9a-fA-F]{64})$') { throw 'Digest SHA-256 do Setup indisponivel' }
+            "$($Matches[1])  Callas_Optimizer_Setup_x64.exe" | Set-Content dist/SHA256SUMS.txt -Encoding Ascii
+            gh release upload $env:RELEASE_TAG dist/SHA256SUMS.txt --clobber
+            if ($LASTEXITCODE -ne 0) { throw 'Falha ao corrigir checksum da Release' }
+            Write-Output 'Release mantida: checksum apenas do Setup.'
             exit 0
           }
-          gh release create $env:RELEASE_TAG `
-            dist/Callas_Optimizer_Windows_x64.exe `
-            dist/Callas_Optimizer_Setup_x64.exe `
-            dist/SHA256SUMS.txt `
-            --target $env:GITHUB_SHA `
-            --title "Callas Optimizer $env:RELEASE_TAG" `
-            --notes-file CHANGELOG.md `
-            --latest
+          gh release create $env:RELEASE_TAG dist/Callas_Optimizer_Setup_x64.exe dist/SHA256SUMS.txt --target $env:GITHUB_SHA --title "Callas Optimizer $env:RELEASE_TAG" --notes-file CHANGELOG.md --latest
+          if ($LASTEXITCODE -ne 0) { throw 'Falha ao criar Release' }
+
+  remover-portateis-antigos:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Excluir executaveis portateis de todas as Releases
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" --jq '.[] | .assets[] | select(.name == "Callas_Optimizer_Windows_x64.exe") | .id' |
+            while read -r id; do
+              if [[ -n "$id" ]]; then
+                gh api -X DELETE "repos/$GITHUB_REPOSITORY/releases/assets/$id"
+                echo "Portatil retirado: $id"
+              fi
+            done
+          # Releases antigas sem instalador nao devem oferecer checksum orfao.
+          gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" --jq '.[] | select((.assets | map(.name) | index("Callas_Optimizer_Setup_x64.exe")) == null) | .assets[] | select(.name == "SHA256SUMS.txt") | .id' |
+            while read -r id; do
+              if [[ -n "$id" ]]; then
+                gh api -X DELETE "repos/$GITHUB_REPOSITORY/releases/assets/$id"
+                echo "Checksum antigo retirado: $id"
+              fi
+            done

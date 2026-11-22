@@ -14,9 +14,9 @@
 
 ## v8.9.3 — Instalação e ícone do Windows
 
-**Recomendado:** baixe `Callas_Optimizer_Setup_x64.exe` na Release. O Setup instala em Program Files, cria atalho no Iniciar, oferece atalho de Área de Trabalho, integra com Aplicativos Instalados e inclui desinstalador. A versão portátil permanece disponível.
+**Recomendado:** baixe `Callas_Optimizer_Setup_x64.exe` na Release. O Setup instala em Program Files, cria atalho no Iniciar, oferece atalho de Área de Trabalho, integra com Aplicativos Instalados e inclui desinstalador. Não existe download de versão portátil.
 
-O atualizador distingue o app instalado (Setup oficial validado + UAC) do portátil (substituição do EXE + backup). A interface, navegação e limpeza já são Python/PySide6, mas 11 opções avançadas ainda executam o motor BAT legado 8.8.
+O atualizador do aplicativo instalado usa o Setup oficial validado e solicita UAC quando necessário. A interface, navegação e limpeza já são Python/PySide6, mas 11 opções avançadas ainda executam o motor BAT legado 8.8.
 
 O executável e o Setup não têm assinatura Authenticode; o SmartScreen pode alertar. Não desative o Windows Defender.
 
@@ -27,7 +27,7 @@ A interface fixa anterior foi substituída por uma nova aplicação **Python + P
 - **Início:** visão geral e atalhos para tarefas frequentes.
 - **Limpeza Total (7):** executa nativamente na interface, com escopo selecionável, cancelamento, contagem de arquivos e espaço recuperado, sem travar o aplicativo. Não segue links simbólicos e ignora arquivos bloqueados.
 - **Programas:** ícones vetoriais reais do Brave e NVIDIA App, com instalação oficial e gerenciamento reversível de extensões SteamDB / Bonjourr.
-- **Atualizações (11):** consulta a última Release estável; ao encontrar versão nova, pede sua confirmação. Baixa o EXE, valida o tamanho, cabeçalho PE64 e hash SHA-256, cria backup e somente então fecha para substituir e reiniciar.
+- **Atualizações (11):** consulta a última Release estável, pede confirmação e verifica tamanho, formato PE e SHA-256 do Setup antes de iniciar a atualização.
 - **Registros:** visualização dos logs das operações na interface.
 - **Ferramentas 1–6, 8–10, 12–13:** mantidas sem mudar o funcionamento do motor BAT **8.8** (uma janela de console ainda é aberta para os submenus antigos). Elas serão migradas progressivamente para a nova UI.
 
@@ -35,12 +35,12 @@ A interface fixa anterior foi substituída por uma nova aplicação **Python + P
 
 **Prioridade:** Windows 11 x64 Pro, Enterprise e IoT Enterprise LTSC. Windows 10 e ARM64 não são alvos testados.
 
-O executável é standalone: não é necessário instalar Python ou Qt. A primeira execução extrai os scripts de manutenção para `%LOCALAPPDATA%\CallasTeck`. A compilação inclui somente dependências usadas pelo projeto.
+O Setup já inclui o aplicativo e as dependências Python/Qt; não é necessário instalar Python. A primeira execução extrai os scripts de manutenção para `%LOCALAPPDATA%\CallasTeck`. A compilação inclui somente dependências usadas pelo projeto.
 
 1. Abra **[Releases](https://github.com/Callas157/Callas-Optimizer-Windows/releases/latest)**.
-2. Baixe `Callas_Optimizer_Windows_x64.exe`.
-3. Guarde em uma pasta **com permissão de gravação**, por exemplo `Documentos\Callas Optimizer`.
-4. Execute com duplo clique. Funções administrativas solicitam UAC quando necessário.
+2. Baixe `Callas_Optimizer_Setup_x64.exe` (único EXE distribuído).
+3. Execute o instalador e autorize o UAC.
+4. Abra o aplicativo pelo menu Iniciar; a desinstalação fica em Aplicativos Instalados.
 
 > O aplicativo ainda não tem assinatura digital própria; o SmartScreen pode alertar. **Não desative proteções do Windows para executá-lo.** Verifique a origem e o SHA-256 publicado na Release.
 
@@ -53,9 +53,9 @@ Consulta: `https://api.github.com/repos/Callas157/Callas-Optimizer-Windows/relea
 - Só encerra a interface quando a nova versão está pronta para substituir o executável.
 - Mantém até dois backups recentes e tenta restaurar uma versão funcional quando o processo falha.
 - Logs do atualizador em `%LOCALAPPDATA%\CallasTeck\atualizacoes.log`.
-- O EXE publicado deve ter **100 MiB ou menos** para continuar compatível com atualizadores das versões 8.9.0/8.9.1.
+- Nas Releases é distribuído apenas o Setup e seu SHA-256; versões portáteis antigas foram retiradas.
 
-A edição instalada usa o Setup com UAC para atualizar Program Files. A versão portátil exige pasta gravável. Instalação interrompida não tem garantia de rollback transacional.
+A edição instalada usa o Setup com UAC para atualizar Program Files. Quem possui uma versão portátil antiga deverá instalar o Setup para migrar. Instalação interrompida não tem garantia de rollback transacional.
 
 ## Desenvolvimento
 
@@ -68,7 +68,7 @@ A edição instalada usa o Setup com UAC para atualizar Program Files. A versão
 - `requirements-build.txt`: dependências do ambiente de compilação.
 - `scripts/build.py`: PyInstaller no **Windows x64**; o executável fica em `dist/`.
 - `scripts/check_version.py`, `scripts/verify_build.py`, `tests/`: integridade, proteção contra erros e testes de interface.
-- `.github/workflows/release.yml`: constrói, testa e publica a versão `VERSION` em Release estável quando tudo passa.
+- `.github/workflows/release.yml`: constrói, testa, distribui somente o Setup e remove executáveis portáteis antigos das Releases.
 
 O código pode ser desenvolvido e testado em Windows usando Python 3.12:
 

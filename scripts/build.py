@@ -41,5 +41,4 @@ size = exe.stat().st_size
 if size > 100 * 1024 * 1024:
     raise SystemExit(f'EXE de {size} bytes ultrapassa o limite de 100 MiB do updater da versao 8.9.1.')
 sha = hashlib.sha256(exe.read_bytes()).hexdigest()
-(ROOT / 'dist/SHA256SUMS.txt').write_text(f'{sha}  {exe.name}\n', encoding='ascii')
 print(f'PE64 Windows: {exe.name} ({size} bytes) SHA256={sha}')
