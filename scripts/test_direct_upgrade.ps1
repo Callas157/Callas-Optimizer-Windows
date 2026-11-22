@@ -60,6 +60,44 @@ $smoke=Start-Process -FilePath $app -ArgumentList '--self-test' -Wait -PassThru
 if ($smoke.ExitCode -ne 0) { throw "O app atualizado nao abriu: $($smoke.ExitCode)" }
 Write-Host 'Salto direto 8.9.3 -> Setup atual validado, incluindo abertura em Windows.'
 
+# Testa o instalador com duas janelas reais, inclusive com os argumentos do
+# atualizador interativo anterior. Desabilita o Restart Manager para que só
+# passe se o próprio Setup solicitar e aguardar o fechamento.
+$settingsKey = 'HKCU:\Software\Callas\OptimizerWindows'
+if (!(Test-Path $settingsKey)) { New-Item -Path $settingsKey -Force | Out-Null }
+Set-ItemProperty -Path $settingsKey -Name auto_update -Value 'false'
+$env:QT_QPA_PLATFORM='windows'
+$instances = @()
+try {
+    $instances += Start-Process -FilePath $app -PassThru
+    $instances += Start-Process -FilePath $app -PassThru
+    foreach ($instance in $instances) {
+        $limit = [Diagnostics.Stopwatch]::StartNew()
+        do {
+            $instance.Refresh()
+            if ($instance.HasExited) { throw 'O Callas de teste fechou antes de abrir a janela.' }
+            if ($instance.MainWindowHandle) { break }
+            Start-Sleep -Milliseconds 200
+        } while ($limit.Elapsed.TotalSeconds -lt 20)
+        if (!$instance.MainWindowHandle) { throw 'A janela do Callas de teste não abriu.' }
+    }
+    $arguments = '/CALLASUPDATE /NORESTART /NOCLOSEAPPLICATIONS /SP- /DIR="' + $destination + '"'
+    $setup = Start-Process -FilePath $CurrentSetup -ArgumentList $arguments -PassThru
+    if (!$setup.WaitForExit(90000)) {
+        Stop-Process -Id $setup.Id -ErrorAction SilentlyContinue
+        throw 'O Setup ficou esperando interação ou não conseguiu fechar o aplicativo.'
+    }
+    if ($setup.ExitCode -ne 0) { throw "Atualização com Callas aberto falhou: $($setup.ExitCode)" }
+    foreach ($instance in $instances) {
+        if (!$instance.HasExited) { throw 'Uma janela antiga permaneceu aberta após a instalação.' }
+    }
+    Write-Host 'Setup de atualização fechou duas instâncias sem intervenção.'
+} finally {
+    foreach ($instance in $instances) {
+        if (!$instance.HasExited) { Stop-Process -Id $instance.Id -ErrorAction SilentlyContinue }
+    }
+}
+
 # Desinstalar a versao de teste para nao interferir nos testes de instalacao normais.
 $uninstaller=Join-Path $destination 'unins000.exe'
 if (!(Test-Path -LiteralPath $uninstaller -PathType Leaf)) { throw 'Desinstalador nao encontrado' }

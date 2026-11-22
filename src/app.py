@@ -30,7 +30,7 @@ from extra_installers import (
     official_website, open_program, powershell_env, powershell_path, program_key, upgrade_program,
 )
 
-APP_VERSION = "8.9.18"
+APP_VERSION = "8.9.19"
 REPO = "Callas157/Callas-Optimizer-Windows"
 PROJECT_URL = f"https://github.com/{REPO}"
 DATA_DIR = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "CallasTeck"

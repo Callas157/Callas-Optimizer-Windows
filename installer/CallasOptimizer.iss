@@ -38,6 +38,7 @@ Name: "desktopicon"; Description: "Criar atalho na area de trabalho"; GroupDescr
 Source: "..\dist\Callas_Optimizer_Windows_x64\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\assets\icons\callas.ico"; DestDir: "{app}"; DestName: "CallasOptimizer.ico"; Flags: ignoreversion
 Source: "installed.marker"; DestDir: "{app}"; Flags: ignoreversion
+Source: "close_running_app.ps1"; Flags: dontcopy
 [Icons]
 Name: "{autoprograms}\Callas Optimizer"; Filename: "{app}\{#MyAppExe}"; WorkingDir: "{app}"; IconFilename: "{app}\CallasOptimizer.ico"; AppUserModelID: "CallasTeck.CallasOptimizer.Windows"
 Name: "{autodesktop}\Callas Optimizer"; Filename: "{app}\{#MyAppExe}"; WorkingDir: "{app}"; IconFilename: "{app}\CallasOptimizer.ico"; AppUserModelID: "CallasTeck.CallasOptimizer.Windows"; Tasks: desktopicon
@@ -63,6 +64,39 @@ begin
   for I := 1 to ParamCount do
     if CompareText(ParamStr(I), '/CALLASUPDATE') = 0 then
       Result := True;
+end;
+
+function ShouldSkipPage(PageID: Integer): Boolean;
+begin
+  Result := IsCallasUpdate and ((PageID = wpWelcome) or (PageID = wpSelectDir) or
+    (PageID = wpSelectTasks) or (PageID = wpReady) or (PageID = wpFinished));
+end;
+
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+var
+  Target, PowerShell, Arguments: String;
+  ExitCode: Integer;
+begin
+  Result := '';
+  Target := ExpandConstant('{app}\{#MyAppExe}');
+  if not FileExists(Target) then
+    Exit;
+  ExtractTemporaryFile('close_running_app.ps1');
+  PowerShell := ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe');
+  Arguments := '-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File ' +
+    AddQuotes(ExpandConstant('{tmp}\close_running_app.ps1')) + ' -Target ' + AddQuotes(Target);
+  if not Exec(PowerShell, Arguments, ExpandConstant('{tmp}'), SW_HIDE, ewWaitUntilTerminated, ExitCode) then
+  begin
+    Log(Format('Failed to start graceful application shutdown: %d', [ExitCode]));
+    Result := 'Não foi possível solicitar o fechamento do Callas Optima.';
+  end
+  else if ExitCode <> 0 then
+  begin
+    Log(Format('Callas Optima is still running or close failed: %d', [ExitCode]));
+    Result := 'O Callas Optima ainda está em uso. Conclua a tarefa aberta e tente atualizar novamente.';
+  end
+  else
+    Log('Checked and closed running Callas Optima windows for the installation directory.');
 end;
 
 procedure CurPageChanged(CurPageID: Integer);

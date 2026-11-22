@@ -1,3 +1,9 @@
+## v8.9.19 — Atualização fecha o Callas automaticamente
+
+- O Setup pede o fechamento das instâncias abertas da instalação de destino e aguarda saírem antes de substituir arquivos.
+- Atualizações confirmadas exibem a janela de progresso e seguem com as configurações existentes. O atualizador reabre o Callas quando a instalação termina.
+- O teste de atualização no Windows também usa um Callas em execução e verifica que o Setup fecha as janelas sem interação.
+
 ## v8.9.18 — Downloads da Central de Programas
 
 - Validação HTTPS pela cadeia de confiança do Windows, com mensagem específica quando o certificado não é aceito.

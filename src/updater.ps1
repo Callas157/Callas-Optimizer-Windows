@@ -109,6 +109,12 @@ function Download-Verified([hashtable]$latest,[string]$staged) {
     Confirm-WindowsExe $staged -Installer:$Installed
     Log ('Download e validacao PE64/SHA256 concluidos para '+$latest.Tag)
 }
+function Start-TargetIfClosed([string]$path) {
+    $name = [IO.Path]::GetFileNameWithoutExtension($path)
+    $running = Get-Process -Name $name -ErrorAction SilentlyContinue |
+      Where-Object { [StringComparer]::OrdinalIgnoreCase.Equals($_.Path, $path) }
+    if (!$running) { Start-Process -FilePath $path -ErrorAction Stop | Out-Null }
+}
 try {
     if ($CurrentVersion -cnotmatch '^[0-9]+\.[0-9]+\.[0-9]+$') { throw 'Versao local invalida.' }
     $latest=Get-Latest
@@ -153,17 +159,17 @@ try {
             try {
                 $verified = (Get-FileHash -InputStream $guard -Algorithm SHA256).Hash.ToUpperInvariant()
                 if ($verified -cne $latest.SHA256) { throw 'O Setup foi alterado apos a verificacao.' }
-                $setup=Start-Process -FilePath $staged -ArgumentList '/CALLASUPDATE /NORESTART /CLOSEAPPLICATIONS /SP-' -Verb RunAs -PassThru -ErrorAction Stop
+                $setup=Start-Process -FilePath $staged -ArgumentList ('/CALLASUPDATE /SILENT /NORESTART /CLOSEAPPLICATIONS /SP- /DIR="'+$targetDir+'"') -Verb RunAs -PassThru -ErrorAction Stop
             } finally { $guard.Dispose() }
             $setup.WaitForExit()
             if ($setup.ExitCode -ne 0) { throw ('Setup devolveu codigo '+$setup.ExitCode) }
             if (-not (Test-Path -LiteralPath $fullTarget -PathType Leaf)) { throw 'Executavel ausente apos Setup.' }
             Log ('Setup aplicado: '+$latest.Tag)
-            Start-Process -FilePath $fullTarget -ErrorAction Stop | Out-Null
+            Start-TargetIfClosed $fullTarget
             exit 0
         } catch {
             Log ('Falha no Setup instalado: '+$_.Exception.Message)
-            try { if (Test-Path -LiteralPath $fullTarget) { Start-Process -FilePath $fullTarget -ErrorAction Stop | Out-Null } } catch {}
+            try { if (Test-Path -LiteralPath $fullTarget) { Start-TargetIfClosed $fullTarget } } catch {}
             throw
         } finally {
             Remove-Item -LiteralPath $staged -Force -ErrorAction SilentlyContinue

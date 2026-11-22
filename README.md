@@ -15,6 +15,10 @@
 **[Baixar a versão estável mais recente](https://github.com/Callas157/Callas-Optimizer-Windows/releases/latest)**
 </div>
 
+## v8.9.19 — Fechamento automático durante a atualização
+
+O Setup solicita o fechamento das janelas da instalação de destino antes de substituir os arquivos. A atualização já confirmada continua na janela de progresso. Se uma tarefa impedir o fechamento, o Setup informa que o Callas está em uso.
+
 ## v8.9.18 — Downloads da Central de Programas
 
 - Os downloads HTTPS usam a cadeia de confiança nativa do Windows. O Callas continua conferindo o domínio, o arquivo e a assinatura Authenticode antes de abrir o instalador.
