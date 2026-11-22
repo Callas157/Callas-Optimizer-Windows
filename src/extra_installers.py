@@ -112,15 +112,17 @@ WINGET_IDS = {
 }
 
 PROGRAM_PATHS = {
-    "brave": r"BraveSoftware\Brave-Browser\Application\brave.exe",
-    "nvidia": r"NVIDIA Corporation\NVIDIA App\CEF\NVIDIA App.exe",
-    "discord": r"Discord\app-*\Discord.exe",
-    "steam": r"Steam\steam.exe",
-    "medal": r"Medal\app-*\Medal.exe",
-    "lghub": r"LGHUB\lghub.exe",
-    "spotify": r"Spotify\Spotify.exe",
-    "epic": r"Epic Games\Launcher\Portal\Binaries\Win64\EpicGamesLauncher.exe",
-    "wise": r"Wise\Wise Program Uninstaller\WiseProgramUninstaller.exe",
+    "brave": (r"BraveSoftware\Brave-Browser\Application\brave.exe",),
+    "nvidia": (r"NVIDIA Corporation\NVIDIA App\CEF\NVIDIA App.exe",),
+    "discord": (r"Discord\app-*\Discord.exe",),
+    "steam": (r"Steam\steam.exe",),
+    # Prioriza o mesmo executável do atalho atual do Medal.
+    "medal": (r"Medal\current\Medal.exe", r"Medal\Medal.exe",
+              r"Programs\Medal\Medal.exe", r"Medal\app-*\Medal.exe"),
+    "lghub": (r"LGHUB\lghub.exe",),
+    "spotify": (r"Spotify\Spotify.exe",),
+    "epic": (r"Epic Games\Launcher\Portal\Binaries\Win64\EpicGamesLauncher.exe",),
+    "wise": (r"Wise\Wise Program Uninstaller\WiseProgramUninstaller.exe",),
 }
 
 
@@ -217,18 +219,18 @@ def installed_program(app_id: str) -> Path | str | None:
                     return candidate
         except (OSError, TypeError):
             pass
-    pattern = PROGRAM_PATHS[app_id]
     for variable in ("LOCALAPPDATA", "APPDATA", "ProgramFiles", "ProgramFiles(x86)"):
         directory = os.environ.get(variable)
         if not directory:
             continue
-        found = [path for path in Path(directory).glob(pattern) if path.is_file()]
-        if found:
-            if "app-*" in pattern:
-                def version(path):
-                    return tuple(int(part) for part in re.findall(r"\d+", path.parent.name))
-                return max(found, key=version)
-            return found[0]
+        for pattern in PROGRAM_PATHS[app_id]:
+            found = [path for path in Path(directory).glob(pattern) if path.is_file()]
+            if found:
+                if "app-*" in pattern:
+                    def version(path):
+                        return tuple(int(part) for part in re.findall(r"\d+", path.parent.name))
+                    return max(found, key=version)
+                return found[0]
     return None
 
 

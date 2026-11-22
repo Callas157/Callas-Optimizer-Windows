@@ -1,6 +1,7 @@
 from pathlib import Path
 import subprocess
 import ssl
+import tempfile
 import sys
 import unittest
 from unittest.mock import Mock, patch
@@ -10,6 +11,17 @@ import extra_installers as installers
 
 
 class ProgramLifecycleTest(unittest.TestCase):
+    @unittest.skipUnless(sys.platform == "win32", "Windows paths required")
+    def test_medal_recognizes_current_launcher_and_legacy_layouts(self):
+        for relative in (r"Medal\Medal.exe", r"Medal\current\Medal.exe",
+                         r"Programs\Medal\Medal.exe", r"Medal\app-2.1.0\Medal.exe"):
+            with self.subTest(relative=relative), tempfile.TemporaryDirectory() as directory:
+                with patch.dict(installers.os.environ, {"LOCALAPPDATA": directory}, clear=True):
+                    executable = Path(directory) / relative
+                    executable.parent.mkdir(parents=True)
+                    executable.touch()
+                    self.assertEqual(installers.installed_program("medal"), executable)
+
     def test_downloader_uses_windows_trust_and_preserves_hostname_checks(self):
         import truststore
         with patch.object(installers.urllib.request, "build_opener") as build:

@@ -1,3 +1,7 @@
+## v8.9.20 — Detecção do Medal instalado
+
+- O cartão do Medal reconhece o caminho do atalho atual e instalações anteriores. Quando encontrado, mostra **Abrir** e usa o executável instalado.
+
 ## v8.9.19 — Atualização fecha o Callas automaticamente
 
 - O Setup pede o fechamento das instâncias abertas da instalação de destino e aguarda saírem antes de substituir arquivos.

@@ -56,6 +56,13 @@ with patch("app.installed_program", return_value=Path("Discord.exe")):
     assert primary.text() == "Abrir" and bar.isHidden()
     win.program_updates_done({"discord"}, False)
     assert not upgrade.isHidden() and upgrade.text() == "Atualizar"
+medal = Path(r"C:\Medal\current\Medal.exe")
+with patch("app.installed_program", return_value=medal), patch("app.open_program") as launch:
+    win.refresh_program_cards()
+    primary, _, _, _ = win.program_controls["medal"]
+    assert primary.text() == "Abrir"
+    primary.click()
+    launch.assert_called_once_with(medal)
 win.installing_program = "chatgpt"
 win.show_program_progress("Baixando…", 38)
 for key in ("chatgpt", "codex"):
