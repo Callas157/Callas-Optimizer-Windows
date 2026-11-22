@@ -18,6 +18,7 @@ class InstallerTests(unittest.TestCase):
         self.assertIn('viewBox', root.attrib)
         builder=(R/'scripts/build.py').read_text(encoding='utf-8')
         self.assertIn('make_ico(',builder)
+        self.assertIn('phoenix-approved.png', builder)
         generator=(R/'scripts/make_icon.py').read_text(encoding='utf-8')
         ast.parse(generator)
         self.assertIn('16, 24, 32, 48, 64, 128, 256',generator)

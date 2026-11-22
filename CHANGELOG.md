@@ -1,5 +1,12 @@
 # Histórico de versões — Callas Optimizer Windows
 
+## v8.9.15 — Arte Fênix aprovada
+- A Fênix selecionada em imagem foi incorporada como recurso oficial da interface.
+- Conversão automática da mesma imagem para ICO multirresolução do executável, Setup e atalhos.
+- Prévia gráfica aprovada adicionada ao topo do README em substituição ao banner anterior.
+- Mantidas as funções, rotas e compatibilidade de atualização acumulativa da versão anterior.
+
+
 ## v8.9.14 — Callas Optima, Fênix Edition
 - Interface renovada com Fênix, tema gradiente roxo/azul e seis cartões de ação.
 - Clean, Boost, Repair, Apps, Drivers e Atualizar navegam entre páginas reais dentro do mesmo QStackedWidget.

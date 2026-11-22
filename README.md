@@ -4,7 +4,7 @@
 
 **Interface redesenhada para Windows 11: desempenho e renovação em uma única janela, com cores azul, roxo e ciano.**
 
-<img src="assets/optima-preview.svg" alt="Prévia ilustrativa Callas Optima com Fênix e atalhos Clean, Boost, Repair, Apps, Drivers e Atualizar" width="100%" />
+<img src="assets/optima-approved-preview.jpg" alt="Prévia ilustrativa Callas Optima com Fênix e atalhos Clean, Boost, Repair, Apps, Drivers e Atualizar" width="100%" />
 
 <sub>Prévia do novo layout. O programa utiliza dados reais quando disponíveis e não inventa uma nota de otimização.</sub>
 
@@ -14,6 +14,12 @@
 
 **[Baixar a versão estável mais recente](https://github.com/Callas157/Callas-Optimizer-Windows/releases/latest)**
 </div>
+
+## v8.9.15 — Fênix escolhida e imagem real da interface
+
+- **Ícone da Fênix aprovado:** a imagem selecionada foi adicionada como `assets/icons/phoenix-approved.png` e é usada na janela, no Setup, no menu Iniciar e nos atalhos.
+- **Imagem do README:** a prévia aprovada do Callas Optima aparece em destaque, substituindo o banner antigo.
+- Compatibilidade cumulativa, menus e ferramentas da v8.9.14 preservados.
 
 ## v8.9.14 — Interface Fênix e novos aplicativos
 
@@ -161,7 +167,7 @@ A edição instalada usa o Setup com UAC para atualizar Program Files. Quem poss
 - `src/updater.ps1`: atualização por GitHub Releases, SHA-256 e recuperação.
 - As operações de manutenção já não dependem do BAT. WinUtil abre o site oficial sem executar scripts pela internet; a remoção do Edge depende da edição do Windows.
 - `src/install_brave.ps1`, `src/install_nvidia.ps1`, `src/extensions.ps1` e `src/undo_extensions.ps1`: instaladores e configurações.
-- `assets/icons/`: ícones SVG, incluindo a nova Fênix; `scripts/make_icon.py` gera ICO multirresolução para a aplicação e os atalhos durante a compilação.
+- `assets/icons/`: Fênix aprovada em PNG e ícones SVG auxiliares; `scripts/make_icon.py` gera ICO multirresolução para a aplicação e os atalhos durante a compilação.
 - `requirements-build.txt`: dependências do ambiente de compilação.
 - `scripts/build.py`: PyInstaller no **Windows x64**; o executável fica em `dist/`.
 - `scripts/check_version.py`, `scripts/verify_build.py`, `tests/`: integridade, proteção contra erros e testes de interface.

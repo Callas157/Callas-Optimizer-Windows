@@ -40,9 +40,12 @@ class OptimaInterfaceContract(unittest.TestCase):
                      "assets/icons/epic.svg", "assets/icons/wise.svg"):
             root = ElementTree.parse(ROOT / path).getroot()
             self.assertTrue(root.tag.endswith("svg"), path)
+        png = (ROOT / "assets/icons/phoenix-approved.png").read_bytes()
+        self.assertEqual(png[:8], bytes.fromhex("89504e470d0a1a0a"))
+        self.assertTrue((ROOT / "assets/optima-approved-preview.jpg").is_file())
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
-        self.assertIn("assets/optima-preview.svg", readme)
-        self.assertLess(readme.index("Fênix Edition"), readme.index("assets/optima-preview.svg"))
+        self.assertIn("assets/optima-approved-preview.jpg", readme)
+        self.assertLess(readme.index("Fênix Edition"), readme.index("assets/optima-approved-preview.jpg"))
         self.assertIn("scripts/make_icon.py", (ROOT/"scripts/build.py").read_text() +
                       (ROOT/"README.md").read_text(encoding="utf-8"))
 

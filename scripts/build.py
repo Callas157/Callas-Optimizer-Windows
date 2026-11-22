@@ -18,7 +18,7 @@ if os.name != 'nt':
 # O mesmo icone Fen ix e rasterizado nas resolucoes do Windows.
 from make_icon import make_ico
 icon_file = ROOT / 'assets/icons/callas.ico'
-make_ico(ROOT / 'assets/icons/callas.svg', icon_file)
+make_ico(ROOT / 'assets/icons/phoenix-approved.png', icon_file)
 assert icon_file.read_bytes()[:4] == b'\x00\x00\x01\x00', 'Arquivo ICO invalido'
 
 source = ROOT / 'src'

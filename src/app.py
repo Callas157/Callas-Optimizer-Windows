@@ -30,7 +30,7 @@ from cleaner import clean_folders, empty_recycle_bin, format_size, known_temp_fo
 from windows_actions import ACTIONS, BY_ROUTE, HOME as ACTION_HOME, worker as run_windows_action
 from extra_installers import CATALOG as EXTRA_APPS, download_and_open, official_website
 
-APP_VERSION = "8.9.14"
+APP_VERSION = "8.9.15"
 REPO = "Callas157/Callas-Optimizer-Windows"
 PROJECT_URL = f"https://github.com/{REPO}"
 DATA_DIR = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "CallasTeck"
@@ -152,6 +152,15 @@ def runtime_dir() -> Path:
 
 
 def svg_icon(name: str, pixels: int = 64) -> QIcon:
+    # A Fênix aprovada e usada no painel e na marca do aplicativo.
+    if name == "callas":
+        image_file = asset_dir() / "phoenix-approved.png"
+        if image_file.is_file():
+            original = QPixmap(str(image_file))
+            if not original.isNull():
+                scaled = original.scaled(pixels, pixels, Qt.AspectRatioMode.KeepAspectRatio,
+                                         Qt.TransformationMode.SmoothTransformation)
+                return QIcon(scaled)
     svg = asset_dir() / (name + ".svg")
     renderer = QSvgRenderer(QByteArray(svg.read_bytes()))
     result = QPixmap(pixels, pixels)
