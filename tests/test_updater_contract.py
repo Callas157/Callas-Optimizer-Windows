@@ -23,7 +23,7 @@ class UpdateContract(unittest.TestCase):
     def test_programs_right_after_home(self):
         section = APP.split("NAV_SECTIONS = [", 1)[1].split("LEGACY = {", 1)[0]
         self.assertLess(section.index('("home", "Início"'), section.index('("programs", "Programas"'))
-        self.assertLess(section.index('("programs", "Programas"'), section.index('("gamer", "1  Modo Gamer"'))
+        self.assertLess(section.index('("programs", "Programas"'), section.index('("gamer", "Modo Gamer"'))
         self.assertNotIn('("APLICATIVOS",', section)
 
     def test_update_stage_filename_readable(self):
