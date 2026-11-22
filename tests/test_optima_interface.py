@@ -44,7 +44,7 @@ class OptimaInterfaceContract(unittest.TestCase):
         self.assertIn("assets/optima-preview.svg", readme)
         self.assertLess(readme.index("Fênix Edition"), readme.index("assets/optima-preview.svg"))
         self.assertIn("scripts/make_icon.py", (ROOT/"scripts/build.py").read_text() +
-                      (ROOT/"README.md").read_text())
+                      (ROOT/"README.md").read_text(encoding="utf-8"))
 
 if __name__ == "__main__":
     unittest.main()
