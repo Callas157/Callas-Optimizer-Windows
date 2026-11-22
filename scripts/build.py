@@ -5,7 +5,6 @@ Apenas instalador: pasta do app com DLLs (onedir), evitando extracao _MEI a cada
 """
 from __future__ import annotations
 
-import base64
 import hashlib
 import os
 from pathlib import Path
@@ -16,9 +15,10 @@ ROOT = Path(__file__).resolve().parents[1]
 if os.name != 'nt':
     raise SystemExit('O executavel Windows deve ser compilado em Windows x64 (GitHub Actions).')
 
-icon_b64 = ROOT / 'assets/icons/callas.ico.b64'
+# O mesmo icone Fen ix e rasterizado nas resolucoes do Windows.
+from make_icon import make_ico
 icon_file = ROOT / 'assets/icons/callas.ico'
-icon_file.write_bytes(base64.b64decode(icon_b64.read_text(encoding='ascii')))
+make_ico(ROOT / 'assets/icons/callas.svg', icon_file)
 assert icon_file.read_bytes()[:4] == b'\x00\x00\x01\x00', 'Arquivo ICO invalido'
 
 source = ROOT / 'src'

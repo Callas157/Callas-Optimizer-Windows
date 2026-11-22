@@ -1,0 +1,94 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
+<defs>
+ <linearGradient id="back" x2="1" y2="1"><stop stop-color="#070719"/><stop offset=".47" stop-color="#09142f"/><stop offset="1" stop-color="#110b34"/></linearGradient>
+ <linearGradient id="selected"><stop stop-color="#7029b9"/><stop offset="1" stop-color="#1d62cb"/></linearGradient>
+ <linearGradient id="hero" x2="1" y2="1"><stop stop-color="#28134f"/><stop offset=".7" stop-color="#0d2451"/><stop offset="1" stop-color="#102b52"/></linearGradient>
+ <linearGradient id="tile" x2="1" y2="1"><stop stop-color="#26124e"/><stop offset=".54" stop-color="#172045"/><stop offset="1" stop-color="#0d2853"/></linearGradient>
+ <radialGradient id="haloPreview"><stop stop-color="#6524f5" stop-opacity=".75"/><stop offset="1" stop-color="#120f42" stop-opacity="0"/></radialGradient>
+</defs>
+<rect width="1600" height="900" fill="url(#back)"/>
+<rect x="0" y="0" width="263" height="900" rx="24" fill="#0d102d" stroke="#7230b2" stroke-width="2"/>
+<g transform="translate(65 35) scale(.52)"><svg x="0" y="0" width="256" height="256" viewBox="0 0 256 256">
+<defs>
+ <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#141238"/><stop offset=".58" stop-color="#090a22"/><stop offset="1" stop-color="#070f2c"/></linearGradient>
+ <linearGradient id="wing" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#ff8bff"/><stop offset=".32" stop-color="#9c45ff"/><stop offset=".70" stop-color="#5b43ff"/><stop offset="1" stop-color="#00cffa"/></linearGradient>
+ <linearGradient id="body" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#ffffff"/><stop offset=".22" stop-color="#c4aeff"/><stop offset=".55" stop-color="#784cff"/><stop offset="1" stop-color="#02c5fa"/></linearGradient>
+ <linearGradient id="tail" x1="0" y1="0" x2=".7" y2="1"><stop stop-color="#8e35ff"/><stop offset=".5" stop-color="#174afa"/><stop offset="1" stop-color="#02e7e6"/></linearGradient>
+ <radialGradient id="halo"><stop stop-color="#422df1" stop-opacity=".55"/><stop offset=".7" stop-color="#371a85" stop-opacity=".18"/><stop offset="1" stop-color="#170f45" stop-opacity="0"/></radialGradient>
+</defs>
+<rect x="3" y="3" width="250" height="250" rx="57" fill="url(#bg)" stroke="#7941fa" stroke-opacity=".7" stroke-width="3"/>
+<ellipse cx="125" cy="122" rx="117" ry="116" fill="url(#halo)"/>
+<!-- long rising wing feathers, original phoenix silhouette -->
+<path d="M151 137 C109 121 78 89 65 29 C58 76 74 123 105 150 C80 133 52 98 37 59 C40 118 70 161 116 175 C79 157 49 141 26 111 C43 165 82 191 126 188 L158 160 Z" fill="url(#wing)"/>
+<path d="M146 144 C106 122 83 84 78 42 C87 84 108 113 147 129 Z" fill="#f7a6ff" fill-opacity=".88"/>
+<path d="M136 152 C90 145 64 112 54 87 C79 120 100 132 147 139 Z" fill="#7e66ff"/>
+<path d="M124 168 C80 164 58 144 43 121 C79 148 101 148 146 151 Z" fill="#386aff"/>
+<!-- neck, head, beak -->
+<path d="M128 195 C151 169 164 137 164 113 C164 97 176 87 195 87 C202 87 207 89 215 96 C208 95 201 97 198 100 C213 101 223 108 230 116 L211 117 C206 126 196 128 186 122 C181 151 174 177 148 202 C136 214 114 222 91 222 C107 210 119 199 128 195Z" fill="url(#body)"/>
+<path d="M190 102 C198 101 206 103 215 109" stroke="#fbf4ff" stroke-width="4" stroke-linecap="round" fill="none"/>
+<circle cx="197" cy="107" r="2.4" fill="#101336"/>
+<!-- cyan and violet trailing tail -->
+<path d="M144 169 C139 209 98 224 54 233 C93 229 131 222 153 196 C166 181 174 162 174 139Z" fill="url(#tail)"/>
+<path d="M136 174 C118 210 80 212 43 209 C76 228 125 221 148 194 Z" fill="#08c4ff" fill-opacity=".86"/>
+<path d="M129 172 C100 189 76 182 52 168 C76 206 117 206 147 187Z" fill="#6333f3" fill-opacity=".75"/>
+<path d="M146 161 C149 193 112 221 79 226" fill="none" stroke="#41edff" stroke-opacity=".77" stroke-width="3" stroke-linecap="round"/>
+</svg></g>
+<text x="38" y="203" fill="#ffffff" font-family="Segoe UI,Arial,sans-serif" font-weight="700" font-size="32">Callas <tspan fill="#bd78ff">Optima</tspan></text>
+<text x="40" y="234" fill="#9d9ac5" font-size="17" font-family="Segoe UI,Arial">FÊNIX EDITION</text>
+<rect x="22" y="247" width="224" height="53" rx="13" fill="url(#selected)" stroke="#9d78ff"/><text x="68" y="280" fill="#ffffff" font-size="21" font-weight="700">Início</text><circle cx="47" cy="274" r="10" fill="none" stroke="#f4d9ff" stroke-width="2.8"/>
+<text x="68" y="348" fill="#c7c9eb" font-size="21" font-weight="500">Programas</text><circle cx="47" cy="342" r="10" fill="none" stroke="#b1b4e0" stroke-width="2.8"/>
+<text x="68" y="416" fill="#c7c9eb" font-size="21" font-weight="500">Limpeza</text><circle cx="47" cy="410" r="10" fill="none" stroke="#b1b4e0" stroke-width="2.8"/>
+<text x="68" y="484" fill="#c7c9eb" font-size="21" font-weight="500">Otimização</text><circle cx="47" cy="478" r="10" fill="none" stroke="#b1b4e0" stroke-width="2.8"/>
+<text x="68" y="552" fill="#c7c9eb" font-size="21" font-weight="500">Drivers</text><circle cx="47" cy="546" r="10" fill="none" stroke="#b1b4e0" stroke-width="2.8"/>
+<text x="68" y="620" fill="#c7c9eb" font-size="21" font-weight="500">Atualizações</text><circle cx="47" cy="614" r="10" fill="none" stroke="#b1b4e0" stroke-width="2.8"/>
+<text x="68" y="688" fill="#c7c9eb" font-size="21" font-weight="500">Jogos</text><circle cx="47" cy="682" r="10" fill="none" stroke="#b1b4e0" stroke-width="2.8"/>
+<text x="68" y="756" fill="#c7c9eb" font-size="21" font-weight="500">Ferramentas</text><circle cx="47" cy="750" r="10" fill="none" stroke="#b1b4e0" stroke-width="2.8"/>
+<text x="40" y="850" fill="#a29ad7" font-size="17">v8.9.14  •  Windows 11</text>
+<text x="307" y="69" font-size="47" font-family="Segoe UI,Arial" font-weight="700" fill="#ffffff">Callas <tspan fill="#a66dff">Optima</tspan></text>
+<text x="310" y="105" fill="#b3bedf" font-size="22">Desempenho e renovação</text>
+<rect x="287" y="147" width="1285" height="252" rx="28" fill="url(#hero)" stroke="#9865ff" stroke-width="2"/>
+<text x="332" y="200" fill="#bf9bff" font-weight="700" font-size="20">CENTRAL DE CONTROLE  /  FÊNIX EDITION</text>
+<text x="330" y="255" fill="#ffffff" font-size="39" font-family="Segoe UI,Arial" font-weight="700">Seu Windows no controle</text>
+<text x="332" y="292" fill="#c9d5f6" font-size="21">Gerencie limpeza, aplicativos, atualizações e reparos com segurança.</text>
+<rect x="332" y="321" width="335" height="55" rx="17" fill="url(#selected)" stroke="#d582ff" stroke-width="1.5"/>
+<text x="366" y="355" fill="#ffffff" font-weight="700" font-size="20">EXPLORAR OTIMIZAÇÃO</text>
+<ellipse cx="1375" cy="275" rx="175" ry="125" fill="url(#haloPreview)"/>
+<g transform="translate(1265 161) scale(.78)"><svg x="0" y="0" width="256" height="256" viewBox="0 0 256 256">
+<defs>
+ <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#141238"/><stop offset=".58" stop-color="#090a22"/><stop offset="1" stop-color="#070f2c"/></linearGradient>
+ <linearGradient id="wing" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#ff8bff"/><stop offset=".32" stop-color="#9c45ff"/><stop offset=".70" stop-color="#5b43ff"/><stop offset="1" stop-color="#00cffa"/></linearGradient>
+ <linearGradient id="body" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#ffffff"/><stop offset=".22" stop-color="#c4aeff"/><stop offset=".55" stop-color="#784cff"/><stop offset="1" stop-color="#02c5fa"/></linearGradient>
+ <linearGradient id="tail" x1="0" y1="0" x2=".7" y2="1"><stop stop-color="#8e35ff"/><stop offset=".5" stop-color="#174afa"/><stop offset="1" stop-color="#02e7e6"/></linearGradient>
+ <radialGradient id="halo"><stop stop-color="#422df1" stop-opacity=".55"/><stop offset=".7" stop-color="#371a85" stop-opacity=".18"/><stop offset="1" stop-color="#170f45" stop-opacity="0"/></radialGradient>
+</defs>
+<rect x="3" y="3" width="250" height="250" rx="57" fill="url(#bg)" stroke="#7941fa" stroke-opacity=".7" stroke-width="3"/>
+<ellipse cx="125" cy="122" rx="117" ry="116" fill="url(#halo)"/>
+<!-- long rising wing feathers, original phoenix silhouette -->
+<path d="M151 137 C109 121 78 89 65 29 C58 76 74 123 105 150 C80 133 52 98 37 59 C40 118 70 161 116 175 C79 157 49 141 26 111 C43 165 82 191 126 188 L158 160 Z" fill="url(#wing)"/>
+<path d="M146 144 C106 122 83 84 78 42 C87 84 108 113 147 129 Z" fill="#f7a6ff" fill-opacity=".88"/>
+<path d="M136 152 C90 145 64 112 54 87 C79 120 100 132 147 139 Z" fill="#7e66ff"/>
+<path d="M124 168 C80 164 58 144 43 121 C79 148 101 148 146 151 Z" fill="#386aff"/>
+<!-- neck, head, beak -->
+<path d="M128 195 C151 169 164 137 164 113 C164 97 176 87 195 87 C202 87 207 89 215 96 C208 95 201 97 198 100 C213 101 223 108 230 116 L211 117 C206 126 196 128 186 122 C181 151 174 177 148 202 C136 214 114 222 91 222 C107 210 119 199 128 195Z" fill="url(#body)"/>
+<path d="M190 102 C198 101 206 103 215 109" stroke="#fbf4ff" stroke-width="4" stroke-linecap="round" fill="none"/>
+<circle cx="197" cy="107" r="2.4" fill="#101336"/>
+<!-- cyan and violet trailing tail -->
+<path d="M144 169 C139 209 98 224 54 233 C93 229 131 222 153 196 C166 181 174 162 174 139Z" fill="url(#tail)"/>
+<path d="M136 174 C118 210 80 212 43 209 C76 228 125 221 148 194 Z" fill="#08c4ff" fill-opacity=".86"/>
+<path d="M129 172 C100 189 76 182 52 168 C76 206 117 206 147 187Z" fill="#6333f3" fill-opacity=".75"/>
+<path d="M146 161 C149 193 112 221 79 226" fill="none" stroke="#41edff" stroke-opacity=".77" stroke-width="3" stroke-linecap="round"/>
+</svg></g>
+<text x="294" y="416" fill="#bb9fff" font-weight="700" font-size="18" letter-spacing="2">ACESSO RÁPIDO</text>
+<g><rect x="288" y="430" width="393" height="131" rx="20" fill="url(#tile)" stroke="#ad65ff" stroke-width="2"/><text x="316" y="481" fill="#67e7ff" font-size="35" font-weight="700">✧</text><text x="376" y="483" fill="#ffffff" font-size="28" font-weight="700">Clean</text><text x="317" y="527" fill="#a9bbdd" font-size="19">Limpeza inteligente</text><text x="645" y="484" fill="#d2bbff" font-size="35">›</text></g>
+<g><rect x="707" y="430" width="393" height="131" rx="20" fill="url(#tile)" stroke="#379cff" stroke-width="2"/><text x="735" y="481" fill="#67e7ff" font-size="35" font-weight="700">↗</text><text x="795" y="483" fill="#ffffff" font-size="28" font-weight="700">Boost</text><text x="736" y="527" fill="#a9bbdd" font-size="19">Mais desempenho</text><text x="1064" y="484" fill="#d2bbff" font-size="35">›</text></g>
+<g><rect x="1126" y="430" width="393" height="131" rx="20" fill="url(#tile)" stroke="#ad65ff" stroke-width="2"/><text x="1154" y="481" fill="#67e7ff" font-size="35" font-weight="700">✚</text><text x="1214" y="483" fill="#ffffff" font-size="28" font-weight="700">Repair</text><text x="1155" y="527" fill="#a9bbdd" font-size="19">Diagnóstico e reparo</text><text x="1483" y="484" fill="#d2bbff" font-size="35">›</text></g>
+<g><rect x="288" y="585" width="393" height="131" rx="20" fill="url(#tile)" stroke="#379cff" stroke-width="2"/><text x="316" y="636" fill="#67e7ff" font-size="35" font-weight="700">▦</text><text x="376" y="638" fill="#ffffff" font-size="28" font-weight="700">Apps</text><text x="317" y="682" fill="#a9bbdd" font-size="19">Programas oficiais</text><text x="645" y="639" fill="#d2bbff" font-size="35">›</text></g>
+<g><rect x="707" y="585" width="393" height="131" rx="20" fill="url(#tile)" stroke="#ad65ff" stroke-width="2"/><text x="735" y="636" fill="#67e7ff" font-size="35" font-weight="700">▣</text><text x="795" y="638" fill="#ffffff" font-size="28" font-weight="700">Drivers</text><text x="736" y="682" fill="#a9bbdd" font-size="19">NVIDIA e Windows</text><text x="1064" y="639" fill="#d2bbff" font-size="35">›</text></g>
+<g><rect x="1126" y="585" width="393" height="131" rx="20" fill="url(#tile)" stroke="#379cff" stroke-width="2"/><text x="1154" y="636" fill="#67e7ff" font-size="35" font-weight="700">↻</text><text x="1214" y="638" fill="#ffffff" font-size="28" font-weight="700">Atualizar</text><text x="1155" y="682" fill="#a9bbdd" font-size="19">Últimas versões</text><text x="1483" y="639" fill="#d2bbff" font-size="35">›</text></g>
+<rect x="287" y="754" width="623" height="111" rx="19" fill="#111939" stroke="#58518d"/>
+<text x="314" y="794" fill="#ffffff" font-size="23" font-weight="700">Saúde do sistema</text>
+<text x="315" y="830" fill="#afbfde" font-size="18">Diagnósticos oficiais, sem notas inventadas</text>
+<rect x="935" y="754" width="637" height="111" rx="19" fill="#111939" stroke="#58518d"/>
+<text x="967" y="794" fill="#ffffff" font-size="23" font-weight="700">Armazenamento</text>
+<text x="968" y="830" fill="#afbfde" font-size="18">Espaço livre exibido a partir do disco real</text>
+</svg>

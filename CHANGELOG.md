@@ -1,5 +1,15 @@
 # Histórico de versões — Callas Optimizer Windows
 
+## v8.9.14 — Callas Optima, Fênix Edition
+- Interface renovada com Fênix, tema gradiente roxo/azul e seis cartões de ação.
+- Clean, Boost, Repair, Apps, Drivers e Atualizar navegam entre páginas reais dentro do mesmo QStackedWidget.
+- Nova seção de drivers orienta o uso do NVIDIA App e do Windows Update, sem atualizar drivers arbitrariamente.
+- Discord e Steam adicionados por HTTPS oficial com validação Authenticode; Epic Games Launcher e Wise Program Uninstaller usam seus sites de download oficiais.
+- Nova iconografia SVG Fênix convertida em ICO multirresolução no build, inclusive para o instalador e atalhos.
+- Prévia da interface no topo do README; identidades internas do Setup e compatibilidade de atualização mantidas.
+- Sem métricas de saúde inventadas: o dashboard exibe informações de armazenamento lidas do sistema.
+
+
 ## v8.9.13 — Salto direto entre versões
 - Formalizado o contrato de atualização cumulativa: apenas a última Release estável e seu Setup completo.
 - Teste de migração de instalação 8.9.3 direto para a versão atual, sem intermediárias, com instalação e inicialização da GUI.

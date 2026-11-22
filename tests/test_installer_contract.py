@@ -1,6 +1,7 @@
 """Testes do instalador, versao, iconografia e atualizador."""
 from pathlib import Path
-import ast, base64, struct, unittest
+import ast, unittest
+from xml.etree import ElementTree
 R=Path(__file__).resolve().parents[1]
 A=(R/'src/app.py').read_text(encoding='utf-8')
 U=(R/'src/updater.ps1').read_text(encoding='utf-8')
@@ -12,9 +13,14 @@ class InstallerTests(unittest.TestCase):
         for t in ('def app_icon()', 'app.setWindowIcon(app_icon())', 'SetCurrentProcessExplicitAppUserModelID', 'installed.marker'):
             self.assertIn(t,A)
     def test_ico(self):
-        b=base64.b64decode((R/'assets/icons/callas.ico.b64').read_text())
-        self.assertEqual(b[:4],b'\0\0\x01\0')
-        self.assertGreaterEqual(struct.unpack_from('<H',b,4)[0],5)
+        root=ElementTree.parse(R/'assets/icons/callas.svg').getroot()
+        self.assertTrue(root.tag.endswith('svg'))
+        self.assertIn('viewBox', root.attrib)
+        builder=(R/'scripts/build.py').read_text(encoding='utf-8')
+        self.assertIn('make_ico(',builder)
+        generator=(R/'scripts/make_icon.py').read_text(encoding='utf-8')
+        ast.parse(generator)
+        self.assertIn('16, 24, 32, 48, 64, 128, 256',generator)
     def test_setup(self):
         for t in ('DefaultDirName={autopf}\\Callas Optimizer','UninstallDisplayIcon=','[Icons]','[Registry]','GetEnv("CALLAS_VERSION")'):
             self.assertIn(t,I)

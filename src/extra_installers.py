@@ -16,6 +16,22 @@ import urllib.request
 ROOT = Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "CallasTeck" / "Downloads"
 
 CATALOG = {
+    "discord": {
+        "name": "Discord",
+        "url": "https://discord.com/api/download?platform=win",
+        "website": "https://discord.com/download",
+        "hosts": {"discord.com", "dl.discordapp.net", "dl2.discordapp.net", "stable.dl2.discordapp.net", "updates.discord.com"},
+        "publisher": r"Discord",
+        "filename": "DiscordSetup.exe",
+    },
+    "steam": {
+        "name": "Steam",
+        "url": "https://cdn.akamai.steamstatic.com/client/installer/SteamSetup.exe",
+        "website": "https://store.steampowered.com/about/",
+        "hosts": {"cdn.akamai.steamstatic.com", "steamcdn-a.akamaihd.net", "media.steampowered.com"},
+        "publisher": r"Valve",
+        "filename": "SteamSetup.exe",
+    },
     "medal": {
         "name": "Medal",
         "url": "https://install.medal.tv/",
@@ -43,8 +59,14 @@ CATALOG = {
 }
 
 
+WEBSITE_ONLY = {
+    "epic": {"name": "Epic Games Launcher", "website": "https://store.epicgames.com/download"},
+    "wise": {"name": "Wise Program Uninstaller", "website": "https://www.wisecleaner.com/wise-program-uninstaller.html"},
+}
+
+
 def official_website(app_id: str) -> str:
-    return CATALOG[app_id]["website"]
+    return (CATALOG.get(app_id) or WEBSITE_ONLY[app_id])["website"]
 
 
 def _safe_https(url: str, hosts: set[str]) -> bool:
@@ -108,7 +130,7 @@ def download_and_open(app_id: str, notify=None) -> str:
     part = folder / (Path(app["filename"]).stem + ".parcial.exe")
     notify(f"Baixando {app['name']} do fornecedor oficial...")
     opener = urllib.request.build_opener(_OfficialRedirects(app["hosts"]))
-    request = urllib.request.Request(app["url"], headers={"User-Agent": "CallasOptimizer/8.9.7"})
+    request = urllib.request.Request(app["url"], headers={"User-Agent": "CallasOptimizer/8.9.14"})
     maximum = 300 * 1024 * 1024
     size = 0
     digest = hashlib.sha256()

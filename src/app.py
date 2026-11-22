@@ -30,7 +30,7 @@ from cleaner import clean_folders, empty_recycle_bin, format_size, known_temp_fo
 from windows_actions import ACTIONS, BY_ROUTE, HOME as ACTION_HOME, worker as run_windows_action
 from extra_installers import CATALOG as EXTRA_APPS, download_and_open, official_website
 
-APP_VERSION = "8.9.13"
+APP_VERSION = "8.9.14"
 REPO = "Callas157/Callas-Optimizer-Windows"
 PROJECT_URL = f"https://github.com/{REPO}"
 DATA_DIR = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "CallasTeck"
@@ -45,6 +45,7 @@ NAV_SECTIONS = [
         ("network", "Rede e DNS", "◎"),
         ("privacy", "Privacidade", "◉"),
         ("repair", "Reparar Windows", "✚"),
+        ("drivers", "Drivers", "▣"),
         ("clean", "Limpeza Total", "♻"),
         ("classic", "Menu clássico", "▤"),
         ("shutdown", "Desligamento", "⏻"),
@@ -82,36 +83,40 @@ LEGACY = {
 }
 
 STYLE = """
-* { font-family: 'Segoe UI'; font-size: 13px; color: #d9e5fa; }
-QMainWindow, QWidget#MainRoot { background: #0b1120; }
-QFrame#Sidebar { background: #0c1425; border-right: 1px solid #24354f; }
-QFrame#Topbar { background: #101a2d; border-bottom: 1px solid #263a5a; }
-QFrame#Card { background: #152137; border: 1px solid #2a4160; border-radius: 16px; }
-QFrame#Hero { background: #152b51; border: 1px solid #2e66b4; border-radius: 18px; }
-QLabel#Header { font-size: 25px; font-weight: 700; color: #f2f7ff; }
-QLabel#Title { font-size: 28px; font-weight: 700; color: #f6f9ff; }
-QLabel#CardTitle { font-size: 17px; font-weight: 700; color: #f2f6ff; }
-QLabel#Muted { color: #9fb2d1; }
-QLabel#Section { color: #75afff; font-weight: 700; font-size: 11px; letter-spacing: 1px; }
-QPushButton { background: #22324b; color: #eef5ff; border: 1px solid #3c567d; border-radius: 9px; padding: 11px 15px; font-weight: 600; }
-QPushButton:hover { background: #2e4469; border-color: #628acd; }
-QPushButton:disabled { color: #72849e; background: #1a283e; border-color: #2a3a54; }
-QPushButton#Primary { background: #1d67ed; border: 1px solid #368aff; }
-QPushButton#Primary:hover { background: #337dff; }
-QPushButton#Nav { background: transparent; border: none; border-radius: 9px; padding: 10px 12px; text-align: left; color: #aebed6; font-size: 14px; }
-QPushButton#Nav:hover { background: #1e304d; color: white; }
-QPushButton#Nav:checked { background: #1d3e71; color: #fff; border-left: 3px solid #4390ff; }
+* { font-family: 'Segoe UI'; font-size: 13px; color: #e8ecff; }
+QMainWindow, QWidget#MainRoot { background: #07091e; }
+QFrame#Sidebar { background: qlineargradient(x1:0,y1:0,x2:0.4,y2:1,stop:0 #0b0d2c,stop:0.65 #101131,stop:1 #19104a); border-right: 1px solid #4a297b; }
+QFrame#Topbar { background: #0b102a; border-bottom: 1px solid #37265a; }
+QFrame#Card { background: #111b37; border: 1px solid #403a71; border-radius: 15px; }
+QFrame#QuickCard { background: qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 #27134e,stop:.55 #151c43,stop:1 #07274c); border: 1px solid #7954dc; border-radius: 18px; }
+QFrame#Hero { background: qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 #30135a,stop:.43 #101d4b,stop:1 #052b55); border: 2px solid #8159ff; border-radius: 21px; }
+QLabel#Header { font-size: 25px; font-weight: 700; color: #f8f7ff; }
+QLabel#Title { font-size: 27px; font-weight: 700; color: #f9f8ff; }
+QLabel#HeroTitle { font-size: 34px; font-weight: 800; color: #fff; }
+QLabel#CardTitle { font-size: 17px; font-weight: 700; color: #f8f8ff; }
+QLabel#Muted { color: #a8b9d8; }
+QLabel#Section { color: #bc91ff; font-weight: 700; font-size: 11px; letter-spacing: 1px; }
+QPushButton { background: #22234e; color: #f2f3ff; border: 1px solid #635e9b; border-radius: 11px; padding: 10px 13px; font-weight: 600; }
+QPushButton:hover { background: #38347c; border-color: #b87aff; }
+QPushButton:disabled { color: #7880a6; background: #1b2241; border-color: #3a3b61; }
+QPushButton#Primary { background: qlineargradient(x1:0,y1:0,x2:1,y2:0,stop:0 #a02bdf,stop:.55 #523cec,stop:1 #087bff); border: 1px solid #9e6dff; color: #fff; }
+QPushButton#Primary:hover { background: #8753ee; border-color: #52e3ff; }
+QPushButton#Quick { text-align: left; background: transparent; border: none; padding: 7px; color: #ffffff; font-size: 17px; font-weight: 700; }
+QPushButton#Quick:hover { background: #3a2877; }
+QPushButton#Nav { background: transparent; border: none; border-radius: 9px; padding: 9px 12px; text-align: left; color: #d0d7f6; font-size: 13px; }
+QPushButton#Nav:hover { background: #342563; color: white; }
+QPushButton#Nav:checked { background: qlineargradient(x1:0,y1:0,x2:1,y2:0,stop:0 #6829a6,stop:1 #235ec5); border: 1px solid #bb73ff; color: white; }
 QScrollArea { border: none; background: transparent; }
-QScrollBar:vertical { background: #0f182b; width: 9px; }
-QScrollBar::handle:vertical { background: #385278; border-radius: 4px; min-height: 35px; }
+QScrollBar:vertical { background: #10142d; width: 9px; }
+QScrollBar::handle:vertical { background: #6154a0; border-radius: 4px; min-height: 35px; }
 QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
-QSplitter::handle { background: #253956; width: 3px; }
-QCheckBox { spacing: 12px; font-size: 13px; }
+QSplitter::handle { background: #3f295d; width: 3px; }
+QCheckBox { spacing: 11px; font-size: 13px; }
 QCheckBox::indicator { width: 19px; height: 19px; }
-QProgressBar { border: 1px solid #3b557a; border-radius: 7px; text-align: center; background: #0f1b2c; min-height: 16px; }
-QProgressBar::chunk { background: #2374ff; border-radius: 7px; }
-QPlainTextEdit { background: #0b1627; color: #b3d0ed; border: 1px solid #315174; border-radius: 8px; padding: 10px; font-family: Consolas; font-size: 12px; }
-QMessageBox { background: #152137; }
+QProgressBar { border: 1px solid #5a4b9e; border-radius: 7px; text-align: center; background: #101631; min-height: 16px; }
+QProgressBar::chunk { background: qlineargradient(x1:0,y1:0,x2:1,y2:0,stop:0 #d337eb,stop:1 #06c8f5); border-radius: 7px; }
+QPlainTextEdit { background: #0a1026; color: #c6d7f8; border: 1px solid #4c4684; border-radius: 8px; padding: 10px; font-family: Consolas; font-size: 12px; }
+QMessageBox { background: #13172f; }
 """
 
 
@@ -251,7 +256,7 @@ NAV_ICONS = {
     "network": "◎", "privacy": "◈", "repair": "✚", "clean": "♻",
     "classic": "▤", "shutdown": "⏻", "winutil": "▣",
     "updates": "↓", "restore_point": "✦", "restore": "↩",
-    "programs": "▦", "logs": "≡", "about": "ⓘ",
+    "programs": "▦", "drivers": "▣", "logs": "≡", "about": "ⓘ",
 }
 
 
@@ -274,6 +279,7 @@ def menu_icon(route: str) -> QIcon:
         "restore_point": '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2M7 6 5 4"/>',
         "restore": '<path d="M4 10h10a6 6 0 1 1-6 9M4 10l4-4M4 10l4 4"/>',
         "programs": '<rect x="3" y="3" width="8" height="8" rx="1"/><rect x="13" y="3" width="8" height="8" rx="1"/><rect x="3" y="13" width="8" height="8" rx="1"/><rect x="13" y="13" width="8" height="8" rx="1"/>',
+        "drivers": '<rect x="5" y="5" width="14" height="14" rx="3"/><path d="M9 2v3m6-3v3M9 19v3m6-3v3M2 9h3m-3 6h3m14-6h3m-3 6h3"/>',
         "logs": '<path d="M4 6h16M4 12h16M4 18h16"/>',
         "about": '<circle cx="12" cy="12" r="9"/><path d="M12 10v7M12 7h.01"/>',
     }
@@ -318,7 +324,7 @@ def action_button(text: str, function, primary: bool = False) -> QPushButton:
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle(f"Callas Optimizer {APP_VERSION}  |  Windows Edition")
+        self.setWindowTitle(f"Callas Optima {APP_VERSION}  |  Windows Edition")
         self.setWindowIcon(app_icon())
         # Borda e controles nativos (incluindo maximizar); a janela pode ser redimensionada.
         self.setMinimumSize(810, 570)
@@ -372,8 +378,8 @@ class MainWindow(QMainWindow):
         brand.addWidget(logo)
         words = QVBoxLayout()
         words.setSpacing(0)
-        words.addWidget(label("CALLAS", "CardTitle"))
-        words.addWidget(label("OPTIMIZER  /  WINDOWS", "Muted"))
+        words.addWidget(label("Callas Optima", "CardTitle"))
+        words.addWidget(label("WINDOWS • FÊNIX EDITION", "Muted"))
         brand.addLayout(words)
         brand.addStretch()
         shell.addLayout(brand)
@@ -418,8 +424,8 @@ class MainWindow(QMainWindow):
         bh.setContentsMargins(25, 15, 24, 15)
         titles = QVBoxLayout()
         titles.setSpacing(3)
-        titles.addWidget(label("CALLAS OPTIMIZER", "Header"))
-        titles.addWidget(label("Manutenção, programas e atualizações em um só lugar"))
+        titles.addWidget(label("Callas Optima", "Header"))
+        titles.addWidget(label("Desempenho e renovação • Windows 11"))
         bh.addLayout(titles, 1)
         self.top_check = action_button("VERIFICAR ATUALIZAÇÃO", lambda: self.check_update(True))
         bh.addWidget(self.top_check)
@@ -460,6 +466,7 @@ class MainWindow(QMainWindow):
         self._home_page()
         self._clean_page()
         self._program_page()
+        self._drivers_page()
         self._update_page()
         self._logs_page()
         self._about_page()
@@ -467,33 +474,94 @@ class MainWindow(QMainWindow):
             self._legacy_page(route, op, title, description, warning)
 
     def _home_page(self):
-        col = self._page("home", "Seu Windows, sob controle.", "Uma central de manutenção de verdade, com telas dedicadas para cada tarefa.")
+        """Dashboard Fênix: atalhos levam às páginas reais do mesmo QStackedWidget."""
+        col = self._page("home", "Callas Optima", "Seu centro de manutenção, desempenho e renovação do Windows.")
         hero, box = card_layout("Hero")
-        box.addWidget(label("WINDOWS EDITION  •  v" + APP_VERSION, "Section"))
-        box.addWidget(label("Pronto para cuidar do seu PC", "Header"))
-        box.addWidget(label("Limpeza com progresso, instaladores oficiais, diagnósticos e novas versões pelo GitHub."))
-        actions = QHBoxLayout()
-        actions.addWidget(action_button("ABRIR LIMPEZA TOTAL", lambda: self.goto("clean"), True))
-        actions.addWidget(action_button("GERENCIAR PROGRAMAS", lambda: self.goto("programs")))
-        actions.addStretch()
-        box.addLayout(actions)
-        col.addWidget(hero)
         row = QHBoxLayout()
-        for title, desc, target in [
-            ("13", "Ferramentas de manutenção", "gamer"),
-            ("7", "Opções de aplicativos", "programs"),
-            ("GitHub", "Atualizações com confirmação", "updates"),
-        ]:
-            tile, tcol = card_layout()
-            tcol.addWidget(label(title, "Header"))
-            tcol.addWidget(label(desc))
-            tcol.addWidget(action_button("EXPLORAR", lambda _=False, r=target: self.goto(r)))
-            row.addWidget(tile, 1)
-        col.addLayout(row)
-        safety, s = card_layout()
-        s.addWidget(label("Transparência das operações", "CardTitle"))
-        s.addWidget(label("A Limpeza Total funciona nesta interface. As funções de manutenção rodam pelo executor Python e utilitários oficiais do Windows; as alterações administrativas solicitam UAC."))
-        col.addWidget(safety)
+        content = QVBoxLayout()
+        content.setSpacing(12)
+        content.addWidget(label("FÊNIX EDITION  •  v" + APP_VERSION, "Section"))
+        content.addWidget(label("Seu Windows no controle", "HeroTitle"))
+        content.addWidget(label(
+            "Limpeza, ajustes para jogos, reparos e aplicativos oficiais, "
+            "com cada ferramenta em uma seção da mesma janela."))
+        primary = action_button("EXPLORAR OTIMIZAÇÃO", lambda: self.goto("gamer"), True)
+        content.addWidget(primary)
+        content.addStretch()
+        row.addLayout(content, 3)
+        image = QLabel()
+        image.setPixmap(svg_icon("callas", 210).pixmap(QSize(205, 205)))
+        image.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        row.addWidget(image, 2)
+        box.addLayout(row)
+        col.addWidget(hero)
+
+        col.addWidget(label("ACESSO RÁPIDO", "Section"))
+        tiles = QGridLayout()
+        tiles.setHorizontalSpacing(13)
+        tiles.setVerticalSpacing(13)
+        shortcuts = [
+            ("✦", "Clean", "Limpeza de arquivos temporários", "clean"),
+            ("↗", "Boost", "Ajustes de desempenho para jogos", "gamer"),
+            ("✚", "Repair", "Reparar arquivos e componentes", "repair"),
+            ("▦", "Apps", "Instaladores e programas oficiais", "programs"),
+            ("▣", "Drivers", "NVIDIA App e ferramentas oficiais", "drivers"),
+            ("↻", "Atualizar", "Versões estáveis do Callas Optima", "updates"),
+        ]
+        for index, (glyph, title, description, route) in enumerate(shortcuts):
+            tile, layout = card_layout("QuickCard")
+            layout.setContentsMargins(15, 14, 15, 12)
+            head = action_button(glyph + "  " + title + "    ›",
+                                 lambda _=False, target=route: self.goto(target))
+            head.setObjectName("Quick")
+            layout.addWidget(head)
+            layout.addWidget(label(description, "Muted"))
+            tiles.addWidget(tile, index // 3, index % 3)
+        col.addLayout(tiles)
+
+        footer = QHBoxLayout()
+        health, h = card_layout()
+        h.addWidget(label("Saúde do sistema", "CardTitle"))
+        h.addWidget(label("Execute os diagnósticos do Windows para verificar a integridade. "
+                          "O Callas não atribui uma nota de saúde sem medição."))
+        h.addWidget(action_button("VER DIAGNÓSTICOS", lambda: self.goto("repair")))
+        footer.addWidget(health, 1)
+        space, sc = card_layout()
+        sc.addWidget(label("Armazenamento", "CardTitle"))
+        try:
+            root = Path(os.environ.get("SystemDrive", "C:") + "\\") if os.name == "nt" else Path.home()
+            usage = shutil.disk_usage(root)
+            free = usage.free / (1024**3)
+            total = usage.total / (1024**3)
+            sc.addWidget(label(f"{free:.1f} GB livres de {total:.1f} GB"))
+            progress = QProgressBar()
+            progress.setValue(int(100 * (usage.total - usage.free) / usage.total))
+            sc.addWidget(progress)
+        except (OSError, ZeroDivisionError):
+            sc.addWidget(label("Dados indisponíveis neste computador."))
+        sc.addWidget(action_button("ABRIR LIMPEZA", lambda: self.goto("clean")))
+        footer.addWidget(space, 1)
+        col.addLayout(footer)
+        col.addStretch()
+
+    def _drivers_page(self):
+        col = self._page(
+            "drivers", "Drivers", "Acesso às ferramentas oficiais. Nenhum driver é trocado automaticamente.")
+        c, body = card_layout()
+        body.addWidget(label("NVIDIA APP", "Section"))
+        body.addWidget(label(
+            "Abra o instalador oficial do NVIDIA App. Nele, você pode verificar "
+            "drivers disponíveis e escolher quando instalar; o Callas não remove "
+            "drivers nem força versões sem sua confirmação."))
+        body.addWidget(action_button(
+            "BAIXAR NVIDIA APP", lambda: self.ps_action("install_nvidia.ps1", "NVIDIA App"), True))
+        col.addWidget(c)
+        other, layout = card_layout()
+        layout.addWidget(label("DRIVERS PELO WINDOWS", "Section"))
+        layout.addWidget(label("Use as opções oficiais de Windows Update para drivers opcionais. "
+                               "Evite instaladores de terceiros que prometem atualizar tudo."))
+        layout.addWidget(action_button("ABRIR WINDOWS UPDATE", lambda: self.goto("windows_update")))
+        col.addWidget(other)
         col.addStretch()
 
     def _legacy_page(self, route, option, title, description, warning):
@@ -591,14 +659,27 @@ class MainWindow(QMainWindow):
             "Codex", "codex", "Trabalhe em projetos e arquivos locais com sua autorização",
             "OBTER APP COM CODEX",
             lambda: self.open_openai_download("Codex"))
+        self.discord_card = self._program_card(
+            "Discord", "discord", "Conversas, comunidades e voz", "BAIXAR INSTALADOR",
+            lambda: self.install_extra("discord"))
+        self.steam_card = self._program_card(
+            "Steam", "steam", "Biblioteca de jogos para PC", "BAIXAR INSTALADOR",
+            lambda: self.install_extra("steam"))
+        self.epic_card = self._program_card(
+            "Epic Games Launcher", "epic", "Loja e biblioteca Epic Games", "ABRIR DOWNLOAD OFICIAL",
+            lambda: self.open_program_website("epic"))
+        self.wise_card = self._program_card(
+            "Wise Program Uninstaller", "wise", "Desinstalação de aplicativos", "ABRIR DOWNLOAD OFICIAL",
+            lambda: self.open_program_website("wise"))
         self.all_program_cards = [
             self.brave_card, self.nvidia_card, self.medal_card,
             self.lghub_card, self.spotify_card, self.chatgpt_card, self.codex_card,
+            self.discord_card, self.steam_card, self.epic_card, self.wise_card,
         ]
         for index, card in enumerate(self.all_program_cards):
             self.program_grid.addWidget(card, index // 2, index % 2)
         col.addLayout(self.program_grid)
-        self.extra_status = label("Medal, Logitech e Spotify: download verificado. ChatGPT/Codex: página oficial da OpenAI.")
+        self.extra_status = label("Discord, Steam, Medal, Logitech e Spotify: executáveis com assinatura verificada. Epic, Wise e ChatGPT/Codex: site oficial.")
         col.addWidget(self.extra_status)
         openai_card, openai_box = card_layout()
         openai_box.addWidget(label("CHATGPT + CODEX NO WINDOWS", "Section"))
@@ -785,6 +866,18 @@ class MainWindow(QMainWindow):
             )
         else:
             self.status_message("Página oficial de ChatGPT e Codex aberta no navegador.")
+
+    def open_program_website(self, app_id: str):
+        """Instaladores de URL dinamica: apenas o site HTTPS oficial."""
+        from extra_installers import WEBSITE_ONLY
+        if app_id not in WEBSITE_ONLY:
+            return
+        entry = WEBSITE_ONLY[app_id]
+        if confirmar(self, "Site oficial", f"Abrir o download oficial de {entry['name']} no navegador?", True):
+            if webbrowser.open(entry["website"]):
+                self.status_message(f"Site oficial de {entry['name']} aberto.")
+            else:
+                QMessageBox.warning(self, "Navegador", "Não foi possível abrir o site oficial.")
 
     def install_extra(self, app_id: str):
         if self.extra_installer and self.extra_installer.isRunning():

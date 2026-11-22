@@ -1,9 +1,12 @@
 <div align="center">
-  <img src="assets/banner.jpg" alt="Callas Optimizer — Windows Edition" width="100%" />
 
-# Callas Optimizer — Windows Edition
+# Callas Optima — Fênix Edition
 
-**Central de manutenção para Windows 11, com interface gráfica em Python/Qt e atualizações pelo GitHub Releases.**
+**Interface redesenhada para Windows 11: desempenho e renovação em uma única janela, com cores azul, roxo e ciano.**
+
+<img src="assets/optima-preview.svg" alt="Prévia ilustrativa Callas Optima com Fênix e atalhos Clean, Boost, Repair, Apps, Drivers e Atualizar" width="100%" />
+
+<sub>Prévia do novo layout. O programa utiliza dados reais quando disponíveis e não inventa uma nota de otimização.</sub>
 
 [![Release](https://img.shields.io/github/v/release/Callas157/Callas-Optimizer-Windows?logo=github)](https://github.com/Callas157/Callas-Optimizer-Windows/releases/latest)
 [![Windows 11](https://img.shields.io/badge/Windows-11%20x64-1976FF?logo=windows11&logoColor=white)](#compatibilidade)
@@ -11,6 +14,17 @@
 
 **[Baixar a versão estável mais recente](https://github.com/Callas157/Callas-Optimizer-Windows/releases/latest)**
 </div>
+
+## v8.9.14 — Interface Fênix e novos aplicativos
+
+- **Callas Optima:** nova identidade visual Fênix, com tema azul e roxo, cartões e página inicial reformulados.
+- **Navegação em uma só janela:** Clean, Boost, Repair, Apps, Drivers e Atualizar levam diretamente às páginas correspondentes; não abrem outra janela.
+- **Discord e Steam:** download direto dos fornecedores, HTTPS e validação da assinatura digital antes de executar.
+- **Epic Games Launcher e Wise Program Uninstaller:** botões direcionam ao download oficial no navegador, evitando executar arquivos não verificados.
+- **Drivers:** acesso ao NVIDIA App e às ferramentas oficiais do Windows; nenhum driver é instalado ou revertido automaticamente.
+- **Ícone Fênix:** o build cria ICO multirresolução para o Setup, menu Iniciar, Área de Trabalho e aplicativo.
+- **Atualizador cumulativo preservado:** AppId, diretório de instalação, nome do EXE e validação de Setup continuam compatíveis com as instalações suportadas.
+- O painel mostra apenas dados reais de armazenamento; a imagem de destaque é ilustrativa.
 
 ## v8.9.13 — Atualização cumulativa entre versões
 
@@ -147,7 +161,7 @@ A edição instalada usa o Setup com UAC para atualizar Program Files. Quem poss
 - `src/updater.ps1`: atualização por GitHub Releases, SHA-256 e recuperação.
 - As operações de manutenção já não dependem do BAT. WinUtil abre o site oficial sem executar scripts pela internet; a remoção do Edge depende da edição do Windows.
 - `src/install_brave.ps1`, `src/install_nvidia.ps1`, `src/extensions.ps1` e `src/undo_extensions.ps1`: instaladores e configurações.
-- `assets/icons/`: ícones SVG do Callas, Brave e NVIDIA; `callas.ico.b64` é convertido no build para o ícone da janela do Windows.
+- `assets/icons/`: ícones SVG, incluindo a nova Fênix; `scripts/make_icon.py` gera ICO multirresolução para a aplicação e os atalhos durante a compilação.
 - `requirements-build.txt`: dependências do ambiente de compilação.
 - `scripts/build.py`: PyInstaller no **Windows x64**; o executável fica em `dist/`.
 - `scripts/check_version.py`, `scripts/verify_build.py`, `tests/`: integridade, proteção contra erros e testes de interface.
@@ -167,7 +181,7 @@ Para gerar o executável, `py -3.12 scripts\build.py` em uma máquina Windows x6
 
 - Qt for Python / PySide6-Essentials: distribuição segundo os termos LGPLv3/GPL/comercial aplicáveis. O projeto disponibiliza o código, instruções de build e bibliotecas Qt dinâmicas empacotadas pelo PyInstaller. Respeite as condições da licença ao redistribuir.
 - Os ícones de marca **Brave** e **NVIDIA** usam os caminhos vetoriais do projeto [Simple Icons](https://github.com/simple-icons/simple-icons) (CC0 para os desenhos). As marcas permanecem pertencentes aos respectivos titulares e não indicam afiliação ou endosso.
-- Os instaladores Brave/NVIDIA são obtidos de fornecedores oficiais e validados por assinatura de editor; o aplicativo não redistribui seus instaladores.
+- Downloads diretos de instaladores, incluindo Discord e Steam, usam origem HTTPS autorizada e assinatura Authenticode do editor. Epic Games e Wise Program Uninstaller usam seus sites oficiais. Nenhum instalador de terceiros é redistribuído.
 
 ## Avisos e testes
 
