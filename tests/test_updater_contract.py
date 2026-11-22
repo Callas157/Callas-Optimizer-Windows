@@ -32,6 +32,17 @@ class UpdateContract(unittest.TestCase):
         self.assertIn('Start-Process -FilePath $staged', UPDATER)
         self.assertNotIn("Join-Path $stageDir ([guid]::NewGuid().ToString('N')+'.exe')", UPDATER)
 
+    def test_setup_identity_before_uac(self):
+        self.assertIn('function Confirm-StagedSetupIdentity', UPDATER)
+        self.assertIn("Join-Path $sessionDir 'Callas Optimizer.exe'", UPDATER)
+        self.assertLess(UPDATER.index("Confirm-StagedSetupIdentity $staged"),
+                        UPDATER.index("Status 'READY'"))
+        self.assertLess(UPDATER.index("Confirm-StagedSetupIdentity $staged"),
+                        UPDATER.index("Start-Process -FilePath $staged"))
+        self.assertIn('FileDescription.Trim()', UPDATER)
+        self.assertIn('ProductName.Trim()', UPDATER)
+        self.assertIn('Abrindo UAC do instalador:', UPDATER)
+
     def test_release_sha256(self):
         self.assertIn('Get-FileHash', UPDATER)
         self.assertIn('Confirm-WindowsExe $staged', UPDATER)

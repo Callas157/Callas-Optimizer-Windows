@@ -12,6 +12,14 @@
 **[Baixar a versão estável mais recente](https://github.com/Callas157/Callas-Optimizer-Windows/releases/latest)**
 </div>
 
+## v8.9.10 — Verificação da identificação do Setup
+
+- O atualizador instalado verifica **o nome `Callas Optimizer.exe` e os metadados do instalador** após validar o SHA-256 e antes de abrir o UAC.
+- Registra o nome do arquivo de atualização no log, facilitando identificar se existe um atualizador antigo.
+- Teste de compilação simula a cópia do Setup para o nome amigável, confere os metadados e compara os hashes.
+- **Importante para quem atualiza versões antigas:** a atualização é iniciada com o código da versão já instalada. Se a versão antiga usava nomes aleatórios, o UAC dessa primeira atualização ainda poderá exibi-los. Para corrigir imediatamente, instale o Setup atual manualmente por cima; as atualizações seguintes usarão o atualizador corrigido.
+- `Fornecedor desconhecido` só será resolvido com assinatura digital confiável; nome e metadados não substituem a assinatura.
+
 ## v8.9.9 — Menu e identificação na atualização
 
 - **Programas** movido para logo abaixo de **Início**, acima de todas as ferramentas de manutenção.

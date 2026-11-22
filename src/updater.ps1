@@ -61,6 +61,22 @@ function Confirm-WindowsExe([string]$path,[switch]$Installer) {
         if (-not $Installer -and $machine -ne 0x8664) { throw 'Aplicativo nao e Windows x64.' }
     } finally { $f.Dispose() }
 }
+function Confirm-StagedSetupIdentity([string]$path) {
+    # Nome amigavel no prompt UAC mesmo quando o executavel esta sem assinatura.
+    # Metadados nao provam autenticidade; SHA256 da Release e validado separadamente.
+    if ((Split-Path -Path $path -Leaf) -cne 'Callas Optimizer.exe') {
+        throw 'O instalador preparado nao possui nome legivel.'
+    }
+    $info = (Get-Item -LiteralPath $path -ErrorAction Stop).VersionInfo
+    if (-not $info -or [string]$info.FileDescription -eq '') {
+        throw 'Instalador sem metadados de identificacao.'
+    }
+    if ([string]$info.FileDescription.Trim() -cne 'Callas Optimizer' -or
+        [string]$info.ProductName.Trim() -cne 'Callas Optimizer') {
+        throw 'A identidade do instalador nao corresponde ao Callas Optimizer.'
+    }
+    Log ('Setup confirmado para UAC: '+$path+'; descricao: '+$info.FileDescription.Trim())
+}
 function Move-Retry([string]$source,[string]$destination) {
     # PyInstaller onefile mantem um processo supervisor vivo por instantes
     # apos a janela fechar. Aguarda a liberacao do arquivo com limite.
@@ -126,10 +142,12 @@ try {
                 throw 'Instalacao nao reconhecida pelo Setup.'
             }
             Download-Verified $latest $staged
+            Confirm-StagedSetupIdentity $staged
             Status 'READY'
             Log ('Setup validado; aguardando fechamento do PID '+$WaitPid)
             $process=Get-Process -Id $WaitPid -ErrorAction SilentlyContinue
             if ($process) { Wait-Process -Id $WaitPid -Timeout 60 -ErrorAction Stop }
+            Log ('Abrindo UAC do instalador: '+(Split-Path -Path $staged -Leaf))
             $setup=Start-Process -FilePath $staged -ArgumentList '/SILENT /NORESTART /CLOSEAPPLICATIONS /SUPPRESSMSGBOXES' -Verb RunAs -PassThru -Wait -ErrorAction Stop
             if ($setup.ExitCode -ne 0) { throw ('Setup devolveu codigo '+$setup.ExitCode) }
             if (-not (Test-Path -LiteralPath $fullTarget -PathType Leaf)) { throw 'Executavel ausente apos Setup.' }

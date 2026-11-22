@@ -66,6 +66,22 @@ jobs:
           if ($metadata.ProductName.Trim() -ne 'Callas Optimizer') {
             throw "Nome de produto incorreto: $($metadata.ProductName)"
           }
+          # Simula o arquivo baixado e a sua exibicao no UAC, sem elevar o runner.
+          $uacDir = Join-Path $env:RUNNER_TEMP 'Callas UAC'
+          New-Item -Path $uacDir -ItemType Directory -Force | Out-Null
+          $uacPath = Join-Path $uacDir 'Callas Optimizer.exe'
+          Copy-Item -LiteralPath 'dist/Callas_Optimizer_Setup_x64.exe' -Destination $uacPath -Force
+          if ((Split-Path -Path $uacPath -Leaf) -cne 'Callas Optimizer.exe') { throw 'Nome amigavel UAC incorreto' }
+          $uacInfo = (Get-Item -LiteralPath $uacPath).VersionInfo
+          if ($uacInfo.FileDescription.Trim() -ne 'Callas Optimizer' -or
+              $uacInfo.ProductName.Trim() -ne 'Callas Optimizer') {
+            throw 'Descricao UAC incorreta no arquivo copiado'
+          }
+          $a = (Get-FileHash -LiteralPath 'dist/Callas_Optimizer_Setup_x64.exe' -Algorithm SHA256).Hash
+          $b = (Get-FileHash -LiteralPath $uacPath -Algorithm SHA256).Hash
+          if ($a -ne $b) { throw 'Setup copiado para UAC diferente do original' }
+          Write-Host 'Nome UAC e metadados do Setup confirmados: Callas Optimizer'
+          Remove-Item -LiteralPath $uacPath -Force
       - name: Testar instalacao e icones dos atalhos no Windows
         shell: pwsh
         run: |

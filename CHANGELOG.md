@@ -1,5 +1,13 @@
 # Histórico de versões — Callas Optimizer Windows
 
+## v8.9.10 — Validação de identidade antes de solicitar UAC
+- Verifica nome e metadados de produto do Setup validado antes da elevação.
+- Mantém nome legível no arquivo baixado, com diagnóstico no log e checagem no Windows Actions.
+- Explica a migração de edições com atualizador antigo, que pode exibir GUID na primeira atualização.
+- Não altera o comportamento das ferramentas de manutenção ou a exigência de assinatura digital.
+
+
+
 ## v8.9.9 — Nome do atualizador no UAC e navegação
 - Programas reposicionado imediatamente abaixo de Início, antes de Manutenção.
 - Nome do Setup temporário alterado de GUID para `Callas Optimizer.exe` durante o update.
