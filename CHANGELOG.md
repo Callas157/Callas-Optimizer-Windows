@@ -1,3 +1,11 @@
+## v8.9.23 — Preparação opcional de VMs Windows 11
+
+- Laboratório VirtualBox na aba Programas, com criação confirmada de duas máquinas de teste, Pro e IoT Enterprise LTSC.
+- Perfis de 6 GB RAM, 2 vCPU, VDI dinâmico 80 GB, TPM 2.0, UEFI, Secure Boot e NAT, via VBoxManage.
+- Pasta escolhida pelo usuário e operações não destrutivas sobre VMs existentes. Sem ISOs e sem instalação automática de Windows.
+- Criação em thread separada, com progresso na interface, sem console PowerShell.
+- Testes automatizados de idempotência, criação, disco mínimo e ausência de comandos shell.
+
 ## v8.9.22 — Oracle VirtualBox (Windows)
 
 - Incluído o Oracle VirtualBox na Central de aplicativos, sem mudanças nas outras ferramentas.

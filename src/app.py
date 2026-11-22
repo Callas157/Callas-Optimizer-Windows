@@ -18,7 +18,7 @@ from PySide6.QtCore import QByteArray, QFileInfo, QRectF, QSettings, QSize, Qt, 
 from PySide6.QtGui import QBrush, QColor, QConicalGradient, QIcon, QLinearGradient, QPainter, QPainterPath, QPen, QPixmap
 from PySide6.QtSvg import QSvgRenderer
 from PySide6.QtWidgets import (
-    QApplication, QButtonGroup, QCheckBox, QFileIconProvider, QFrame, QGridLayout, QHBoxLayout,
+    QApplication, QButtonGroup, QCheckBox, QFileDialog, QFileIconProvider, QFrame, QGridLayout, QHBoxLayout,
     QLabel, QMainWindow, QMessageBox, QPlainTextEdit, QProgressBar, QPushButton,
     QScrollArea, QSplitter, QStackedWidget, QVBoxLayout, QWidget,
 )
@@ -29,8 +29,9 @@ from extra_installers import (
     CATALOG as EXTRA_APPS, available_upgrades, download_and_open, installed_program,
     official_website, open_program, powershell_env, powershell_path, program_key, upgrade_program,
 )
+from virtualbox_templates import create_test_vms, VM_NAMES, get_vboxmanage
 
-APP_VERSION = "8.9.22"
+APP_VERSION = "8.9.23"
 REPO = "Callas157/Callas-Optimizer-Windows"
 PROJECT_URL = f"https://github.com/{REPO}"
 DATA_DIR = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "CallasTeck"
@@ -232,6 +233,22 @@ class ExtraInstallerThread(QThread):
             self.result.emit(False, message, self.app_id)
         except Exception as exc:
             self.result.emit(False, str(exc), self.app_id)
+
+
+class VirtualBoxTemplateThread(QThread):
+    progress = Signal(str)
+    result = Signal(bool, str)
+
+    def __init__(self, folder: Path):
+        super().__init__()
+        self.folder = folder
+
+    def run(self):
+        try:
+            message = create_test_vms(self.folder, self.progress.emit)
+            self.result.emit(True, message)
+        except Exception as exc:
+            self.result.emit(False, str(exc))
 
 
 class BraveExtensionsThread(QThread):
@@ -445,6 +462,7 @@ class MainWindow(QMainWindow):
         self.settings = QSettings("Callas", "OptimizerWindows")
         self.cleaner: CleanerThread | None = None
         self.extra_installer: ExtraInstallerThread | None = None
+        self.vm_template_thread: VirtualBoxTemplateThread | None = None
         self.checking_program_updates = False
         self.program_updates_checked = False
         self.program_updates_result.connect(self.program_updates_done)
@@ -1014,6 +1032,27 @@ class MainWindow(QMainWindow):
         for index, card in enumerate(self.all_program_cards):
             self.program_grid.addWidget(card, index // 2, index % 2)
         col.addLayout(self.program_grid)
+        lab_card, lab = card_layout()
+        lab.addWidget(label("LABORATÓRIO VIRTUALBOX · WINDOWS 11", "Section"))
+        lab.addWidget(label(
+            "Prepare duas máquinas independentes para testar o Callas: "
+            "Windows 11 Pro e Windows 11 IoT Enterprise LTSC. "
+            "Cada VM terá 6 GB de RAM, 2 CPUs, disco dinâmico de 80 GB, "
+            "UEFI, Secure Boot, TPM 2.0 e rede NAT. "
+            "Você escolhe a pasta e adiciona as ISOs posteriormente."
+        ))
+        self.vm_template_button = action_button(
+            "PREPARAR 2 VMS PARA TESTES", self.prepare_virtualbox_templates, True)
+        lab.addWidget(self.vm_template_button, alignment=Qt.AlignmentFlag.AlignLeft)
+        self.vm_template_progress = QProgressBar()
+        self.vm_template_progress.setRange(0, 0)
+        self.vm_template_progress.hide()
+        lab.addWidget(self.vm_template_progress)
+        self.vm_template_status = label("")
+        self.vm_template_status.setTextFormat(Qt.TextFormat.PlainText)
+        self.vm_template_status.hide()
+        lab.addWidget(self.vm_template_status)
+        col.addWidget(lab)
         self.program_updates_status = label("")
         self.program_updates_status.hide()
         col.addWidget(self.program_updates_status)
@@ -1252,6 +1291,49 @@ class MainWindow(QMainWindow):
                 message = "O WinGet não encontrou atualizações para os aplicativos do catálogo."
             self.program_updates_status.setText(message)
             self.program_updates_status.show()
+
+    def prepare_virtualbox_templates(self):
+        if (self.vm_template_thread and self.vm_template_thread.isRunning()):
+            return
+        try:
+            get_vboxmanage()
+        except Exception as exc:
+            QMessageBox.warning(self, "VirtualBox necessário", str(exc))
+            return
+        folder = QFileDialog.getExistingDirectory(
+            self, "Escolha o disco ou pasta para as duas VMs",
+            str(Path.home()), QFileDialog.Option.ShowDirsOnly)
+        if not folder:
+            return
+        info = (
+            "Criar as seguintes máquinas no VirtualBox?\n\n"
+            + "\n".join("• " + name for name in VM_NAMES)
+            + "\n\nCada máquina: 6 GB RAM, 2 CPUs, VDI dinâmico até 80 GB, "
+            "UEFI / TPM 2.0 / Secure Boot.\n"
+            "O Windows NÃO será instalado e nenhuma ISO será baixada.\n"
+            "VMs existentes não serão apagadas nem sobrescritas.\n\n"
+            "Destino: " + folder
+        )
+        if not confirmar(self, "Preparar laboratório Windows 11", info):
+            return
+        self.vm_template_button.setEnabled(False)
+        self.vm_template_progress.show()
+        self.vm_template_status.setText("Preparando as máquinas no VirtualBox…")
+        self.vm_template_status.show()
+        self.vm_template_thread = VirtualBoxTemplateThread(Path(folder))
+        self.vm_template_thread.progress.connect(self.vm_template_status.setText)
+        self.vm_template_thread.result.connect(self.virtualbox_templates_finished)
+        self.vm_template_thread.start()
+
+    def virtualbox_templates_finished(self, ok: bool, message: str):
+        self.vm_template_progress.hide()
+        self.vm_template_button.setEnabled(True)
+        self.vm_template_status.setText(message)
+        self.status_message("Máquinas de teste preparadas." if ok else "Erro ao preparar VMs.")
+        if ok:
+            QMessageBox.information(self, "Máquinas preparadas", message)
+        else:
+            QMessageBox.warning(self, "Máquinas virtuais", message)
 
     def install_extra(self, app_id: str, upgrade: bool = False):
         app_id = program_key(app_id)
@@ -1546,6 +1628,11 @@ class MainWindow(QMainWindow):
             self.program_grid.addWidget(card, index // columns, index % columns)
 
     def closeEvent(self, event):
+        if self.vm_template_thread and self.vm_template_thread.isRunning():
+            QMessageBox.information(self, "VMs em preparação",
+                                    "Conclua a preparação das máquinas antes de fechar.")
+            event.ignore()
+            return
         if self.extra_installer and self.extra_installer.isRunning():
             QMessageBox.information(self, "Download em andamento",
                                     "Conclua o download do instalador antes de fechar.")
