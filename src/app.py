@@ -30,7 +30,7 @@ from cleaner import clean_folders, empty_recycle_bin, format_size, known_temp_fo
 from windows_actions import ACTIONS, BY_ROUTE, HOME as ACTION_HOME, worker as run_windows_action
 from extra_installers import CATALOG as EXTRA_APPS, download_and_open, official_website
 
-APP_VERSION = "8.9.11"
+APP_VERSION = "8.9.12"
 REPO = "Callas157/Callas-Optimizer-Windows"
 PROJECT_URL = f"https://github.com/{REPO}"
 DATA_DIR = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "CallasTeck"
@@ -481,7 +481,7 @@ class MainWindow(QMainWindow):
         row = QHBoxLayout()
         for title, desc, target in [
             ("13", "Ferramentas de manutenção", "gamer"),
-            ("5", "Instaladores oficiais", "programs"),
+            ("7", "Opções de aplicativos", "programs"),
             ("GitHub", "Atualizações com confirmação", "updates"),
         ]:
             tile, tcol = card_layout()
@@ -583,15 +583,36 @@ class MainWindow(QMainWindow):
         self.spotify_card = self._program_card(
             "Spotify", "spotify", "Aplicativo de música para Windows", "BAIXAR INSTALADOR",
             lambda: self.install_extra("spotify"))
+        self.chatgpt_card = self._program_card(
+            "ChatGPT", "chatgpt", "Chat, Work e Codex no aplicativo oficial para Windows",
+            "OBTER APP OFICIAL",
+            lambda: self.open_openai_download("ChatGPT"))
+        self.codex_card = self._program_card(
+            "Codex", "codex", "Trabalhe em projetos e arquivos locais com sua autorização",
+            "OBTER APP COM CODEX",
+            lambda: self.open_openai_download("Codex"))
         self.all_program_cards = [
             self.brave_card, self.nvidia_card, self.medal_card,
-            self.lghub_card, self.spotify_card,
+            self.lghub_card, self.spotify_card, self.chatgpt_card, self.codex_card,
         ]
         for index, card in enumerate(self.all_program_cards):
             self.program_grid.addWidget(card, index // 2, index % 2)
         col.addLayout(self.program_grid)
-        self.extra_status = label("Novos instaladores: download oficial, assinatura digital verificada e abertura guiada.")
+        self.extra_status = label("Medal, Logitech e Spotify: download verificado. ChatGPT/Codex: página oficial da OpenAI.")
         col.addWidget(self.extra_status)
+        openai_card, openai_box = card_layout()
+        openai_box.addWidget(label("CHATGPT + CODEX NO WINDOWS", "Section"))
+        openai_box.addWidget(label(
+            "O ChatGPT para desktop já inclui o Codex. É um único aplicativo oficial, "
+            "sem precisar instalar dois programas. Entre com sua conta e, no Codex, "
+            "selecione a pasta do projeto que deseja analisar. O Callas não concede "
+            "acesso automático aos arquivos nem solicita chaves de API."
+        ))
+        openai_box.addWidget(action_button(
+            "COMO USAR COM ARQUIVOS LOCAIS",
+            lambda: webbrowser.open("https://learn.chatgpt.com/pt-BR/docs/quickstart")
+        ))
+        col.addWidget(openai_card)
         c, box = card_layout()
         box.addWidget(label("EXTENSÕES DO BRAVE", "Section"))
         box.addWidget(label("SteamDB e Bonjourr podem ser configurados por política local. Isso faz o Brave exibir 'Gerenciado pela organização'."))
@@ -741,6 +762,29 @@ class MainWindow(QMainWindow):
             self.status_message(f"{name}: ferramenta aberta no PowerShell.")
         except Exception as e:
             QMessageBox.critical(self, "Não foi possível iniciar", str(e))
+
+    def open_openai_download(self, requested: str):
+        # ChatGPT, Work e Codex pertencem ao mesmo aplicativo oficial para Windows.
+        # Apenas abre a página do fabricante, sem instaladores espelhados, API keys,
+        # login capturado ou acesso automático a arquivos da máquina.
+        if requested not in ("ChatGPT", "Codex"):
+            return
+        message = (
+            f"Obter {requested} pelo site oficial da OpenAI?\n\n"
+            "O aplicativo ChatGPT para Windows já inclui Chat, Work e Codex. "
+            "Não é necessário instalar dois aplicativos.\n\n"
+            "O acesso a arquivos locais é configurado dentro do aplicativo oficial, "
+            "quando você escolher um projeto ou pasta."
+        )
+        if not confirmar(self, "Download oficial da OpenAI", message, True):
+            return
+        if not webbrowser.open("https://chatgpt.com/download/"):
+            QMessageBox.warning(
+                self, "Abrir download",
+                "Não foi possível abrir o navegador. Acesse https://chatgpt.com/download/"
+            )
+        else:
+            self.status_message("Página oficial de ChatGPT e Codex aberta no navegador.")
 
     def install_extra(self, app_id: str):
         if self.extra_installer and self.extra_installer.isRunning():

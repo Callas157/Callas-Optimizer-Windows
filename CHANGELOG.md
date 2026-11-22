@@ -1,5 +1,14 @@
 # Histórico de versões — Callas Optimizer Windows
 
+## v8.9.12 — ChatGPT e Codex em Programas
+- ChatGPT e Codex adicionados à Central de Programas, total de sete cartões.
+- Os dois cartões usam o mesmo canal oficial do ChatGPT para desktop, que já contém Codex.
+- Guia de trabalho com arquivos locais, concedendo acesso somente a pastas/projetos escolhidos pelo usuário.
+- Nenhum instalador não oficial, token de API, login automatizado ou acesso total ao sistema.
+- Testes dos ícones e da navegação; distribuição exclusiva por Setup mantida.
+
+
+
 ## v8.9.11 — Menu sem números
 - Removidos os números de todos os 13 itens da navegação, mantendo nomes e ícones.
 - Preservadas rotas, funcionalidades e agrupamento Início / Programas / Manutenção / Central.

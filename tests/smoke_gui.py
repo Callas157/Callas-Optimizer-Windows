@@ -20,8 +20,10 @@ win.goto('clean')
 assert win.stack.currentWidget() is win.pages['clean']
 win.goto('programs')
 assert win.stack.currentWidget() is win.pages['programs']
-assert len(win.all_program_cards) == 5
+assert len(win.all_program_cards) == 7
 assert all(not card is None for card in win.all_program_cards)
+assert win.chatgpt_card in win.all_program_cards
+assert win.codex_card in win.all_program_cards
 win.resize(930, 610)
 app.processEvents()
 win.showMaximized()

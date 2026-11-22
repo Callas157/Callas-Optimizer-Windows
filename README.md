@@ -12,6 +12,15 @@
 **[Baixar a versão estável mais recente](https://github.com/Callas157/Callas-Optimizer-Windows/releases/latest)**
 </div>
 
+## v8.9.12 — ChatGPT e Codex na Central de Programas
+
+- Adicionados dois cartões visuais: **ChatGPT** e **Codex**, na seção **Programas**, ao lado dos aplicativos existentes.
+- Ambos abrem a [página oficial de download da OpenAI](https://chatgpt.com/download/) porque o novo aplicativo **ChatGPT para desktop já inclui Codex**. Não são instaladas duas cópias.
+- Cartões com ícones vetoriais ilustrativos, confirmação em português e adaptação ao redimensionar.
+- Guia oficial para selecionar pasta/projeto local; **sem acesso automático ao disco, login interceptado, elevação administrativa, chave de API ou executável de terceiros**.
+- Em Windows 11 IoT LTSC, o instalador/Store do fornecedor pode depender da disponibilidade de componentes Microsoft Store; o Callas não tenta contornar essas restrições.
+- Mantida a Release somente com o Setup do Callas Optimizer, sem edição portátil.
+
 ## v8.9.11 — Navegação sem numeração
 
 - Os 13 itens de manutenção agora mostram **apenas os nomes e seus ícones**, sem os números herdados do antigo script BAT.
