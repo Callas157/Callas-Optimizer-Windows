@@ -2,6 +2,7 @@
 import os
 import sys
 from pathlib import Path
+from unittest.mock import patch
 root = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(root / 'src'))
 os.environ['QT_QPA_PLATFORM'] = 'offscreen'
@@ -42,6 +43,19 @@ assert win.chatgpt_card in win.all_program_cards
 assert win.codex_card in win.all_program_cards
 for card in (win.discord_card, win.steam_card, win.epic_card, win.wise_card):
     assert card in win.all_program_cards
+with patch("app.installed_program", return_value=None):
+    win.refresh_program_cards()
+    primary, upgrade, bar, status = win.program_controls["discord"]
+    assert primary.text() == "Instalar"
+    win.installing_program = "discord"
+    win.show_program_progress("Baixando…", 42)
+    assert primary.isHidden() and not bar.isHidden() and bar.value() == 42
+    assert status.text() == "Baixando…"
+with patch("app.installed_program", return_value=Path("Discord.exe")):
+    win.extra_installer_done(True, "", "discord")
+    assert primary.text() == "Abrir" and bar.isHidden()
+    win.program_updates_done({"discord"}, False)
+    assert not upgrade.isHidden() and upgrade.text() == "Atualizar"
 for route in ("home", "clean", "gamer", "repair", "programs", "drivers", "updates"):
     win.goto(route)
     assert win.stack.currentWidget() is win.pages[route]

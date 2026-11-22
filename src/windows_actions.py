@@ -10,15 +10,29 @@ import json
 import os
 from pathlib import Path
 import re
-import shutil
 import subprocess
 import time
 import webbrowser
 import winreg
 
+from extra_installers import _system_program, powershell_env, powershell_path, verify_authenticode, winget_path
+
 HOME = Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "CallasTeck"
 BACKUP = HOME / "actions_backup.json"
 LOG = HOME / "acoes.log"
+GAME_BAR = r"Software\Microsoft\GameBar"
+WINDOWS_UPDATE = r"SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU"
+DATA_COLLECTION = r"SOFTWARE\Policies\Microsoft\Windows\DataCollection"
+CLASSIC_MENU = r"Software\Classes\CLSID\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}\InprocServer32"
+GAME_SERVICES = ("SysMain", "WSearch")
+UPDATE_SERVICES = ("wuauserv", "BITS", "DoSvc", "UsoSvc")
+REGISTRY_SETTINGS = {
+    ("CU", GAME_BAR, "AutoGameModeEnabled"): winreg.REG_DWORD,
+    ("LM", WINDOWS_UPDATE, "NoAutoUpdate"): winreg.REG_DWORD,
+    ("LM", WINDOWS_UPDATE, "AUOptions"): winreg.REG_DWORD,
+    ("LM", DATA_COLLECTION, "AllowTelemetry"): winreg.REG_DWORD,
+    ("CU", CLASSIC_MENU, ""): winreg.REG_SZ,
+}
 
 # (id, rota, título, descrição, administrador, alerta)
 ROWS = [
@@ -31,7 +45,7 @@ ROWS = [
  ("hiber_off","gamer","Desativar hibernação","Afeta também a Inicialização Rápida.",True,""),
  ("hiber_on","gamer","Restaurar hibernação","Reativa caso tenha sido desligada aqui.",True,""),
  ("edge_uninstall","edge","Tentar remover Edge","Usa o desinstalador nativo, se disponível.",True,"Alguns Windows bloqueiam a remoção."),
- ("edge_restore","edge","Restaurar Edge","Usa WinGet quando disponível.",True,""),
+ ("edge_restore","edge","Restaurar Edge","Usa WinGet quando disponível.",False,""),
  ("wu_notify","windows_update","Notificar antes de baixar","Configura política do Windows Update.",True,""),
  ("wu_pause","windows_update","Desativar atualização automática","Altera política, sem alterar serviços.",True,"Reduz a proteção de segurança."),
  ("wu_services_off","windows_update","Suspender serviços de atualização","Salva o modo de inicialização.",True,"Pode impedir Store e atualizações."),
@@ -65,9 +79,11 @@ def admin():
     return os.name=="nt" and bool(ctypes.windll.shell32.IsUserAnAdmin())
 
 
-def cmd(*argv, optional=False):
+def cmd(*argv, optional=False, env=None):
     if os.name!="nt": raise OSError("Ação exclusiva do Windows.")
-    proc=subprocess.run(argv,shell=False,capture_output=True,text=True,errors="replace",
+    if not Path(argv[0]).is_absolute():
+        argv = (str(_system_program(argv[0])), *argv[1:])
+    proc=subprocess.run(argv,shell=False,capture_output=True,text=True,errors="replace",env=env,
                         timeout=1800,creationflags=getattr(subprocess,"CREATE_NO_WINDOW",0))
     output=(proc.stdout+"\n"+proc.stderr).strip()
     if proc.returncode and not optional:
@@ -77,7 +93,8 @@ def cmd(*argv, optional=False):
 
 def ps(source):
     encoded=base64.b64encode(source.encode("utf-16le")).decode("ascii")
-    return cmd("powershell.exe","-NoLogo","-NoProfile","-NonInteractive","-EncodedCommand",encoded)
+    return cmd(str(powershell_path()),"-NoLogo","-NoProfile","-NonInteractive","-EncodedCommand",encoded,
+               env=powershell_env())
 
 
 def load():
@@ -114,7 +131,21 @@ def restore_reg(prefix=""):
     st=load();n=0
     for keyid,old in list(st["reg"].items()):
         if prefix and not keyid.startswith(prefix): continue
-        root=winreg.HKEY_CURRENT_USER if old["hive"]=="CU" else winreg.HKEY_LOCAL_MACHINE
+        if not isinstance(old, dict):
+            continue
+        location = old.get("hive"), old.get("path"), old.get("name")
+        if any(not isinstance(part, str) for part in location):
+            continue
+        kind = REGISTRY_SETTINGS.get(location)
+        found = old.get("found")
+        if kind is None or keyid != "|".join(location) or type(found) is not bool:
+            continue
+        value = old.get("value")
+        if found and (old.get("type") != kind or
+                      (kind == winreg.REG_DWORD and (type(value) is not int or not 0 <= value <= 0xFFFFFFFF)) or
+                      (kind == winreg.REG_SZ and not isinstance(value, str))):
+            continue
+        root=winreg.HKEY_CURRENT_USER if location[0]=="CU" else winreg.HKEY_LOCAL_MACHINE
         try:
             if old["found"]:
                 with winreg.CreateKeyEx(root,old["path"],0,winreg.KEY_SET_VALUE) as key:
@@ -132,6 +163,8 @@ def restore_reg(prefix=""):
 def services(names,disable):
     st=load();changed=[]
     for name in names:
+        if name not in (*GAME_SERVICES, *UPDATE_SERVICES):
+            continue
         try:
             with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE,
                     r"SYSTEM\CurrentControlSet\Services"+"\\"+name) as key:
@@ -144,7 +177,8 @@ def services(names,disable):
             cmd("sc.exe","config",name,"start=","disabled")
             changed.append(name)
         elif name in st["svc"]:
-            mode={2:"auto",3:"demand",4:"disabled"}.get(st["svc"][name])
+            startup = st["svc"][name]
+            mode = {2:"auto",3:"demand",4:"disabled"}.get(startup) if type(startup) is int else None
             if not mode:continue
             cmd("sc.exe","config",name,"start=",mode)
             del st["svc"][name];save(st);changed.append(name)
@@ -160,6 +194,8 @@ def energy(enable):
             st["power"]=found.group();save(st)
         return cmd("powercfg.exe","/setactive","SCHEME_MIN")
     if not st["power"]:return "Não havia plano anterior salvo."
+    if not isinstance(st["power"], str) or not re.fullmatch(r"[0-9A-Fa-f]{8}-(?:[0-9A-Fa-f]{4}-){3}[0-9A-Fa-f]{12}", st["power"]):
+        raise ValueError("O identificador do plano de energia salvo é inválido.")
     result=cmd("powercfg.exe","/setactive",st["power"])
     st["power"]=None;save(st);return result
 
@@ -176,9 +212,10 @@ def edge(uninstall):
         location=Path(os.environ.get("PROGRAMFILES(X86)",r"C:\Program Files (x86)"))/"Microsoft/Edge/Application"
         found=sorted(location.glob("*/Installer/setup.exe"),reverse=True) if location.exists() else []
         if not found:raise RuntimeError("Desinstalador Edge não encontrado ou protegido nesta edição.")
+        verify_authenticode(found[0], r"Microsoft Corporation")
         return cmd(str(found[0]),"--uninstall","--system-level","--verbose-logging","--force-uninstall")
-    winget=shutil.which("winget.exe")
-    if winget:return cmd(winget,"install","--id","Microsoft.Edge","--exact",
+    winget=winget_path()
+    if winget.is_file():return cmd(str(winget),"install","--id","Microsoft.Edge","--exact","--source","winget",
                          "--accept-package-agreements","--accept-source-agreements")
     webbrowser.open("https://www.microsoft.com/edge")
     return "Sem WinGet. Página oficial do Edge aberta para instalação."
@@ -195,12 +232,8 @@ def execute(action_id):
     if os.name!="nt":raise OSError("Requer Windows.")
     if ACTIONS[action_id]["admin"] and not admin():
         raise PermissionError("Permissão UAC de administrador necessária.")
-    gb=r"Software\Microsoft\GameBar"
-    wu=r"SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU"
-    dc=r"SOFTWARE\Policies\Microsoft\Windows\DataCollection"
-    cl=r"Software\Classes\CLSID\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}\InprocServer32"
-    sg=("SysMain","WSearch")
-    sw=("wuauserv","BITS","DoSvc","UsoSvc")
+    gb, wu, dc, cl = GAME_BAR, WINDOWS_UPDATE, DATA_COLLECTION, CLASSIC_MENU
+    sg, sw = GAME_SERVICES, UPDATE_SERVICES
     tasks={
         "gamer_on":lambda:setreg("CU",gb,"AutoGameModeEnabled",1),
         "gamer_off":lambda:restore_reg("CU|"+gb),

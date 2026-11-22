@@ -129,7 +129,8 @@ try {
     New-Item -ItemType Directory -Path $stageDir -Force | Out-Null
     # A elevacao UAC deve referenciar o nome legivel do produto, nunca um GUID.
     # Nome de pasta por versao evita mistura entre arquivos de Releases distintas.
-    $sessionDir = Join-Path $stageDir $latest.Tag
+    $versionDir = Join-Path $stageDir $latest.Tag
+    $sessionDir = Join-Path $versionDir ([guid]::NewGuid().ToString('N'))
     New-Item -ItemType Directory -Path $sessionDir -Force | Out-Null
     $staged = if ($Installed) {
         Join-Path $sessionDir 'Callas Optimizer.exe'
@@ -148,7 +149,13 @@ try {
             $process=Get-Process -Id $WaitPid -ErrorAction SilentlyContinue
             if ($process) { Wait-Process -Id $WaitPid -Timeout 60 -ErrorAction Stop }
             Log ('Abrindo UAC do instalador: '+(Split-Path -Path $staged -Leaf))
-            $setup=Start-Process -FilePath $staged -ArgumentList '/SILENT /NORESTART /CLOSEAPPLICATIONS /SUPPRESSMSGBOXES' -Verb RunAs -PassThru -Wait -ErrorAction Stop
+            $guard = [IO.File]::Open($staged, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
+            try {
+                $verified = (Get-FileHash -InputStream $guard -Algorithm SHA256).Hash.ToUpperInvariant()
+                if ($verified -cne $latest.SHA256) { throw 'O Setup foi alterado apos a verificacao.' }
+                $setup=Start-Process -FilePath $staged -ArgumentList '/CALLASUPDATE /NORESTART /CLOSEAPPLICATIONS /SP-' -Verb RunAs -PassThru -ErrorAction Stop
+            } finally { $guard.Dispose() }
+            $setup.WaitForExit()
             if ($setup.ExitCode -ne 0) { throw ('Setup devolveu codigo '+$setup.ExitCode) }
             if (-not (Test-Path -LiteralPath $fullTarget -PathType Leaf)) { throw 'Executavel ausente apos Setup.' }
             Log ('Setup aplicado: '+$latest.Tag)
@@ -160,6 +167,7 @@ try {
             throw
         } finally {
             Remove-Item -LiteralPath $staged -Force -ErrorAction SilentlyContinue
+            try { [IO.Directory]::Delete($sessionDir) } catch {}
         }
     }
     $neighbor=Join-Path $targetDir ('.callas-update-'+[guid]::NewGuid().ToString('N')+'.exe')

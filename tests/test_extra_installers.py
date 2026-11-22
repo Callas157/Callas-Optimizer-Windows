@@ -40,8 +40,10 @@ class ExtraInstallersTest(unittest.TestCase):
             self.assertFalse(_safe_https("https://phishing.invalid/" + app["url"], app["hosts"]))
             self.assertTrue(app["publisher"])
 
-    def test_staging_uses_exe(self):
+    def test_staging_is_isolated_and_verifies_before_execution(self):
         installer = (ROOT / "src/extra_installers.py").read_text(encoding="utf-8")
-        self.assertIn(".parcial.exe", installer)
+        self.assertIn("tempfile.TemporaryDirectory", installer)
+        self.assertLess(installer.index('verify_authenticode(executable, app["publisher"])'),
+                        installer.index("_check_setup_exit(_run_setup(executable), app_id)"))
         app = (ROOT / "src/app.py").read_text(encoding="utf-8")
         self.assertNotIn("self.extra_installer.finished.connect(self.extra_installer.deleteLater)", app)

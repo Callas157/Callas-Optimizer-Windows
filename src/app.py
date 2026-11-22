@@ -1,11 +1,8 @@
-"""Callas Optimizer Windows 8.9.6 — Manutenção em Python e runtime instalado.
-
-Python/PySide6. Operacoes legadas ainda reutilizam o BAT original, mas
-limpeza, atualizacoes, navegacao e painel de logs sao controles nativos.
-"""
+"""Callas Optima para Windows, com interface PySide6."""
 from __future__ import annotations
 
 import ctypes
+from ctypes import wintypes
 from datetime import datetime
 import os
 from pathlib import Path
@@ -17,8 +14,8 @@ import threading
 import uuid
 import webbrowser
 
-from PySide6.QtCore import QByteArray, QSettings, QSize, Qt, QThread, QTimer, Signal
-from PySide6.QtGui import QIcon, QPainter, QPixmap
+from PySide6.QtCore import QByteArray, QRectF, QSettings, QSize, Qt, QThread, QTimer, Signal
+from PySide6.QtGui import QBrush, QColor, QConicalGradient, QIcon, QLinearGradient, QPainter, QPainterPath, QPen, QPixmap
 from PySide6.QtSvg import QSvgRenderer
 from PySide6.QtWidgets import (
     QApplication, QButtonGroup, QCheckBox, QFrame, QGridLayout, QHBoxLayout,
@@ -28,33 +25,40 @@ from PySide6.QtWidgets import (
 
 from cleaner import clean_folders, empty_recycle_bin, format_size, known_temp_folders
 from windows_actions import ACTIONS, BY_ROUTE, HOME as ACTION_HOME, worker as run_windows_action
-from extra_installers import CATALOG as EXTRA_APPS, download_and_open, official_website
+from extra_installers import (
+    CATALOG as EXTRA_APPS, available_upgrades, download_and_open, installed_program,
+    official_website, powershell_env, powershell_path, upgrade_program,
+)
 
-APP_VERSION = "8.9.16"
+APP_VERSION = "8.9.17"
 REPO = "Callas157/Callas-Optimizer-Windows"
 PROJECT_URL = f"https://github.com/{REPO}"
 DATA_DIR = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "CallasTeck"
 
 # Um id selecionado corresponde a UMA pagina, com conteudo proprio.
 NAV_SECTIONS = [
-    ("VISÃO GERAL", [("home", "Início", "⌂"), ("programs", "Programas", "▦")]),
-    ("MANUTENÇÃO", [
+    ("", [
+        ("home", "Início", "⌂"),
+        ("programs", "Programas", "▦"),
+        ("clean", "Limpeza Total", "♻"),
         ("gamer", "Modo Gamer", "⚡"),
+        ("repair", "Reparar Windows", "✚"),
+        ("drivers", "Drivers", "▣"),
+        ("updates", "Atualizações", "↓"),
+        ("logs", "Registros", "≡"),
+        ("about", "Sobre", "ⓘ"),
+    ]),
+    ("FERRAMENTAS DO WINDOWS", [
         ("edge", "Microsoft Edge", "◇"),
         ("windows_update", "Windows Update", "↻"),
         ("network", "Rede e DNS", "◎"),
         ("privacy", "Privacidade", "◉"),
-        ("repair", "Reparar Windows", "✚"),
-        ("drivers", "Drivers", "▣"),
-        ("clean", "Limpeza Total", "♻"),
         ("classic", "Menu clássico", "▤"),
         ("shutdown", "Desligamento", "⏻"),
         ("winutil", "WinUtil", "▣"),
-        ("updates", "Atualizações", "↓"),
         ("restore_point", "Ponto de restauração", "✦"),
         ("restore", "Restaurar padrões", "↩"),
     ]),
-    ("CENTRAL", [("logs", "Registros", "≡"), ("about", "Sobre", "ⓘ")]),
 ]
 
 LEGACY = {
@@ -85,16 +89,18 @@ LEGACY = {
 STYLE = """
 * { font-family: 'Segoe UI'; font-size: 13px; color: #e8ecff; }
 QMainWindow, QWidget#MainRoot { background: #07091e; }
-QFrame#Sidebar { background: qlineargradient(x1:0,y1:0,x2:0.4,y2:1,stop:0 #0b0d2c,stop:0.65 #101131,stop:1 #19104a); border-right: 1px solid #4a297b; }
-QFrame#Topbar { background: #0b102a; border-bottom: 1px solid #37265a; }
+QFrame#Sidebar { background: qlineargradient(x1:0,y1:0,x2:0.45,y2:1,stop:0 #101226,stop:.73 #0d1023,stop:1 #191347); border-right: 1px solid #363468; }
+QFrame#Topbar { background: #0a0e24; border-bottom: 1px solid #282449; }
 QFrame#Card { background: #111b37; border: 1px solid #403a71; border-radius: 15px; }
 QFrame#DashboardPanel { background: qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 #15173b,stop:1 #0c1e3f); border: 1px solid #595197; border-radius: 15px; }
 QLabel#Metric { font-size: 19px; font-weight: 700; color: #f2f9ff; }
-QFrame#QuickCard { background: qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 #27134e,stop:.55 #151c43,stop:1 #07274c); border: 1px solid #7954dc; border-radius: 18px; }
-QFrame#Hero { background: qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 #30135a,stop:.43 #101d4b,stop:1 #052b55); border: 2px solid #8159ff; border-radius: 21px; }
-QLabel#Header { font-size: 25px; font-weight: 700; color: #f8f7ff; }
+QFrame#QuickCard { background: qlineargradient(x1:0,y1:0,x2:.7,y2:1,stop:0 #28134e,stop:.64 #121332,stop:1 #321469); border: 1px solid #a466f1; border-radius: 16px; }
+QFrame#QuickCard[accent="cyan"] { background: qlineargradient(x1:0,y1:0,x2:.7,y2:1,stop:0 #0c2d56,stop:.64 #0e1837,stop:1 #0b3a70); border-color: #4c9bea; }
+QFrame#Hero { background: qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 #171b3b,stop:.5 #0a1028,stop:.77 #171044,stop:1 #0b2148); border: 1px solid #6255ba; border-radius: 18px; }
+QLabel#Header { font-size: 31px; font-weight: 700; color: #f8f7ff; }
 QLabel#Title { font-size: 27px; font-weight: 700; color: #f9f8ff; }
-QLabel#HeroTitle { font-size: 34px; font-weight: 800; color: #fff; }
+QLabel#HeroTitle { font-size: 26px; font-weight: 700; color: #fff; }
+QLabel#SystemMetric { color: #e6efff; font-size: 14px; font-weight: 600; }
 QLabel#CardTitle { font-size: 17px; font-weight: 700; color: #f8f8ff; }
 QLabel#Muted { color: #a8b9d8; }
 QLabel#Section { color: #bc91ff; font-weight: 700; font-size: 11px; letter-spacing: 1px; }
@@ -103,12 +109,14 @@ QPushButton:hover { background: #38347c; border-color: #b87aff; }
 QPushButton:disabled { color: #7880a6; background: #1b2241; border-color: #3a3b61; }
 QPushButton#Primary { background: qlineargradient(x1:0,y1:0,x2:1,y2:0,stop:0 #a02bdf,stop:.55 #523cec,stop:1 #087bff); border: 1px solid #9e6dff; color: #fff; }
 QPushButton#Primary:hover { background: #8753ee; border-color: #52e3ff; }
-QPushButton#Quick { text-align: left; background: transparent; border: none; padding: 7px; color: #ffffff; font-size: 17px; font-weight: 700; }
+QPushButton#Quick { text-align: left; background: transparent; border: none; padding: 4px 0; color: #ffffff; font-size: 21px; font-weight: 700; }
 QPushButton#Quick:hover { background: #3a2877; }
 QPushButton#Nav { background: transparent; border: none; border-radius: 9px; padding: 9px 12px; text-align: left; color: #d0d7f6; font-size: 13px; }
 QPushButton#Nav:hover { background: #342563; color: white; }
 QPushButton#Nav:checked { background: qlineargradient(x1:0,y1:0,x2:1,y2:0,stop:0 #6829a6,stop:1 #235ec5); border: 1px solid #bb73ff; color: white; }
 QScrollArea { border: none; background: transparent; }
+QWidget#PageContent { background: #07091e; }
+QWidget#NavContent { background: #101226; }
 QScrollBar:vertical { background: #10142d; width: 9px; }
 QScrollBar::handle:vertical { background: #6154a0; border-radius: 4px; min-height: 35px; }
 QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
@@ -174,20 +182,11 @@ def svg_icon(name: str, pixels: int = 64) -> QIcon:
 
 
 def runtime_files() -> None:
-    """Instala recursos versionados numa pasta do usuario sem executar da temp do PyInstaller."""
+    """Prepara a pasta de dados e confere os scripts empacotados."""
     DATA_DIR.mkdir(parents=True, exist_ok=True)
-    for name in ("updater.ps1", "install_brave.ps1", "install_nvidia.ps1",
-                 "extensions.ps1", "undo_extensions.ps1"):
-        source = runtime_dir() / name
-        target = DATA_DIR / name
-        if not source.is_file():
+    for name in ("updater.ps1", "extensions.ps1", "undo_extensions.ps1"):
+        if not (runtime_dir() / name).is_file():
             raise FileNotFoundError(f"Recurso da aplicação não encontrado: {name}")
-        data = source.read_bytes()
-        if target.is_file() and target.read_bytes() == data:
-            continue
-        temp_target = target.with_name(target.name + "." + uuid.uuid4().hex + ".tmp")
-        temp_target.write_bytes(data)
-        os.replace(temp_target, target)
 
 
 def in_windows11() -> bool:
@@ -198,16 +197,6 @@ def in_windows11() -> bool:
         return v.major == 10 and v.build >= 22000
     except AttributeError:
         return False
-
-
-def start_script(name: str) -> None:
-    path = DATA_DIR / name
-    if not path.is_file():
-        raise FileNotFoundError(str(path))
-    flags = subprocess.CREATE_NEW_CONSOLE if os.name == "nt" else 0
-    subprocess.Popen(["powershell.exe", "-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass",
-                      "-File", str(path)], cwd=str(DATA_DIR), creationflags=flags)
-
 
 
 def confirmar(parent, titulo: str, mensagem: str, padrao_sim: bool = False) -> bool:
@@ -224,18 +213,46 @@ def confirmar(parent, titulo: str, mensagem: str, padrao_sim: bool = False) -> b
 
 
 class ExtraInstallerThread(QThread):
-    progress = Signal(str)
-    result = Signal(bool, str)
+    progress = Signal(str, int)
+    result = Signal(bool, str, str)
 
-    def __init__(self, app_id: str):
+    def __init__(self, app_id: str, upgrade: bool):
         super().__init__()
         self.app_id = app_id
+        self.upgrade = upgrade
 
     def run(self):
         try:
-            message = download_and_open(self.app_id, self.progress.emit)
-            self.result.emit(True, message)
+            operation = upgrade_program if self.upgrade else download_and_open
+            operation(self.app_id, self.progress.emit)
+            self.result.emit(True, "", self.app_id)
+        except OSError as exc:
+            message = "A instalação foi cancelada." if getattr(exc, "winerror", None) == 1223 else str(exc)
+            self.result.emit(False, message, self.app_id)
         except Exception as exc:
+            self.result.emit(False, str(exc), self.app_id)
+
+
+class BraveExtensionsThread(QThread):
+    result = Signal(bool, str)
+
+    def __init__(self, undo: bool):
+        super().__init__()
+        self.script = "undo_extensions.ps1" if undo else "extensions.ps1"
+
+    def run(self):
+        try:
+            process = subprocess.run(
+                [str(powershell_path()), "-NoLogo", "-NoProfile", "-NonInteractive",
+                 "-ExecutionPolicy", "Bypass", "-File", str(runtime_dir() / self.script)],
+                cwd=DATA_DIR, capture_output=True, timeout=45,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+                env=powershell_env(),
+            )
+            message = "Reinicie o Brave para carregar a alteração." if process.returncode == 0 else (
+                "Falha ao configurar extensões. Consulte o log de instalações.")
+            self.result.emit(process.returncode == 0, message)
+        except (OSError, subprocess.TimeoutExpired) as exc:
             self.result.emit(False, str(exc))
 
 
@@ -271,7 +288,7 @@ NAV_ICONS = {
 }
 
 
-def menu_icon(route: str) -> QIcon:
+def menu_icon(route: str, color: str = "#c7cefb") -> QIcon:
     """Ícones vetoriais monocromáticos com traçado consistente."""
     # Ícones com fundo próprio, independentes das fontes de emojis do Windows.
     paths = {
@@ -282,7 +299,8 @@ def menu_icon(route: str) -> QIcon:
         "network": '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c5 5 5 13 0 18M12 3c-5 5-5 13 0 18"/>',
         "privacy": '<path d="M12 2 4 6v6c0 6 4 9 8 10 4-1 8-4 8-10V6z"/><path d="m9 12 2 2 4-4"/>',
         "repair": '<path d="m4 20 9-9M14 3a5 5 0 0 0 6 6l-6 6-5-5zM3 21l4-1"/>',
-        "clean": '<path d="M6 3h12M9 3v3h6V3M5 7h14l-1 14H6zM10 10v8m4-8v8"/>',
+        "clean": '<path d="m15 9 5-6-2-1-5 6m-3 2 6 4-3 7-10-6 7-5Zm-3 4-2 3m6-1-2 3"/>',
+        "boost": '<path d="M8 14c0-6 6-11 12-11 0 6-5 12-11 12l-1-1Zm0-4H5l-2 4h5m6 2v3l-4 2v-5m-4 1-3 4"/><circle cx="15" cy="8" r="1.5"/>',
         "classic": '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M8 9v11"/>',
         "shutdown": '<path d="M12 2v10M6 5a9 9 0 1 0 12 0"/>',
         "winutil": '<path d="M4 4h16v16H4zM4 9h16m-10 0v11"/>',
@@ -296,7 +314,7 @@ def menu_icon(route: str) -> QIcon:
     }
     markup = paths.get(route, paths["about"])
     svg = ('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" '
-           'fill="none" stroke="#8ec3ff" stroke-width="1.7" '
+           f'fill="none" stroke="{color}" stroke-width="1.7" '
            'stroke-linecap="round" stroke-linejoin="round">' + markup + '</svg>')
     renderer = QSvgRenderer(QByteArray(svg.encode("utf-8")))
     pixmap = QPixmap(64, 64)
@@ -332,17 +350,107 @@ def action_button(text: str, function, primary: bool = False) -> QPushButton:
     return button
 
 
+class MemoryRing(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.percent = None
+        self.setFixedSize(146, 146)
+        self.setAccessibleName("Uso de memória RAM")
+
+    def set_percent(self, percent):
+        self.percent = percent
+        self.setAccessibleDescription("Indisponível" if percent is None else f"{percent}%")
+        self.update()
+
+    def paintEvent(self, event):
+        with QPainter(self) as painter:
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+            track = QRectF(10, 10, 126, 126)
+            painter.setPen(QPen(QColor("#273154"), 11))
+            painter.drawEllipse(track)
+            if self.percent is not None and self.percent > 0:
+                spectrum = QConicalGradient(73, 73, 90)
+                spectrum.setColorAt(0, QColor("#46dcf9"))
+                spectrum.setColorAt(.5, QColor("#6a8cff"))
+                spectrum.setColorAt(.86, QColor("#df72fb"))
+                spectrum.setColorAt(1, QColor("#46dcf9"))
+                pen = QPen(QBrush(spectrum), 11)
+                pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+                painter.setPen(pen)
+                painter.drawArc(track, 90 * 16, -round(self.percent * 57.6))
+            painter.setPen(QColor("#f5f4ff"))
+            font = painter.font()
+            font.setBold(True)
+            font.setPixelSize(35)
+            painter.setFont(font)
+            value = "—" if self.percent is None else f"{self.percent}%"
+            painter.drawText(QRectF(0, 36, 146, 48), Qt.AlignmentFlag.AlignCenter, value)
+            font.setBold(False)
+            font.setPixelSize(13)
+            painter.setFont(font)
+            painter.drawText(QRectF(0, 83, 146, 23), Qt.AlignmentFlag.AlignCenter, "RAM em uso")
+
+
+class WindowsMemoryStatus(ctypes.Structure):
+    _fields_ = [("length", wintypes.DWORD), ("load", wintypes.DWORD)] + [
+        (name, ctypes.c_ulonglong) for name in
+        ("total", "available", "page_total", "page_available", "virtual_total",
+         "virtual_available", "extended_available")
+    ]
+
+
+def phoenix_art() -> QPixmap:
+    """Usa o recorte da fênix da arte aprovada, sem os controles desenhados."""
+    source = QPixmap(str(asset_dir().parent / "optima-approved-preview.jpg"))
+    if source.isNull():
+        return svg_icon("callas", 220).pixmap(220, 220)
+    result = QPixmap(316, 231)
+    result.fill(Qt.GlobalColor.transparent)
+    outline = QPainterPath()
+    outline.moveTo(5, 7)
+    outline.lineTo(127, 0)
+    outline.cubicTo(104, 39, 148, 74, 195, 68)
+    outline.lineTo(314, 63)
+    outline.lineTo(306, 190)
+    outline.cubicTo(231, 193, 185, 225, 30, 231)
+    outline.lineTo(35, 197)
+    outline.cubicTo(100, 181, 64, 164, 12, 133)
+    outline.closeSubpath()
+    with QPainter(result) as painter:
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setClipPath(outline)
+        painter.drawPixmap(0, 0, source, 875, 4, 316, 231)
+        painter.setClipping(False)
+        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_DestinationIn)
+        mask = QLinearGradient(0, 0, 316, 0)
+        mask.setColorAt(0, QColor(0, 0, 0, 0))
+        mask.setColorAt(.10, QColor(0, 0, 0, 255))
+        mask.setColorAt(.88, QColor(0, 0, 0, 255))
+        mask.setColorAt(1, QColor(0, 0, 0, 0))
+        painter.fillRect(result.rect(), mask)
+    return result
+
+
 class MainWindow(QMainWindow):
+    program_updates_result = Signal(object, bool)
+
     def __init__(self):
         super().__init__()
         self.setWindowTitle(f"Callas Optima {APP_VERSION}  |  Windows Edition")
         self.setWindowIcon(app_icon())
         # Borda e controles nativos (incluindo maximizar); a janela pode ser redimensionada.
         self.setMinimumSize(810, 570)
-        self.resize(1200, 815)
+        self.resize(1450, 850)
         self.settings = QSettings("Callas", "OptimizerWindows")
         self.cleaner: CleanerThread | None = None
         self.extra_installer: ExtraInstallerThread | None = None
+        self.checking_program_updates = False
+        self.program_updates_checked = False
+        self.program_updates_result.connect(self.program_updates_done)
+        self.extensions_job: BraveExtensionsThread | None = None
+        self.installing_program: str | None = None
+        self.program_controls = {}
+        self.upgradeable_programs: set[str] = set()
         self.updater_process: subprocess.Popen | None = None
         self.update_mode = ""
         self.update_status = DATA_DIR / ("updater-" + uuid.uuid4().hex + ".status")
@@ -360,7 +468,7 @@ class MainWindow(QMainWindow):
         root_layout.addWidget(self.splitter)
         self._sidebar()
         self._main_area()
-        self.splitter.setSizes([300, 900])
+        self.splitter.setSizes([220, 1230])
         self.splitter.setStretchFactor(0, 0)
         self.splitter.setStretchFactor(1, 1)
         self.goto("home")
@@ -377,42 +485,39 @@ class MainWindow(QMainWindow):
     def _sidebar(self):
         sidebar = QFrame()
         sidebar.setObjectName("Sidebar")
-        sidebar.setMinimumWidth(245)
+        sidebar.setMinimumWidth(205)
         sidebar.setMaximumWidth(365)
         shell = QVBoxLayout(sidebar)
         shell.setContentsMargins(15, 19, 12, 14)
         shell.setSpacing(14)
-        brand = QHBoxLayout()
-        brand.setSpacing(12)
+        brand = QVBoxLayout()
+        brand.setSpacing(8)
         logo = QLabel()
-        logo.setPixmap(app_icon().pixmap(43, 43))
-        brand.addWidget(logo)
-        words = QVBoxLayout()
-        words.setSpacing(0)
-        words.addWidget(label("Callas Optima", "CardTitle"))
-        words.addWidget(label("WINDOWS • FÊNIX EDITION", "Muted"))
-        brand.addLayout(words)
-        brand.addStretch()
+        logo.setPixmap(svg_icon("callas", 96).pixmap(79, 79))
+        brand.addWidget(logo, alignment=Qt.AlignmentFlag.AlignHCenter)
+        name = label('Callas <span style="color:#c874ff">Optima</span>', "CardTitle")
+        brand.addWidget(name, alignment=Qt.AlignmentFlag.AlignHCenter)
         shell.addLayout(brand)
-        shell.addWidget(label("CENTRAL DE CONTROLE", "Section"))
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         content = QWidget()
+        content.setObjectName("NavContent")
         nav = QVBoxLayout(content)
         nav.setContentsMargins(0, 0, 0, 0)
         nav.setSpacing(2)
         self.nav_group = QButtonGroup(self)
         self.nav_group.setExclusive(True)
         for section, entries in NAV_SECTIONS:
-            heading = label(section, "Section")
-            heading.setContentsMargins(8, 15, 0, 6)
-            nav.addWidget(heading)
+            if section:
+                heading = label(section, "Section")
+                heading.setContentsMargins(8, 12, 0, 4)
+                nav.addWidget(heading)
             for route, title, glyph in entries:
                 btn = action_button(title, lambda _=False, key=route: self.goto(key))
                 btn.setIcon(menu_icon(route))
                 btn.setIconSize(QSize(23, 23))
-                btn.setMinimumHeight(47)
+                btn.setMinimumHeight(35)
                 btn.setObjectName("Nav")
                 btn.setCheckable(True)
                 self.nav_group.addButton(btn)
@@ -433,10 +538,14 @@ class MainWindow(QMainWindow):
         bar.setObjectName("Topbar")
         bh = QHBoxLayout(bar)
         bh.setContentsMargins(25, 15, 24, 15)
+        logo = QLabel()
+        logo.setPixmap(svg_icon("callas", 70).pixmap(60, 60))
+        bh.addWidget(logo)
+        bh.addSpacing(6)
         titles = QVBoxLayout()
         titles.setSpacing(3)
-        titles.addWidget(label("Callas Optima", "Header"))
-        titles.addWidget(label("Desempenho e renovação • Windows 11"))
+        titles.addWidget(label('Callas <span style="color:#7ca7ff">Optima</span>', "Header"))
+        titles.addWidget(label("Desempenho e renovação"))
         bh.addLayout(titles, 1)
         self.top_check = action_button("VERIFICAR ATUALIZAÇÃO", lambda: self.check_update(True))
         bh.addWidget(self.top_check)
@@ -451,9 +560,10 @@ class MainWindow(QMainWindow):
         foot.setObjectName("Topbar")
         fh = QHBoxLayout(foot)
         fh.setContentsMargins(20, 9, 20, 9)
-        self.status_label = label("Pronto. Selecione uma ferramenta na lateral.")
+        self.status_label = label("Pronto")
+        self.status_label.setTextFormat(Qt.TextFormat.PlainText)
         fh.addWidget(self.status_label, 1)
-        fh.addWidget(label("Windows 11 Pro / Enterprise / IoT LTSC", "Section"))
+        fh.addWidget(label("Windows 11 x64", "Section", wrap=False))
         col.addWidget(foot)
         self.splitter.addWidget(central)
 
@@ -462,12 +572,13 @@ class MainWindow(QMainWindow):
         scroll.setWidgetResizable(True)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         content = QWidget()
+        content.setObjectName("PageContent")
         layout = QVBoxLayout(content)
-        layout.setContentsMargins(30, 26, 30, 34)
-        layout.setSpacing(18)
-        layout.addWidget(label("CALLAS  /  CONTROLE CENTRAL", "Section"))
-        layout.addWidget(label(title, "Title"))
-        layout.addWidget(label(description, "Muted"))
+        layout.setContentsMargins(22, 18, 22, 22)
+        layout.setSpacing(15)
+        if route != "home":
+            layout.addWidget(label(title, "Title"))
+            layout.addWidget(label(description, "Muted"))
         scroll.setWidget(content)
         self.pages[route] = scroll
         self.stack.addWidget(scroll)
@@ -486,46 +597,49 @@ class MainWindow(QMainWindow):
 
     def _home_page(self):
         """Painel Fênix interativo; todos os atalhos usam páginas da mesma janela."""
-        col = self._page(
-            "home", "Callas Optima",
-            "Desempenho e renovação do Windows 11. Escolha o que deseja fazer."
-        )
-
+        col = self._page("home", "Callas Optima", "")
         hero, hero_box = card_layout("Hero")
-        hero_box.setContentsMargins(27, 20, 23, 20)
+        hero_box.setContentsMargins(23, 12, 18, 12)
         row = QHBoxLayout()
+        row.setSpacing(22)
+
+        self.memory_ring = MemoryRing()
+        row.addWidget(self.memory_ring, alignment=Qt.AlignmentFlag.AlignVCenter)
         text_col = QVBoxLayout()
-        text_col.setSpacing(10)
-        text_col.addWidget(label("FÊNIX EDITION  •  v" + APP_VERSION, "Section"))
-        text_col.addWidget(label("Seu Windows no controle", "HeroTitle"))
-        text_col.addWidget(label(
-            "Limpeza, reparos, aplicativos e ajustes de desempenho no mesmo lugar. "
-            "Cada ação abre sua própria seção, sem fechar esta janela."
-        ))
-        text_col.addWidget(label(
-            "Sem resultados fictícios: diagnósticos e modificações são realizados "
-            "somente quando você os solicita.", "Muted"
-        ))
-        controls = QHBoxLayout()
-        controls.addWidget(action_button(
-            "EXPLORAR OTIMIZAÇÃO", lambda: self.goto("gamer"), True
-        ))
-        controls.addWidget(action_button(
-            "VER DIAGNÓSTICOS", lambda: self.goto("repair")
-        ))
-        controls.addStretch()
-        text_col.addLayout(controls)
+        text_col.setSpacing(8)
         text_col.addStretch()
-        row.addLayout(text_col, 3)
-        phoenix = QLabel()
-        phoenix.setPixmap(svg_icon("callas", 220).pixmap(QSize(210, 210)))
-        phoenix.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        phoenix.setAccessibleName("Ícone da Fênix Callas Optima")
-        row.addWidget(phoenix, 2)
+        text_col.addWidget(label("Visão geral do sistema", "HeroTitle"))
+        text_col.addWidget(label("Uso atual dos recursos do Windows."))
+        self.live_cpu = label("CPU  —", "SystemMetric")
+        self.live_memory = label("RAM  —", "SystemMetric")
+        self.live_storage = label("Disco  —", "SystemMetric")
+        stats = QHBoxLayout()
+        stats.setSpacing(16)
+        for metric in (self.live_cpu, self.live_memory, self.live_storage):
+            stats.addWidget(metric)
+        text_col.addLayout(stats)
+        text_col.addStretch()
+        row.addLayout(text_col, 2)
+
+        art_box = QVBoxLayout()
+        art_box.setSpacing(0)
+        self.hero_phoenix = QLabel()
+        self.hero_phoenix.setPixmap(phoenix_art().scaled(
+            275, 160, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
+        self.hero_phoenix.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.hero_phoenix.setAccessibleName("Fênix Callas Optima")
+        art_box.addWidget(self.hero_phoenix)
+        art_box.addWidget(action_button("Explorar otimização", lambda: self.goto("gamer"), True))
+        row.addLayout(art_box, 1)
         hero_box.addLayout(row)
         col.addWidget(hero)
 
-        col.addWidget(label("FERRAMENTAS PRINCIPAIS", "Section"))
+        self._cpu_snapshot = None
+        self.home_timer = QTimer(self)
+        self.home_timer.setInterval(2500)
+        self.home_timer.timeout.connect(self.refresh_system_metrics)
+        self.refresh_system_metrics()
+
         self.home_quick_grid = QGridLayout()
         self.home_quick_grid.setSpacing(12)
         self.home_tiles = []
@@ -537,22 +651,26 @@ class MainWindow(QMainWindow):
             ("Drivers", "NVIDIA App e Windows Update", "drivers"),
             ("Atualizar", "Verificar versões do Callas Optima", "updates"),
         ]
-        for title, description, route in shortcuts:
+        for index, (title, description, route) in enumerate(shortcuts):
             tile, tile_box = card_layout("QuickCard")
-            tile_box.setContentsMargins(15, 15, 15, 15)
+            cyan = index % 2 == 1
+            tile.setProperty("accent", "cyan" if cyan else "violet")
+            tile_box.setContentsMargins(16, 12, 16, 12)
+            tile_box.setSpacing(3)
+            icon = QLabel()
+            icon_route = {"gamer": "boost", "updates": "windows_update"}.get(route, route)
+            icon.setPixmap(menu_icon(icon_route, "#37deff" if cyan else "#e6aaff").pixmap(34, 34))
+            tile_box.addWidget(icon)
             button = action_button(
-                title + "    ›", lambda _=False, destination=route: self.goto(destination)
+                title + "  ›", lambda _=False, destination=route: self.goto(destination)
             )
-            button.setIcon(menu_icon(route))
-            button.setIconSize(QSize(25, 25))
             button.setObjectName("Quick")
-            button.setMinimumHeight(43)
             tile_box.addWidget(button)
             tile_box.addWidget(label(description, "Muted"))
+            tile_box.addStretch()
             self.home_tiles.append(tile)
         col.addLayout(self.home_quick_grid)
 
-        col.addWidget(label("SEU PC E ACESSOS RÁPIDOS", "Section"))
         self.home_detail_grid = QGridLayout()
         self.home_detail_grid.setSpacing(12)
         self.home_panels = []
@@ -618,7 +736,6 @@ class MainWindow(QMainWindow):
 
         tools, tools_box = card_layout("DashboardPanel")
         tools_box.addWidget(label("Ferramentas rápidas", "CardTitle"))
-        tools_box.addWidget(label("Acesse as funções existentes do Callas.", "Muted"))
         quick_tools = QGridLayout()
         for position, (title, route) in enumerate((
             ("Rede e DNS", "network"),
@@ -637,19 +754,53 @@ class MainWindow(QMainWindow):
         col.addStretch()
         self._refresh_home_layout(force=True)
 
+    def refresh_system_metrics(self):
+        if os.name != "nt":
+            return
+        kernel = ctypes.windll.kernel32
+        memory = WindowsMemoryStatus()
+        memory.length = ctypes.sizeof(memory)
+        if kernel.GlobalMemoryStatusEx(ctypes.byref(memory)):
+            self.memory_ring.set_percent(memory.load)
+            total = memory.total / 1024 ** 3
+            used = (memory.total - memory.available) / 1024 ** 3
+            self.live_memory.setText(f"RAM\n{used:.1f} / {total:.1f} GB")
+        idle, system, user = (ctypes.c_ulonglong() for _ in range(3))
+        if kernel.GetSystemTimes(ctypes.byref(idle), ctypes.byref(system), ctypes.byref(user)):
+            current = idle.value, system.value + user.value
+            if self._cpu_snapshot:
+                idle_delta = current[0] - self._cpu_snapshot[0]
+                total_delta = current[1] - self._cpu_snapshot[1]
+                if total_delta > 0:
+                    usage = max(0, min(100, round(100 * (1 - idle_delta / total_delta))))
+                    self.live_cpu.setText(f"CPU\n{usage}%")
+            self._cpu_snapshot = current
+        try:
+            drive = os.environ.get("SystemDrive", "C:")
+            space = shutil.disk_usage(drive + "\\")
+            self.live_storage.setText(f"Disco ({drive})\n{space.free / 1024 ** 3:.0f} GB livres")
+        except OSError:
+            pass
+
     def _refresh_home_layout(self, force: bool = False):
         """Mantém os cartões legíveis em janelas pequenas e monitores maiores."""
         if not hasattr(self, "home_quick_grid"):
             return
         width = self.width()
-        profile = "compact" if width < 1100 else ("wide" if width >= 1500 else "medium")
+        profile = "compact" if width < 1120 else ("wide" if width >= 1390 else "medium")
         if not force and getattr(self, "_home_profile", None) == profile:
             return
         self._home_profile = profile
         for grid in (self.home_quick_grid, self.home_detail_grid):
             while grid.count():
                 grid.takeAt(0)
-        quick_columns = 2 if profile == "compact" else 3
+        self.hero_phoenix.setVisible(profile != "compact")
+        quick_columns = {"compact": 2, "medium": 3, "wide": 6}[profile]
+        detail_columns = {"compact": 1, "medium": 2, "wide": 3}[profile]
+        for column in range(6):
+            self.home_quick_grid.setColumnStretch(column, int(column < quick_columns))
+            if column < 3:
+                self.home_detail_grid.setColumnStretch(column, int(column < detail_columns))
         for index, tile in enumerate(self.home_tiles):
             self.home_quick_grid.addWidget(
                 tile, index // quick_columns, index % quick_columns
@@ -690,8 +841,7 @@ class MainWindow(QMainWindow):
             "Abra o instalador oficial do NVIDIA App. Nele, você pode verificar "
             "drivers disponíveis e escolher quando instalar; o Callas não remove "
             "drivers nem força versões sem sua confirmação."))
-        body.addWidget(action_button(
-            "BAIXAR NVIDIA APP", lambda: self.ps_action("install_nvidia.ps1", "NVIDIA App"), True))
+        body.addWidget(action_button("ABRIR NVIDIA APP EM PROGRAMAS", self._show_nvidia_card, True))
         col.addWidget(c)
         other, layout = card_layout()
         layout.addWidget(label("DRIVERS PELO WINDOWS", "Section"))
@@ -700,6 +850,10 @@ class MainWindow(QMainWindow):
         layout.addWidget(action_button("ABRIR WINDOWS UPDATE", lambda: self.goto("windows_update")))
         col.addWidget(other)
         col.addStretch()
+
+    def _show_nvidia_card(self):
+        self.goto("programs")
+        self.pages["programs"].ensureWidgetVisible(self.nvidia_card)
 
     def _legacy_page(self, route, option, title, description, warning):
         col = self._page(route, title, description)
@@ -766,19 +920,39 @@ class MainWindow(QMainWindow):
         names.addWidget(label(description))
         title_row.addLayout(names, 1)
         content.addLayout(title_row)
-        content.addWidget(action_button(action_title, action, True))
+        primary = action_button(action_title, action, True)
+        if icon not in EXTRA_APPS:
+            content.addWidget(primary)
+            return outer
+        actions = QHBoxLayout()
+        actions.addWidget(primary, 1)
+        upgrade = action_button("Atualizar", lambda: self.install_extra(icon, upgrade=True))
+        upgrade.hide()
+        actions.addWidget(upgrade)
+        content.addLayout(actions)
+        progress = QProgressBar()
+        progress.setAccessibleName(f"Progresso de {name}")
+        progress.hide()
+        content.addWidget(progress)
+        status = label("")
+        status.setTextFormat(Qt.TextFormat.PlainText)
+        status.hide()
+        content.addWidget(status)
+        self.program_controls[icon] = primary, upgrade, progress, status
         return outer
 
     def _program_page(self):
-        col = self._page("programs", "Central de aplicativos", "Programas oficiais e configurações do navegador, separados das ferramentas do sistema.")
+        col = self._page("programs", "Central de aplicativos", "Instale, abra e atualize seus aplicativos.")
+        col.addWidget(action_button("VERIFICAR ATUALIZAÇÕES DOS APPS", self.check_program_updates),
+                      alignment=Qt.AlignmentFlag.AlignLeft)
         self.program_grid = QGridLayout()
         self.program_grid.setSpacing(16)
         self.brave_card = self._program_card(
-            "Brave Browser", "brave", "Com SteamDB e Bonjourr", "INSTALAR / CONFIGURAR",
-            lambda: self.ps_action("install_brave.ps1", "Brave Browser"))
+            "Brave Browser", "brave", "Navegador com configuração opcional de SteamDB e Bonjourr", "Instalar",
+            lambda: self.install_extra("brave"))
         self.nvidia_card = self._program_card(
-            "NVIDIA App", "nvidia", "Instalação oficial; não muda o driver sozinho", "BAIXAR / INSTALAR",
-            lambda: self.ps_action("install_nvidia.ps1", "NVIDIA App"))
+            "NVIDIA App", "nvidia", "Gerencie drivers e configurações da GPU", "Instalar",
+            lambda: self.install_extra("nvidia"))
         self.medal_card = self._program_card(
             "Medal", "medal", "Gravação de clipes e melhores momentos", "BAIXAR INSTALADOR",
             lambda: self.install_extra("medal"))
@@ -803,21 +977,22 @@ class MainWindow(QMainWindow):
             "Steam", "steam", "Biblioteca de jogos para PC", "BAIXAR INSTALADOR",
             lambda: self.install_extra("steam"))
         self.epic_card = self._program_card(
-            "Epic Games Launcher", "epic", "Loja e biblioteca Epic Games", "ABRIR DOWNLOAD OFICIAL",
-            lambda: self.open_program_website("epic"))
+            "Epic Games Launcher", "epic", "Loja e biblioteca Epic Games", "Instalar",
+            lambda: self.install_extra("epic"))
         self.wise_card = self._program_card(
-            "Wise Program Uninstaller", "wise", "Desinstalação de aplicativos", "ABRIR DOWNLOAD OFICIAL",
-            lambda: self.open_program_website("wise"))
+            "Wise Program Uninstaller", "wise", "Desinstalação de aplicativos", "Instalar",
+            lambda: self.install_extra("wise"))
         self.all_program_cards = [
-            self.brave_card, self.nvidia_card, self.medal_card,
-            self.lghub_card, self.spotify_card, self.chatgpt_card, self.codex_card,
-            self.discord_card, self.steam_card, self.epic_card, self.wise_card,
+            self.brave_card, self.nvidia_card, self.discord_card, self.steam_card,
+            self.epic_card, self.wise_card, self.medal_card, self.lghub_card,
+            self.spotify_card, self.chatgpt_card, self.codex_card,
         ]
         for index, card in enumerate(self.all_program_cards):
             self.program_grid.addWidget(card, index // 2, index % 2)
         col.addLayout(self.program_grid)
-        self.extra_status = label("Discord, Steam, Medal, Logitech e Spotify: executáveis com assinatura verificada. Epic, Wise e ChatGPT/Codex: site oficial.")
-        col.addWidget(self.extra_status)
+        self.program_updates_status = label("")
+        self.program_updates_status.hide()
+        col.addWidget(self.program_updates_status)
         openai_card, openai_box = card_layout()
         openai_box.addWidget(label("CHATGPT + CODEX NO WINDOWS", "Section"))
         openai_box.addWidget(label(
@@ -835,11 +1010,15 @@ class MainWindow(QMainWindow):
         box.addWidget(label("EXTENSÕES DO BRAVE", "Section"))
         box.addWidget(label("SteamDB e Bonjourr podem ser configurados por política local. Isso faz o Brave exibir 'Gerenciado pela organização'."))
         row = QHBoxLayout()
-        row.addWidget(action_button("CONFIGURAR EXTENSÕES", lambda: self.ps_action("extensions.ps1", "Extensões Brave"), True))
-        row.addWidget(action_button("DESFAZER POLÍTICAS", lambda: self.ps_action("undo_extensions.ps1", "Remover políticas")))
+        row.addWidget(action_button("CONFIGURAR EXTENSÕES", lambda: self.configure_brave_extensions(False), True))
+        row.addWidget(action_button("DESFAZER POLÍTICAS", lambda: self.configure_brave_extensions(True)))
         box.addLayout(row)
+        self.extensions_status = label("")
+        self.extensions_status.setTextFormat(Qt.TextFormat.PlainText)
+        box.addWidget(self.extensions_status)
         col.addWidget(c)
         col.addStretch()
+        self.refresh_program_cards()
 
     def _update_page(self):
         col = self._page("updates", "Atualizações", "Verificação automática pelo GitHub Releases, sempre com sua autorização.")
@@ -905,11 +1084,22 @@ class MainWindow(QMainWindow):
         if route == "logs":
             self.load_logs()
         self.status_message("Seção aberta: " + self.nav_buttons[route].text().strip())
+        if route == "home":
+            self.refresh_system_metrics()
+            self.home_timer.start()
+        else:
+            self.home_timer.stop()
+        if route == "programs":
+            self.refresh_program_cards()
+            if not self.program_updates_checked:
+                self.check_program_updates(automatic=True)
 
     def status_message(self, message: str):
         self.status_label.setText(message)
 
     def native_action(self, code: str):
+        if self.update_mode == "install":
+            return
         task = ACTIONS.get(code)
         if task is None or getattr(self, "native_timer", None) is not None:
             return
@@ -928,16 +1118,17 @@ class MainWindow(QMainWindow):
         self.native_report.unlink(missing_ok=True)
         self.native_task_name = task["name"]
         self.native_ticks = 0
-        args = f'--callas-task {code} --callas-report {self.native_report.name}'
+        script_args = [] if getattr(sys, "frozen", False) else [str(Path(__file__).resolve())]
+        args = [*script_args, "--callas-task", code, "--callas-report", self.native_report.name]
         try:
             if task["admin"]:
                 rc = ctypes.windll.shell32.ShellExecuteW(
-                    None, "runas", sys.executable, args, None, 1)
+                    None, "runas", sys.executable, subprocess.list2cmdline(args), None, 1)
                 if int(rc) <= 32:
                     raise RuntimeError("Permissão UAC não concedida.")
             else:
                 subprocess.Popen(
-                    [sys.executable, "--callas-task", code, "--callas-report", self.native_report.name],
+                    [sys.executable, *args],
                     cwd=str(ACTION_HOME),
                     creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
         except Exception as exc:
@@ -972,15 +1163,6 @@ class MainWindow(QMainWindow):
             self.native_timer = None
             QMessageBox.warning(self, "Tempo limite", "A tarefa excedeu o tempo previsto. Consulte os registros.")
 
-    def ps_action(self, script: str, name: str):
-        if not confirmar(self, "Confirmar operação", f"Abrir a ferramenta {name}?", True):
-            return
-        try:
-            start_script(script)
-            self.status_message(f"{name}: ferramenta aberta no PowerShell.")
-        except Exception as e:
-            QMessageBox.critical(self, "Não foi possível iniciar", str(e))
-
     def open_openai_download(self, requested: str):
         # ChatGPT, Work e Codex pertencem ao mesmo aplicativo oficial para Windows.
         # Apenas abre a página do fabricante, sem instaladores espelhados, API keys,
@@ -1004,46 +1186,135 @@ class MainWindow(QMainWindow):
         else:
             self.status_message("Página oficial de ChatGPT e Codex aberta no navegador.")
 
-    def open_program_website(self, app_id: str):
-        """Instaladores de URL dinamica: apenas o site HTTPS oficial."""
-        from extra_installers import WEBSITE_ONLY
-        if app_id not in WEBSITE_ONLY:
+    def configure_brave_extensions(self, undo: bool):
+        if self.update_mode == "install" or (self.extensions_job and self.extensions_job.isRunning()):
             return
-        entry = WEBSITE_ONLY[app_id]
-        if confirmar(self, "Site oficial", f"Abrir o download oficial de {entry['name']} no navegador?", True):
-            if webbrowser.open(entry["website"]):
-                self.status_message(f"Site oficial de {entry['name']} aberto.")
-            else:
-                QMessageBox.warning(self, "Navegador", "Não foi possível abrir o site oficial.")
+        if not undo and not installed_program("brave"):
+            self.extensions_status.setText("Instale o Brave antes de configurar as extensões.")
+            return
+        message = ("Remover as políticas de SteamDB e Bonjourr adicionadas pelo Callas?" if undo
+                   else "Adicionar SteamDB e Bonjourr por política local? O Brave poderá exibir "
+                        "'Gerenciado pela organização'.")
+        if not confirmar(self, "Extensões do Brave", message):
+            return
+        self.extensions_status.setText("Aplicando alteração…")
+        self.extensions_job = BraveExtensionsThread(undo)
+        self.extensions_job.result.connect(self.brave_extensions_done)
+        self.extensions_job.start()
 
-    def install_extra(self, app_id: str):
-        if self.extra_installer and self.extra_installer.isRunning():
-            QMessageBox.information(self, "Download em andamento", "Conclua o download atual antes de iniciar outro.")
+    def brave_extensions_done(self, ok: bool, message: str):
+        self.extensions_status.setText(message)
+        self.status_message("Extensões do Brave: concluído." if ok else "Extensões do Brave: falha.")
+
+    def refresh_program_cards(self):
+        for app_id, (primary, upgrade, _, _) in self.program_controls.items():
+            installed = installed_program(app_id) is not None
+            primary.setText("Abrir" if installed else "Instalar")
+            primary.setVisible(self.installing_program != app_id)
+            primary.setEnabled(not self.installing_program)
+            upgrade.setVisible(installed and app_id in self.upgradeable_programs
+                               and self.installing_program != app_id)
+            upgrade.setEnabled(not self.installing_program)
+
+    def check_program_updates(self, automatic=False):
+        if self.checking_program_updates or self.installing_program:
+            return
+        self.checking_program_updates = True
+        self.program_updates_checked = True
+        if not automatic:
+            self.program_updates_status.setText("Verificando atualizações pelo WinGet…")
+            self.program_updates_status.show()
+
+        def check():
+            upgrades = available_upgrades()
+            try:
+                self.program_updates_result.emit(upgrades, automatic)
+            except RuntimeError:
+                pass  # A janela pode ter sido fechada durante a consulta.
+
+        threading.Thread(target=check, daemon=True).start()
+
+    def program_updates_done(self, upgrades, automatic: bool):
+        self.checking_program_updates = False
+        self.upgradeable_programs = upgrades or set()
+        self.refresh_program_cards()
+        if not automatic or self.upgradeable_programs:
+            if upgrades is None:
+                message = "Consulta indisponível. Os apps podem ser atualizados pelo próprio fabricante."
+            elif upgrades:
+                message = "Atualizações disponíveis nos cartões dos aplicativos."
+            else:
+                message = "O WinGet não encontrou atualizações para os aplicativos do catálogo."
+            self.program_updates_status.setText(message)
+            self.program_updates_status.show()
+
+    def install_extra(self, app_id: str, upgrade: bool = False):
+        if self.installing_program or (self.extra_installer and self.extra_installer.isRunning()):
+            return
+        if self.update_mode == "install" and self.updater_process:
+            self.status_message("Aguarde a atualização do Callas Optima.")
             return
         name = EXTRA_APPS[app_id]["name"]
-        if not confirmar(self, "Instalador oficial",
-                         f"Baixar o instalador de {name} pelo site oficial?\n"
-                         "A assinatura digital será conferida antes de abrir o arquivo."):
+        if not upgrade and (installed := installed_program(app_id)):
+            try:
+                os.startfile(str(installed))
+                self.status_message(f"{name} aberto.")
+            except OSError as exc:
+                QMessageBox.warning(self, "Falha ao abrir", str(exc))
             return
-        self.extra_status.setText(f"Preparando o download de {name}...")
-        self.extra_installer = ExtraInstallerThread(app_id)
-        self.extra_installer.progress.connect(self.extra_status.setText)
-        self.extra_installer.result.connect(
-            lambda ok, msg, key=app_id: self.extra_installer_done(ok, msg, key))
-        # Mantenha o objeto da thread ate a proxima acao.
-        # deleteLater aqui deixaria uma referencia invalida em self.extra_installer.
+        if upgrade and app_id not in self.upgradeable_programs:
+            return
+        message = (f"Atualizar {name} pelo WinGet?" if upgrade else
+                   f"Instalar {name}? A assinatura digital será conferida antes da execução.")
+        if not confirmar(self, "Instalador oficial", message):
+            return
+        self.installing_program = app_id
+        self.refresh_program_cards()
+        self.show_program_progress("Preparando…", -1)
+        self.extra_installer = ExtraInstallerThread(app_id, upgrade)
+        self.extra_installer.progress.connect(self.show_program_progress)
+        self.extra_installer.result.connect(self.extra_installer_done)
         self.extra_installer.start()
+
+    def show_program_progress(self, message: str, percent: int):
+        if self.installing_program is None:
+            return
+        primary, upgrade, progress, status = self.program_controls[self.installing_program]
+        primary.hide()
+        upgrade.hide()
+        progress.setRange(0, 0 if percent < 0 else 100)
+        if percent >= 0:
+            progress.setValue(percent)
+        progress.show()
+        status.setText(message)
+        status.show()
 
     def extra_installer_done(self, ok: bool, message: str, app_id: str):
         name = EXTRA_APPS[app_id]["name"]
-        self.extra_status.setText(
-            f"{name}: instalador aberto." if ok else f"{name}: download não concluído.")
+        primary, _, progress, status = self.program_controls[app_id]
+        self.installing_program = None
+        progress.hide()
+        primary.show()
+        installed = installed_program(app_id)
         if ok:
-            QMessageBox.information(self, "Instalador oficial", message)
-        else:
+            self.upgradeable_programs.discard(app_id)
+            message = "Pronto para abrir." if installed else (
+                "O instalador terminou. O programa ainda não foi localizado; "
+                "revise a instalação do fabricante.")
+        status.setText(message)
+        status.show()
+        self.refresh_program_cards()
+        self.status_message(f"{name}: {message}")
+        try:
+            with (DATA_DIR / "instalacoes.log").open("a", encoding="utf-8") as log:
+                log.write(f"[{datetime.now():%Y-%m-%d %H:%M:%S}] {name}: {message}\n")
+        except OSError:
+            pass
+        if not ok:
             caixa = QMessageBox(self)
-            caixa.setWindowTitle("Falha no download")
-            caixa.setText(f"Não foi possível preparar o {name}.\n\n{message}")
+            caixa.setWindowTitle("Instalação interrompida")
+            caixa.setTextFormat(Qt.TextFormat.PlainText)
+            caixa.setText(f"{name}\n\n{message}")
             caixa.setIcon(QMessageBox.Icon.Warning)
             website = caixa.addButton("Abrir site oficial", QMessageBox.ButtonRole.ActionRole)
             caixa.addButton("Fechar", QMessageBox.ButtonRole.RejectRole)
@@ -1052,6 +1323,8 @@ class MainWindow(QMainWindow):
                 webbrowser.open(official_website(app_id))
 
     def start_clean(self):
+        if self.update_mode == "install":
+            return
         if self.cleaner and self.cleaner.isRunning():
             return
         if not any((self.clean_user.isChecked(), self.clean_windows.isChecked(), self.clean_recycle.isChecked())):
@@ -1107,7 +1380,7 @@ class MainWindow(QMainWindow):
             if manual:
                 self.goto("updates")
             return
-        if not (DATA_DIR / "updater.ps1").is_file():
+        if not (runtime_dir() / "updater.ps1").is_file():
             if manual:
                 QMessageBox.warning(self, "Atualização", "O atualizador ainda não está disponível.")
             return
@@ -1136,10 +1409,11 @@ class MainWindow(QMainWindow):
             raise OSError("O atualizador só funciona no Windows.")
         flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
         self.updater_process = subprocess.Popen(
-            ["powershell.exe", "-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
-             "-File", str(DATA_DIR / "updater.ps1"), *args],
+            [str(powershell_path()), "-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
+             "-File", str(runtime_dir() / "updater.ps1"), *args],
             cwd=str(DATA_DIR), creationflags=flags,
             stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            env=powershell_env(),
         )
 
     def poll_update(self):
@@ -1166,6 +1440,11 @@ class MainWindow(QMainWindow):
                 self.stop_update_timer()
                 release = status.split("|", 1)[1]
                 self.update_note.setText("Disponível: " + release)
+                self.goto("updates")
+                if self.isMinimized():
+                    self.showNormal()
+                self.raise_()
+                self.activateWindow()
                 if confirmar(self, "Atualização disponível",
                          f"Nova versão encontrada: {release}\nVersão instalada: {APP_VERSION}\n\nDeseja baixar e atualizar agora?", True):
                     self.install_update()
@@ -1180,6 +1459,7 @@ class MainWindow(QMainWindow):
         if hasattr(self, "update_timer"):
             self.update_timer.stop()
         self.updater_process = None
+        self.update_mode = ""
         self.top_check.setEnabled(True)
         self.update_progress.setRange(0, 100)
         self.update_progress.setValue(100 if success else 0)
@@ -1191,6 +1471,13 @@ class MainWindow(QMainWindow):
         QMessageBox.warning(self, "Atualização", message)
 
     def install_update(self):
+        if (self.installing_program or (self.cleaner and self.cleaner.isRunning()) or
+                (self.extensions_job and self.extensions_job.isRunning()) or
+                getattr(self, "native_timer", None) is not None):
+            self.update_note.setText("Conclua a tarefa em andamento antes de instalar a atualização.")
+            return
+        if self.updater_process and self.updater_process.poll() is None:
+            return
         if not getattr(sys, "frozen", False):
             QMessageBox.information(self, "Atualização", "A substituição automática exige a edição .exe. No modo código-fonte, use o GitHub Releases.")
             return
@@ -1254,6 +1541,10 @@ class MainWindow(QMainWindow):
         if self.extra_installer and self.extra_installer.isRunning():
             QMessageBox.information(self, "Download em andamento",
                                     "Conclua o download do instalador antes de fechar.")
+            event.ignore()
+            return
+        if self.extensions_job and self.extensions_job.isRunning():
+            self.status_message("Aguarde a configuração das extensões do Brave.")
             event.ignore()
             return
         if self.cleaner and self.cleaner.isRunning():

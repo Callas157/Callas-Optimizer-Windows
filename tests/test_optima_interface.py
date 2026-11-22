@@ -7,7 +7,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
-from extra_installers import CATALOG, WEBSITE_ONLY, _safe_https
+from extra_installers import CATALOG, _safe_https
 
 
 class OptimaInterfaceContract(unittest.TestCase):
@@ -32,12 +32,11 @@ class OptimaInterfaceContract(unittest.TestCase):
         gui = (ROOT / "src/app.py").read_text(encoding="utf-8")
         for card in ('discord_card', 'steam_card', 'epic_card', 'wise_card'):
             self.assertIn('self.' + card, gui)
-        self.assertEqual(set(WEBSITE_ONLY), {"epic", "wise"})
-        for app_id in ("discord", "steam"):
+        for app_id in ("brave", "discord", "steam", "epic", "wise"):
             self.assertTrue(_safe_https(CATALOG[app_id]["url"], CATALOG[app_id]["hosts"]))
             self.assertTrue(CATALOG[app_id]["publisher"])
-        self.assertTrue(WEBSITE_ONLY["epic"]["website"].startswith("https://store.epicgames.com/"))
-        self.assertTrue(WEBSITE_ONLY["wise"]["website"].startswith("https://www.wisecleaner.com/"))
+        self.assertTrue(CATALOG["epic"]["website"].startswith("https://store.epicgames.com/"))
+        self.assertTrue(CATALOG["wise"]["website"].startswith("https://www.wisecleaner.com/"))
 
     def test_phoenix_visual_assets(self):
         for path in ("assets/icons/callas.svg", "assets/optima-preview.svg",
@@ -49,8 +48,8 @@ class OptimaInterfaceContract(unittest.TestCase):
         self.assertEqual(png[:8], bytes.fromhex("89504e470d0a1a0a"))
         self.assertTrue((ROOT / "assets/optima-approved-preview.jpg").is_file())
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
-        self.assertIn("assets/optima-approved-preview.jpg", readme)
-        self.assertLess(readme.index("Fênix Edition"), readme.index("assets/optima-approved-preview.jpg"))
+        self.assertIn("assets/optima-interface.png", readme)
+        self.assertLess(readme.index("Fênix Edition"), readme.index("assets/optima-interface.png"))
         self.assertIn("scripts/make_icon.py", (ROOT/"scripts/build.py").read_text() +
                       (ROOT/"README.md").read_text(encoding="utf-8"))
 

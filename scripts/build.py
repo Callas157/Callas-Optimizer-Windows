@@ -29,10 +29,10 @@ args = [sys.executable, '-m', 'PyInstaller', '--noconfirm', '--clean',
         '--distpath', str(ROOT / 'dist'),
         '--workpath', str(ROOT / 'build'),
         '--specpath', str(ROOT / 'build')]
-for file in ('updater.ps1', 'install_brave.ps1',
-             'install_nvidia.ps1', 'extensions.ps1', 'undo_extensions.ps1'):
+for file in ('updater.ps1', 'extensions.ps1', 'undo_extensions.ps1'):
     args += ['--add-data', f'{source / file}{os.pathsep}runtime']
 args += ['--add-data', f'{ROOT / "assets/icons"}{os.pathsep}assets/icons']
+args += ['--add-data', f'{ROOT / "assets/optima-approved-preview.jpg"}{os.pathsep}assets']
 args += [str(source / 'app.py')]
 subprocess.run(args, cwd=ROOT, check=True)
 exe = ROOT / 'dist/Callas_Optimizer_Windows_x64/Callas_Optimizer_Windows_x64.exe'

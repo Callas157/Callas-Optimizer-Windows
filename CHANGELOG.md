@@ -1,3 +1,10 @@
+## v8.9.17 — Painel Fênix e instalações na interface
+
+- Painel inicial com métricas reais de CPU, RAM e armazenamento, além das seis rotas na mesma janela.
+- Download e instalação de Brave, Discord, Steam, Epic Games Launcher, Wise Program Uninstaller, NVIDIA App, Medal, Logitech G HUB e Spotify com progresso no cartão. A Central permite abrir apps detectados e instalar atualizações que o WinGet identifica.
+- Steam solicita UAC quando o Windows exige. Brave usa o instalador independente e informa quando outro processo de atualização do Brave impede o setup. SteamDB e Bonjourr têm configuração e reversão explícitas.
+- O Setup iniciado pelo atualizador abre o assistente em primeiro plano. Os downloads usam arquivos isolados e verificação antes da execução. A restauração de configurações verifica destinos e tipos permitidos.
+
 ## v8.9.16 — Painel Fênix interativo e responsivo
 
 - **Dashboard real, não apenas imagem:** destaque da Fênix, seis cartões clicáveis (Clean, Boost, Repair, Apps, Drivers e Atualizar), seção de saúde, programas de inicialização, armazenamento, modo jogo e ferramentas rápidas.

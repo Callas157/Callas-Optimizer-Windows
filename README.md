@@ -4,9 +4,9 @@
 
 **Interface redesenhada para Windows 11: desempenho e renovação em uma única janela, com cores azul, roxo e ciano.**
 
-<img src="assets/optima-approved-preview.jpg" alt="Prévia ilustrativa Callas Optima com Fênix e atalhos Clean, Boost, Repair, Apps, Drivers e Atualizar" width="100%" />
+<img src="assets/optima-interface.png" alt="Interface do Callas Optima em execução, com a Fênix, métricas do Windows e atalhos para as seções" width="100%" />
 
-<sub>Prévia do novo layout. O programa utiliza dados reais quando disponíveis e não inventa uma nota de otimização.</sub>
+<sub>Captura da interface em execução no Windows 11. O círculo mostra a porcentagem de RAM em uso.</sub>
 
 [![Release](https://img.shields.io/github/v/release/Callas157/Callas-Optimizer-Windows?logo=github)](https://github.com/Callas157/Callas-Optimizer-Windows/releases/latest)
 [![Windows 11](https://img.shields.io/badge/Windows-11%20x64-1976FF?logo=windows11&logoColor=white)](#compatibilidade)
@@ -15,14 +15,23 @@
 **[Baixar a versão estável mais recente](https://github.com/Callas157/Callas-Optimizer-Windows/releases/latest)**
 </div>
 
+## v8.9.17 — Interface Fênix, instalações e atualização do Callas
+
+- **Painel Fênix:** acompanhe CPU, RAM e espaço livre. Clean, Boost, Repair, Apps, Drivers e Atualizar abrem suas seções na mesma janela, com cartões que se reorganizam conforme a largura disponível.
+- **Programas:** instale Brave, Discord, Steam, Epic Games Launcher, Wise Program Uninstaller, NVIDIA App, Medal, Logitech G HUB e Spotify com progresso no cartão. O botão **Abrir** aparece quando o aplicativo instalado é localizado. **Atualizar** aparece para versões reconhecidas pelo WinGet quando ele está disponível no Windows.
+- **Brave:** usa o instalador independente oficial. SteamDB e Bonjourr ficam em **Extensões do Brave**, com confirmação e opção de desfazer as políticas locais.
+- **Drivers:** abra o NVIDIA App ou consulte drivers opcionais pelo Windows Update. O Callas deixa a escolha da instalação na ferramenta oficial.
+- **Atualização do Callas:** o instalador mostra sua janela após a confirmação do UAC. Uma atualização iniciada pela v8.9.16 ou anterior ainda usa o fluxo da versão que está instalada.
+- **Segurança:** downloads diretos verificam o editor Authenticode e a origem HTTPS. As operações administrativas usam utilitários do sistema e a restauração aceita somente configurações contempladas no Callas. A atualização do Callas confere o SHA-256 divulgado pelo GitHub. O Setup do Callas ainda não tem assinatura própria.
+
 ## v8.9.16 — Dashboard Fênix responsivo e funcional
 
 - **Início interativo:** Clean, Boost, Repair, Apps, Drivers e Atualizar abrem páginas próprias dentro da mesma janela.
 - **Cartões de informações reais:** espaço de disco medido no PC, acesso a diagnósticos oficiais, apps de inicialização e ajustes de jogo. Nenhum percentual fictício de saúde ou otimização.
 - **Layout responsivo:** reorganiza cartões para funcionar também em janelas menores.
-- A imagem acima é a **arte de referência**, e não uma captura de resultados de diagnóstico. A interface em execução usa controles Qt e informações disponíveis no Windows.
+- O visual foi baseado na [arte de referência](assets/optima-approved-preview.jpg). A interface usa controles Qt e informações do Windows.
 
-## v8.9.15 — Fênix escolhida e imagem real da interface
+## v8.9.15 — Fênix escolhida e prévia da interface
 
 - **Ícone da Fênix aprovado:** a imagem selecionada foi adicionada como `assets/icons/phoenix-approved.png` e é usada na janela, no Setup, no menu Iniciar e nos atalhos.
 - **Imagem do README:** a prévia aprovada do Callas Optima aparece em destaque, substituindo o banner antigo.
@@ -173,7 +182,8 @@ A edição instalada usa o Setup com UAC para atualizar Program Files. Quem poss
 - `src/cleaner.py`: rotina de limpeza nativa, sem seguir links.
 - `src/updater.ps1`: atualização por GitHub Releases, SHA-256 e recuperação.
 - As operações de manutenção já não dependem do BAT. WinUtil abre o site oficial sem executar scripts pela internet; a remoção do Edge depende da edição do Windows.
-- `src/install_brave.ps1`, `src/install_nvidia.ps1`, `src/extensions.ps1` e `src/undo_extensions.ps1`: instaladores e configurações.
+- `src/extra_installers.py`: catálogo, download, verificação e execução dos instaladores de terceiros.
+- `src/extensions.ps1` e `src/undo_extensions.ps1`: configuração e reversão das políticas locais de extensões do Brave.
 - `assets/icons/`: Fênix aprovada em PNG e ícones SVG auxiliares; `scripts/make_icon.py` gera ICO multirresolução para a aplicação e os atalhos durante a compilação.
 - `requirements-build.txt`: dependências do ambiente de compilação.
 - `scripts/build.py`: PyInstaller no **Windows x64**; o executável fica em `dist/`.
@@ -194,7 +204,7 @@ Para gerar o executável, `py -3.12 scripts\build.py` em uma máquina Windows x6
 
 - Qt for Python / PySide6-Essentials: distribuição segundo os termos LGPLv3/GPL/comercial aplicáveis. O projeto disponibiliza o código, instruções de build e bibliotecas Qt dinâmicas empacotadas pelo PyInstaller. Respeite as condições da licença ao redistribuir.
 - Os ícones de marca **Brave** e **NVIDIA** usam os caminhos vetoriais do projeto [Simple Icons](https://github.com/simple-icons/simple-icons) (CC0 para os desenhos). As marcas permanecem pertencentes aos respectivos titulares e não indicam afiliação ou endosso.
-- Downloads diretos de instaladores, incluindo Discord e Steam, usam origem HTTPS autorizada e assinatura Authenticode do editor. Epic Games e Wise Program Uninstaller usam seus sites oficiais. Nenhum instalador de terceiros é redistribuído.
+- Downloads diretos de instaladores usam as origens HTTPS autorizadas do catálogo e a assinatura Authenticode dos editores. Os instaladores são obtidos dos fornecedores durante a instalação.
 
 ## Avisos e testes
 

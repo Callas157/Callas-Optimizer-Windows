@@ -89,7 +89,7 @@ class UpdateContract(unittest.TestCase):
     def test_source_assets_present(self):
         for p in ('assets/icons/brave.svg', 'assets/icons/nvidia.svg', 'assets/icons/callas.svg',
                   'src/windows_actions.py', 'src/updater.ps1',
-                  'src/install_brave.ps1', 'src/install_nvidia.ps1'):
+                  'src/extra_installers.py', 'src/extensions.ps1', 'src/undo_extensions.ps1'):
             self.assertTrue((ROOT / p).is_file(), p)
 
 if __name__ == '__main__':

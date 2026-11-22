@@ -1,10 +1,24 @@
 """Testes das funções Python Windows (não realizam mutações no runner)."""
 import ast
 from pathlib import Path
+import sys
 import unittest
+from unittest.mock import patch
 
 ROOT=Path(__file__).resolve().parents[1]
 class NativeActionContracts(unittest.TestCase):
+    @unittest.skipUnless(sys.platform == "win32", "Windows registry module required")
+    def test_restore_ignores_registry_entries_outside_product_settings(self):
+        sys.path.insert(0, str(ROOT / "src"))
+        import windows_actions
+        entry = {"hive": "LM", "path": r"SOFTWARE\Other", "name": "Setting",
+                 "found": True, "value": 1, "type": windows_actions.winreg.REG_DWORD}
+        backup = {"reg": {r"LM|SOFTWARE\Other|Setting": entry}}
+        with patch.object(windows_actions, "load", return_value=backup):
+            with patch.object(windows_actions.winreg, "CreateKeyEx") as write:
+                windows_actions.restore_reg()
+        write.assert_not_called()
+
     def test_catalogue(self):
         s=(ROOT/'src/windows_actions.py').read_text(encoding='utf-8')
         ast.parse(s)

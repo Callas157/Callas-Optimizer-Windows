@@ -44,4 +44,37 @@ Name: "{autodesktop}\Callas Optimizer"; Filename: "{app}\{#MyAppExe}"; WorkingDi
 [Registry]
 Root: HKLM; Subkey: "Software\CallasTeck\CallasOptimizer"; ValueType: string; ValueName: "InstallDir"; ValueData: "{app}"; Flags: uninsdeletekey
 [Run]
-Filename: "{app}\{#MyAppExe}"; Description: "Iniciar Callas Optimizer"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\{#MyAppExe}"; Description: "Iniciar Callas Optimizer"; Flags: nowait postinstall skipifsilent; Check: not IsCallasUpdate
+
+[Code]
+var
+  RaisedUpdateWizard: Boolean;
+
+function SetWindowPos(Window, InsertAfter: HWND; X, Y, Width, Height: Integer; Flags: Cardinal): Boolean;
+  external 'SetWindowPos@user32.dll stdcall';
+function SetForegroundWindow(Window: HWND): Boolean;
+  external 'SetForegroundWindow@user32.dll stdcall';
+
+function IsCallasUpdate: Boolean;
+var
+  I: Integer;
+begin
+  Result := False;
+  for I := 1 to ParamCount do
+    if CompareText(ParamStr(I), '/CALLASUPDATE') = 0 then
+      Result := True;
+end;
+
+procedure CurPageChanged(CurPageID: Integer);
+begin
+  if not IsCallasUpdate then
+    Exit;
+  if not RaisedUpdateWizard then
+  begin
+    RaisedUpdateWizard := True;
+    SetWindowPos(WizardForm.Handle, HWND(-1), 0, 0, 0, 0, $0003);
+    SetForegroundWindow(WizardForm.Handle);
+  end
+  else
+    SetWindowPos(WizardForm.Handle, HWND(-2), 0, 0, 0, 0, $0013);
+end;
