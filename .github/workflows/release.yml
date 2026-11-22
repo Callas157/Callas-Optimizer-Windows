@@ -59,6 +59,13 @@ jobs:
           & $iscc "installer\CallasOptimizer.iss"
           if ($LASTEXITCODE -ne 0) { throw 'Erro ao compilar instalador' }
           if (-not (Test-Path "dist/Callas_Optimizer_Setup_x64.exe")) { throw "Setup nao gerado" }
+          $metadata = (Get-Item 'dist/Callas_Optimizer_Setup_x64.exe').VersionInfo
+          if ($metadata.FileDescription -ne 'Callas Optimizer') {
+            throw "Identidade UAC incorreta: $($metadata.FileDescription)"
+          }
+          if ($metadata.ProductName -ne 'Callas Optimizer') {
+            throw "Nome de produto incorreto: $($metadata.ProductName)"
+          }
       - name: Testar instalacao e icones dos atalhos no Windows
         shell: pwsh
         run: |

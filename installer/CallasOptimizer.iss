@@ -8,6 +8,8 @@
 [Setup]
 AppId={{33D8076A-342F-4AF7-8D18-1885BF08FC04}
 AppName={#MyAppName}
+VersionInfoDescription=Callas Optimizer
+VersionInfoProductName=Callas Optimizer
 AppVersion={#MyAppVersion}
 AppPublisher=CallasTeck
 AppPublisherURL=https://github.com/Callas157/Callas-Optimizer-Windows

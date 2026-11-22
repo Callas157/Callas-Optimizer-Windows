@@ -1,5 +1,15 @@
 # Histórico de versões — Callas Optimizer Windows
 
+## v8.9.9 — Nome do atualizador no UAC e navegação
+- Programas reposicionado imediatamente abaixo de Início, antes de Manutenção.
+- Nome do Setup temporário alterado de GUID para `Callas Optimizer.exe` durante o update.
+- Metadados de descrição e produto do Setup identificam Callas Optimizer.
+- Testes automatizados para navegação e nome do executável que solicita elevação.
+- Sem mudanças nas funções de manutenção ou instalações existentes.
+- Sem certificado digital, Windows ainda pode exibir Fornecedor desconhecido.
+
+
+
 ## v8.9.8 — Correções dos instaladores extras
 - Verificação digital sobre o executável temporário (.exe), não um arquivo de extensão desconhecida.
 - Thread de download reaproveitável para instalar Medal, Logitech G HUB e Spotify na mesma sessão.

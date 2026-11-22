@@ -111,7 +111,15 @@ try {
     $targetDir=Split-Path -Parent $fullTarget
     $stageDir=Join-Path $HomeFolder 'updates'
     New-Item -ItemType Directory -Path $stageDir -Force | Out-Null
-    $staged=Join-Path $stageDir ([guid]::NewGuid().ToString('N')+'.exe')
+    # A elevacao UAC deve referenciar o nome legivel do produto, nunca um GUID.
+    # Nome de pasta por versao evita mistura entre arquivos de Releases distintas.
+    $sessionDir = Join-Path $stageDir $latest.Tag
+    New-Item -ItemType Directory -Path $sessionDir -Force | Out-Null
+    $staged = if ($Installed) {
+        Join-Path $sessionDir 'Callas Optimizer.exe'
+    } else {
+        Join-Path $sessionDir ('CallasOptimizer-'+$latest.Tag+'.exe')
+    }
     if ($Installed) {
         try {
             if (-not (Test-Path -LiteralPath (Join-Path $targetDir 'installed.marker') -PathType Leaf)) {

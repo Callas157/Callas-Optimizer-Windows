@@ -18,6 +18,10 @@ class InstallerTests(unittest.TestCase):
     def test_setup(self):
         for t in ('DefaultDirName={autopf}\\Callas Optimizer','UninstallDisplayIcon=','[Icons]','[Registry]','GetEnv("CALLAS_VERSION")'):
             self.assertIn(t,I)
+    def test_setup_uac_display_identity(self):
+        self.assertIn("VersionInfoDescription=Callas Optimizer", I)
+        self.assertIn("VersionInfoProductName=Callas Optimizer", I)
+        self.assertIn("'Callas Optimizer.exe'", U)
     def test_shortcut_icon_paths(self):
         for value in (
             'Source: "..\\assets\\icons\\callas.ico"',

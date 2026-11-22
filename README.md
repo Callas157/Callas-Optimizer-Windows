@@ -12,6 +12,14 @@
 **[Baixar a versão estável mais recente](https://github.com/Callas157/Callas-Optimizer-Windows/releases/latest)**
 </div>
 
+## v8.9.9 — Menu e identificação na atualização
+
+- **Programas** movido para logo abaixo de **Início**, acima de todas as ferramentas de manutenção.
+- O atualizador deixa de iniciar arquivos com nome aleatório no UAC: o Setup validado é salvo como `Callas Optimizer.exe` antes de solicitar a permissão de administrador.
+- Adicionados `VersionInfoDescription` e `VersionInfoProductName` ao instalador, ambos com o nome **Callas Optimizer**.
+- O GitHub Actions verifica a descrição e o nome de produto do Setup antes de publicar.
+- **Atenção:** a mensagem **Fornecedor desconhecido** ainda pode aparecer sem certificado de assinatura de código confiável. Esta atualização corrige a identificação, não a assinatura.
+
 ## v8.9.8 — Confiabilidade dos downloads
 - Ajustada a verificação da assinatura Authenticode do arquivo temporário com extensão executável.
 - Corrigido o ciclo de vida do trabalhador de download para possibilitar instalar vários programas em sequência, sem referência Qt inválida.

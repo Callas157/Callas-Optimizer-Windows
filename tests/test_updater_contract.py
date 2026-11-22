@@ -20,6 +20,18 @@ class UpdateContract(unittest.TestCase):
         ver = (ROOT / 'VERSION').read_text().strip()
         self.assertIn(f'APP_VERSION = "{ver}"', APP)
         self.assertEqual(len(re.findall(r'^APP_VERSION\s*=', APP, re.MULTILINE)), 1)
+    def test_programs_right_after_home(self):
+        section = APP.split("NAV_SECTIONS = [", 1)[1].split("LEGACY = {", 1)[0]
+        self.assertLess(section.index('("home", "Início"'), section.index('("programs", "Programas"'))
+        self.assertLess(section.index('("programs", "Programas"'), section.index('("gamer", "1  Modo Gamer"'))
+        self.assertNotIn('("APLICATIVOS",', section)
+
+    def test_update_stage_filename_readable(self):
+        self.assertIn("Join-Path $sessionDir 'Callas Optimizer.exe'", UPDATER)
+        self.assertIn('Join-Path $stageDir $latest.Tag', UPDATER)
+        self.assertIn('Start-Process -FilePath $staged', UPDATER)
+        self.assertNotIn("Join-Path $stageDir ([guid]::NewGuid().ToString('N')+'.exe')", UPDATER)
+
     def test_release_sha256(self):
         self.assertIn('Get-FileHash', UPDATER)
         self.assertIn('Confirm-WindowsExe $staged', UPDATER)
