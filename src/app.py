@@ -1052,7 +1052,7 @@ class MainWindow(QMainWindow):
         self.vm_template_status.setTextFormat(Qt.TextFormat.PlainText)
         self.vm_template_status.hide()
         lab.addWidget(self.vm_template_status)
-        col.addWidget(lab)
+        col.addWidget(lab_card)
         self.program_updates_status = label("")
         self.program_updates_status.hide()
         col.addWidget(self.program_updates_status)
