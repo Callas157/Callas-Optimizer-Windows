@@ -20,6 +20,8 @@
 - Na Central de Aplicativos, o botão **Preparar 2 VMs para testes** é opcional e só funciona depois de instalar o VirtualBox.
 - Após escolher a pasta de destino e confirmar, cria duas VMs **Callas - Windows 11 Pro** e **Callas - Windows 11 IoT Enterprise LTSC**, cada uma com 6 GB RAM, 2 CPUs, 80 GB VDI dinâmico, UEFI, Secure Boot, TPM 2.0 e NAT.
 - Sem baixar ISOs, licenças ou instalar Windows automaticamente. As ISOs precisam ser fornecidas manualmente para o DVD virtual vazio.
+- Para iniciar a instalação: no VirtualBox, abra **Configurações > Armazenamento** da VM, selecione a unidade óptica vazia e anexe a ISO oficial correspondente; então inicie a máquina. A ativação do Windows depende de licença válida.
+- As VMs usam NAT por padrão. Recomenda-se deixar apenas uma ligada durante cada teste para reduzir o consumo de RAM.
 - Não altera ou apaga VMs já cadastradas. Se a criação de uma nova VM falhar, reverte somente a VM recém-criada incompleta.
 - Comandos VBoxManage executados em Python, em thread de trabalho, sem janela de PowerShell. Checagem de espaço mínimo de 40 GB no destino e presença do VirtualBox antes de iniciar.
 - **Os discos são dinâmicos**: cada VM pode crescer até 80 GB. Verifique a capacidade do disco físico antes de instalar o Windows. O Callas não inicia nenhuma VM sem sua ação.
