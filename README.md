@@ -31,7 +31,7 @@ Para corrigir um atalho branco da versão 8.9.3, instale a 8.9.4 por cima: não 
 
 **Recomendado:** baixe `Callas_Optimizer_Setup_x64.exe` na Release. O Setup instala em Program Files, cria atalho no Iniciar, oferece atalho de Área de Trabalho, integra com Aplicativos Instalados e inclui desinstalador. Não existe download de versão portátil.
 
-O atualizador do aplicativo instalado usa o Setup oficial validado e solicita UAC quando necessário. A interface, navegação e limpeza já são Python/PySide6, mas 11 opções avançadas ainda executam o motor BAT legado 8.8.
+O atualizador do aplicativo instalado usa o Setup oficial validado e solicita UAC quando necessário. A interface, navegação e limpeza já são Python/PySide6, mas 11 opções avançadas agora executam ações em Python.
 
 O executável e o Setup não têm assinatura Authenticode; o SmartScreen pode alertar. Não desative o Windows Defender.
 
@@ -75,9 +75,10 @@ A edição instalada usa o Setup com UAC para atualizar Program Files. Quem poss
 ## Desenvolvimento
 
 - `src/app.py`: interface Qt, navegação, atualização, programas, páginas e logs.
+- `src/windows_actions.py`: ações Python, execução autorizada, backup de Registro/serviços e logs.
 - `src/cleaner.py`: rotina de limpeza nativa, sem seguir links.
 - `src/updater.ps1`: atualização por GitHub Releases, SHA-256 e recuperação.
-- `src/Callas_Optimizer_V8_8_GUI_Engine.bat`: compatibilidade com as funções avançadas anteriores.
+- As operações de manutenção já não dependem do BAT. WinUtil abre o site oficial sem executar scripts pela internet; a remoção do Edge depende da edição do Windows.
 - `src/install_brave.ps1`, `src/install_nvidia.ps1`, `src/extensions.ps1` e `src/undo_extensions.ps1`: instaladores e configurações.
 - `assets/icons/`: ícones SVG do Callas, Brave e NVIDIA; `callas.ico.b64` é convertido no build para o ícone da janela do Windows.
 - `requirements-build.txt`: dependências do ambiente de compilação.

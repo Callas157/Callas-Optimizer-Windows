@@ -27,11 +27,11 @@ from PySide6.QtWidgets import (
 )
 
 from cleaner import clean_folders, empty_recycle_bin, format_size, known_temp_folders
+from windows_actions import ACTIONS, BY_ROUTE, HOME as ACTION_HOME, worker as run_windows_action
 
 APP_VERSION = "8.9.5"
 REPO = "Callas157/Callas-Optimizer-Windows"
 PROJECT_URL = f"https://github.com/{REPO}"
-LEGACY_SCRIPT = "Callas_Optimizer_V8_8_GUI_Engine.bat"
 DATA_DIR = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "CallasTeck"
 
 # Um id selecionado corresponde a UMA pagina, com conteudo proprio.
@@ -160,7 +160,7 @@ def svg_icon(name: str, pixels: int = 64) -> QIcon:
 def runtime_files() -> None:
     """Instala recursos versionados numa pasta do usuario sem executar da temp do PyInstaller."""
     DATA_DIR.mkdir(parents=True, exist_ok=True)
-    for name in (LEGACY_SCRIPT, "updater.ps1", "install_brave.ps1", "install_nvidia.ps1",
+    for name in ("updater.ps1", "install_brave.ps1", "install_nvidia.ps1",
                  "extensions.ps1", "undo_extensions.ps1"):
         source = runtime_dir() / name
         target = DATA_DIR / name
@@ -182,18 +182,6 @@ def in_windows11() -> bool:
         return v.major == 10 and v.build >= 22000
     except AttributeError:
         return False
-
-
-def start_admin_bat(option: int) -> None:
-    if os.name != "nt":
-        raise OSError("O motor de manutenção exige Windows.")
-    script = str(DATA_DIR / LEGACY_SCRIPT)
-    if not Path(script).is_file():
-        raise FileNotFoundError(script)
-    command = f'/k ""{script}" :gui{option}"'
-    rc = ctypes.windll.shell32.ShellExecuteW(None, "runas", "cmd.exe", command, str(DATA_DIR), 1)
-    if int(rc) <= 32:
-        raise OSError(f"Windows não abriu a ferramenta (código {rc}).")
 
 
 def start_script(name: str) -> None:
@@ -487,24 +475,27 @@ class MainWindow(QMainWindow):
         col.addLayout(row)
         safety, s = card_layout()
         s.addWidget(label("Transparência das operações", "CardTitle"))
-        s.addWidget(label("A Limpeza Total funciona nesta interface. Algumas opções avançadas ainda utilizam o motor BAT com console e UAC, identificado em cada tela."))
+        s.addWidget(label("A Limpeza Total funciona nesta interface. As funções de manutenção rodam pelo executor Python e utilitários oficiais do Windows; as alterações administrativas solicitam UAC."))
         col.addWidget(safety)
         col.addStretch()
 
     def _legacy_page(self, route, option, title, description, warning):
         col = self._page(route, title, description)
-        c, inner = card_layout()
-        inner.addWidget(label("O QUE ESTA FERRAMENTA FAZ", "Section"))
-        inner.addWidget(label(description, "CardTitle"))
-        inner.addWidget(label(warning))
-        inner.addWidget(label("Motor de manutenção 8.8 (compatibilidade): abre uma janela de console para opções e confirmações interativas."))
-        inner.addWidget(action_button("ABRIR FERRAMENTA", lambda _=False, n=option: self.legacy_action(n), True))
-        col.addWidget(c)
-        follow, text = card_layout()
-        text.addWidget(label("Precisa reverter uma alteração?", "CardTitle"))
-        text.addWidget(label("Use o item Restaurar padrões ou consulte os logs antes de repetir a operação."))
-        text.addWidget(action_button("CONSULTAR REGISTROS", lambda: self.goto("logs")))
-        col.addWidget(follow)
+        header, panel = card_layout()
+        panel.addWidget(label("AÇÕES EM PYTHON", "Section"))
+        panel.addWidget(label("Cada função roda no Windows com confirmação e registro de resultado."))
+        col.addWidget(header)
+        for action in BY_ROUTE.get(route, []):
+            card, contents = card_layout()
+            contents.addWidget(label(action["name"], "CardTitle"))
+            contents.addWidget(label(action["description"]))
+            if action["warning"]:
+                contents.addWidget(label("Atenção: " + action["warning"]))
+            text = "EXECUTAR (ADMINISTRADOR)" if action["admin"] else "EXECUTAR"
+            contents.addWidget(action_button(text,
+                lambda _=False, code=action["id"]: self.native_action(code), True))
+            col.addWidget(card)
+        col.addWidget(action_button("VER REGISTROS", lambda: self.goto("logs")))
         col.addStretch()
 
     def _clean_page(self):
@@ -647,17 +638,68 @@ class MainWindow(QMainWindow):
     def status_message(self, message: str):
         self.status_label.setText(message)
 
-    def legacy_action(self, option: int):
-        safety = "Esta opção pode alterar serviços e configurações do Windows."
-        if option == 2:
-            safety = "A remoção do Edge pode afetar aplicativos e componentes do Windows."
-        if not confirmar(self, "Confirmar operação", safety + "\n\nAbrir a ferramenta de manutenção?"):
+    def native_action(self, code: str):
+        task = ACTIONS.get(code)
+        if task is None or getattr(self, "native_timer", None) is not None:
             return
+        message = task["name"] + "\n\n" + task["description"]
+        if task["warning"]:
+            message += "\n\nATENÇÃO: " + task["warning"]
+        if task["admin"]:
+            message += "\n\nO Windows solicitará permissão de administrador."
+        if not confirmar(self, "Confirmação da operação", message):
+            return
+        if os.name != "nt":
+            QMessageBox.warning(self, "Indisponível", "Esta opção exige Windows.")
+            return
+        ACTION_HOME.mkdir(parents=True, exist_ok=True)
+        self.native_report = ACTION_HOME / ("acao-" + uuid.uuid4().hex + ".json")
+        self.native_report.unlink(missing_ok=True)
+        self.native_task_name = task["name"]
+        self.native_ticks = 0
+        args = f'--callas-task {code} --callas-report {self.native_report.name}'
         try:
-            start_admin_bat(option)
-            self.status_message(f"Ferramenta {option} aberta no console (motor legado 8.8).")
-        except Exception as e:
-            QMessageBox.critical(self, "Falha ao iniciar", str(e))
+            if task["admin"]:
+                rc = ctypes.windll.shell32.ShellExecuteW(
+                    None, "runas", sys.executable, args, None, 1)
+                if int(rc) <= 32:
+                    raise RuntimeError("Permissão UAC não concedida.")
+            else:
+                subprocess.Popen(
+                    [sys.executable, "--callas-task", code, "--callas-report", self.native_report.name],
+                    cwd=str(ACTION_HOME),
+                    creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        except Exception as exc:
+            QMessageBox.critical(self, "Falha", str(exc))
+            return
+        self.status_message("Executando: " + self.native_task_name)
+        self.native_timer = QTimer(self)
+        self.native_timer.timeout.connect(self.poll_native_action)
+        self.native_timer.start(800)
+
+    def poll_native_action(self):
+        self.native_ticks += 1
+        if self.native_report.is_file():
+            try:
+                import json
+                outcome = json.loads(self.native_report.read_text(encoding="utf-8"))
+                self.native_report.unlink(missing_ok=True)
+            except (OSError, ValueError):
+                return
+            self.native_timer.stop()
+            self.native_timer.deleteLater()
+            self.native_timer = None
+            self.status_message(("Concluído: " if outcome["ok"] else "Falhou: ") + self.native_task_name)
+            if outcome["ok"]:
+                QMessageBox.information(self, "Operação concluída", outcome["message"] or "Concluído.")
+            else:
+                QMessageBox.warning(self, "Operação não concluída", outcome["message"])
+            return
+        if self.native_ticks > 2250:
+            self.native_timer.stop()
+            self.native_timer.deleteLater()
+            self.native_timer = None
+            QMessageBox.warning(self, "Tempo limite", "A tarefa excedeu o tempo previsto. Consulte os registros.")
 
     def ps_action(self, script: str, name: str):
         if not confirmar(self, "Confirmar operação", f"Abrir a ferramenta {name}?", True):
@@ -833,7 +875,7 @@ class MainWindow(QMainWindow):
 
     def load_logs(self):
         result = []
-        for name in ("limpeza.log", "instalacoes.log", "atualizacoes.log", "callas_teck.log"):
+        for name in ("limpeza.log", "instalacoes.log", "atualizacoes.log", "callas_teck.log", "acoes.log"):
             path = DATA_DIR / name
             if not path.is_file():
                 continue
@@ -874,6 +916,13 @@ class MainWindow(QMainWindow):
 
 
 def main():
+    if "--callas-task" in sys.argv:
+        try:
+            index = sys.argv.index("--callas-task")
+            report_index = sys.argv.index("--callas-report")
+            return run_windows_action(sys.argv[index+1], sys.argv[report_index+1])
+        except (ValueError, IndexError):
+            return 2
     if "--self-test" in sys.argv:
         os.environ["QT_QPA_PLATFORM"] = "offscreen"
         # Exercita runtime Python/Qt empacotado, imports e assets apos instalacao.

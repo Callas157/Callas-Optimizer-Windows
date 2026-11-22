@@ -6,6 +6,7 @@
 - Teste automatizado executa **o aplicativo instalado** no Windows antes de publicar a Release.
 - Perguntas de atualização e manutenção usam botões explícitos **Sim / Não** em PT-BR.
 - Barra lateral ampliada e com ícones SVG uniformes, em vez de caracteres pequenos.
+- Executor de manutenção reescrito em Python com ações por função, UAC, backups e registros; BAT não é mais chamado.
 - Mantida somente a versão Setup para download.
 - O alerta de SmartScreen ainda pode aparecer sem assinatura digital.
 

@@ -37,7 +37,7 @@ class UpdateContract(unittest.TestCase):
         self.assertIn('("updates", "11  Atualizações"', APP)
     def test_source_assets_present(self):
         for p in ('assets/icons/brave.svg', 'assets/icons/nvidia.svg', 'assets/icons/callas.svg',
-                  'src/Callas_Optimizer_V8_8_GUI_Engine.bat', 'src/updater.ps1',
+                  'src/windows_actions.py', 'src/updater.ps1',
                   'src/install_brave.ps1', 'src/install_nvidia.ps1'):
             self.assertTrue((ROOT / p).is_file(), p)
 

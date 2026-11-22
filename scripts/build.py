@@ -29,7 +29,7 @@ args = [sys.executable, '-m', 'PyInstaller', '--noconfirm', '--clean',
         '--distpath', str(ROOT / 'dist'),
         '--workpath', str(ROOT / 'build'),
         '--specpath', str(ROOT / 'build')]
-for file in ('Callas_Optimizer_V8_8_GUI_Engine.bat', 'updater.ps1', 'install_brave.ps1',
+for file in ('updater.ps1', 'install_brave.ps1',
              'install_nvidia.ps1', 'extensions.ps1', 'undo_extensions.ps1'):
     args += ['--add-data', f'{source / file}{os.pathsep}runtime']
 args += ['--add-data', f'{ROOT / "assets/icons"}{os.pathsep}assets/icons']
