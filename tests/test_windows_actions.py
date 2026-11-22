@@ -7,6 +7,29 @@ from unittest.mock import patch
 
 ROOT=Path(__file__).resolve().parents[1]
 class NativeActionContracts(unittest.TestCase):
+    @unittest.skipUnless(sys.platform == "win32", "Windows launcher required")
+    def test_winutil_action_opens_the_tool_instead_of_the_browser(self):
+        sys.path.insert(0, str(ROOT / "src"))
+        import windows_actions as actions
+        self.assertTrue(actions.ACTIONS["winutil_open"]["admin"])
+        with patch.object(actions, "admin", return_value=True), patch.object(actions, "open_winutil") as launch:
+            with patch.object(actions, "LOG") as log, patch.object(actions, "HOME"):
+                launch.return_value = "WinUtil aberto."
+                actions.execute("winutil_open")
+                log.open.assert_called_once()
+        launch.assert_called_once_with()
+
+    @unittest.skipUnless(sys.platform == "win32", "Windows launcher required")
+    def test_winutil_rejects_a_changed_release_before_starting_powershell(self):
+        sys.path.insert(0, str(ROOT / "src"))
+        import windows_actions as actions
+        with patch.object(actions, "official_https_opener") as opener, patch.object(actions.subprocess, "Popen") as launch:
+            response = opener.return_value.open.return_value.__enter__.return_value
+            response.read.return_value = b"an unexpected payload"
+            with self.assertRaisesRegex(RuntimeError, "SHA-256"):
+                actions.open_winutil()
+        launch.assert_not_called()
+
     @unittest.skipUnless(sys.platform == "win32", "Windows registry module required")
     def test_restore_ignores_registry_entries_outside_product_settings(self):
         sys.path.insert(0, str(ROOT / "src"))

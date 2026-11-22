@@ -6,20 +6,29 @@ netsh, PowerShell, Registro) são executados sem shell=True.
 from __future__ import annotations
 import base64
 import ctypes
+import hashlib
 import json
 import os
 from pathlib import Path
 import re
 import subprocess
 import time
+import urllib.request
 import webbrowser
 import winreg
 
-from extra_installers import _system_program, powershell_env, powershell_path, verify_authenticode, winget_path
+from extra_installers import (
+    _system_program, official_https_opener, powershell_env, powershell_path,
+    verify_authenticode, winget_path,
+)
 
 HOME = Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "CallasTeck"
 BACKUP = HOME / "actions_backup.json"
 LOG = HOME / "acoes.log"
+WINUTIL_VERSION = "26.11.13"
+WINUTIL_URL = f"https://github.com/ChrisTitusTech/winutil/releases/download/{WINUTIL_VERSION}/winutil.ps1"
+WINUTIL_SHA256 = "e9d05a59d564b4fbb61fcfa1a594504a0f81e8d27c787119e72a99b57ddbe66d"
+WINUTIL_MAX_BYTES = 4 * 1024 * 1024
 GAME_BAR = r"Software\Microsoft\GameBar"
 WINDOWS_UPDATE = r"SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU"
 DATA_COLLECTION = r"SOFTWARE\Policies\Microsoft\Windows\DataCollection"
@@ -65,7 +74,8 @@ ROWS = [
  ("shutdown_30","shutdown","Desligar em 30 minutos","Agenda desligamento.",False,"Salve seus arquivos."),
  ("shutdown_60","shutdown","Desligar em 60 minutos","Agenda desligamento.",False,"Salve seus arquivos."),
  ("shutdown_cancel","shutdown","Cancelar desligamento","Cancela um desligamento pendente.",False,""),
- ("winutil_open","winutil","Abrir WinUtil oficial","Abre página do projeto; não executa código remoto.",False,""),
+ ("winutil_open","winutil","Abrir WinUtil oficial","Baixa a versão verificada e abre a interface do WinUtil.",True,
+  "As opções que você escolher no WinUtil podem alterar o sistema."),
  ("restore_point","restore_point","Criar ponto de restauração","Usa ferramenta oficial Windows.",True,""),
  ("restore_reg","restore","Restaurar ajustes do Registro","Usa apenas backups feitos pela central.",True,""),
  ("restore_services","restore","Restaurar serviços","Recupera modos de inicialização guardados.",True,""),
@@ -221,6 +231,39 @@ def edge(uninstall):
     return "Sem WinGet. Página oficial do Edge aberta para instalação."
 
 
+def open_winutil() -> str:
+    request = urllib.request.Request(WINUTIL_URL, headers={"User-Agent": "CallasOptima"})
+    opener = official_https_opener({"github.com", "release-assets.githubusercontent.com",
+                                     "objects.githubusercontent.com"})
+    with opener.open(request, timeout=30) as response:
+        data = response.read(WINUTIL_MAX_BYTES + 1)
+    if len(data) > WINUTIL_MAX_BYTES or hashlib.sha256(data).hexdigest() != WINUTIL_SHA256:
+        raise RuntimeError("O arquivo do WinUtil não corresponde ao SHA-256 da versão verificada.")
+
+    # A ferramenta oficial é PowerShell. Envia os bytes verificados diretamente
+    # ao processo em vez de executar um arquivo que possa ser trocado no disco.
+    command = (
+        "$reader=[IO.StreamReader]::new([Console]::OpenStandardInput(), [Text.Encoding]::UTF8); "
+        "$source=$reader.ReadToEnd(); $reader.Dispose(); & ([ScriptBlock]::Create($source))"
+    )
+    shell = powershell_path()
+    process = subprocess.Popen(
+        [str(shell), "-NoLogo", "-NoProfile", "-STA", "-Command", command],
+        cwd=shell.parent, env=powershell_env(), stdin=subprocess.PIPE,
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+    )
+    try:
+        with process.stdin as source:
+            source.write(data)
+        process.wait(timeout=2)
+    except subprocess.TimeoutExpired:
+        return f"WinUtil {WINUTIL_VERSION} iniciado."
+    except BrokenPipeError as exc:
+        raise RuntimeError("O PowerShell encerrou antes de iniciar o WinUtil.") from exc
+    raise RuntimeError(f"O WinUtil encerrou durante a inicialização (código {process.returncode}).")
+
+
 def shutdown(minutes):
     if minutes is None:return cmd("shutdown.exe","/a")
     cmd("shutdown.exe","/a",optional=True)
@@ -259,7 +302,7 @@ def execute(action_id):
         "classic_off":lambda:restore_reg("CU|"+cl),
         "shutdown_15":lambda:shutdown(15),"shutdown_30":lambda:shutdown(30),
         "shutdown_60":lambda:shutdown(60),"shutdown_cancel":lambda:shutdown(None),
-        "winutil_open":lambda:("Página oficial WinUtil aberta." if webbrowser.open("https://github.com/ChrisTitusTech/winutil") else "Abra https://github.com/ChrisTitusTech/winutil"),
+        "winutil_open":open_winutil,
         "restore_point":lambda:ps("Checkpoint-Computer -Description 'Callas Optimizer' -RestorePointType MODIFY_SETTINGS -ErrorAction Stop"),
         "restore_reg":lambda:restore_reg(),
         "restore_services":lambda:services(tuple(load()["svc"]),False),

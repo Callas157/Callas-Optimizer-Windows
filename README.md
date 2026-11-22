@@ -15,6 +15,11 @@
 **[Baixar a versão estável mais recente](https://github.com/Callas157/Callas-Optimizer-Windows/releases/latest)**
 </div>
 
+## v8.9.21 — Ícones de aplicativos e WinUtil
+
+- Steam, Discord, Epic Games, Medal, Logitech G HUB e Wise exibem o ícone do executável instalado. O pacote também traz cópias desses ícones para os cartões de aplicativos ainda não instalados. As marcas pertencem aos respectivos fabricantes.
+- A seção WinUtil abre a interface oficial da versão estável 26.11.13, com confirmação administrativa e verificação do SHA-256 do script.
+
 ## v8.9.19 — Fechamento automático durante a atualização
 
 O Setup solicita o fechamento das janelas da instalação de destino antes de substituir os arquivos. A atualização já confirmada continua na janela de progresso. Se uma tarefa impedir o fechamento, o Setup informa que o Callas está em uso.

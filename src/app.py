@@ -14,11 +14,11 @@ import threading
 import uuid
 import webbrowser
 
-from PySide6.QtCore import QByteArray, QRectF, QSettings, QSize, Qt, QThread, QTimer, Signal
+from PySide6.QtCore import QByteArray, QFileInfo, QRectF, QSettings, QSize, Qt, QThread, QTimer, Signal
 from PySide6.QtGui import QBrush, QColor, QConicalGradient, QIcon, QLinearGradient, QPainter, QPainterPath, QPen, QPixmap
 from PySide6.QtSvg import QSvgRenderer
 from PySide6.QtWidgets import (
-    QApplication, QButtonGroup, QCheckBox, QFrame, QGridLayout, QHBoxLayout,
+    QApplication, QButtonGroup, QCheckBox, QFileIconProvider, QFrame, QGridLayout, QHBoxLayout,
     QLabel, QMainWindow, QMessageBox, QPlainTextEdit, QProgressBar, QPushButton,
     QScrollArea, QSplitter, QStackedWidget, QVBoxLayout, QWidget,
 )
@@ -30,10 +30,11 @@ from extra_installers import (
     official_website, open_program, powershell_env, powershell_path, program_key, upgrade_program,
 )
 
-APP_VERSION = "8.9.20"
+APP_VERSION = "8.9.21"
 REPO = "Callas157/Callas-Optimizer-Windows"
 PROJECT_URL = f"https://github.com/{REPO}"
 DATA_DIR = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "CallasTeck"
+NATIVE_PROGRAM_ICONS = {"steam", "discord", "epic", "medal", "lghub", "wise"}
 
 # Um id selecionado corresponde a UMA pagina, com conteudo proprio.
 NAV_SECTIONS = [
@@ -450,6 +451,9 @@ class MainWindow(QMainWindow):
         self.extensions_job: BraveExtensionsThread | None = None
         self.installing_program: str | None = None
         self.program_controls = {}
+        self.program_icons: dict[str, QLabel] = {}
+        self.program_icon_sources: dict[str, Path | None] = {}
+        self.program_icon_provider = QFileIconProvider()
         self.upgradeable_programs: set[str] = set()
         self.updater_process: subprocess.Popen | None = None
         self.update_mode = ""
@@ -908,12 +912,29 @@ class MainWindow(QMainWindow):
         col.addWidget(progress)
         col.addStretch()
 
+    def set_program_icon(self, app_id: str, executable: Path | None = None):
+        if app_id in self.program_icon_sources and self.program_icon_sources[app_id] == executable:
+            return
+        size = QSize(55, 55)
+        scale = self.devicePixelRatioF()
+        pixmap = QPixmap()
+        if executable and QApplication.platformName() == "windows":
+            pixmap = self.program_icon_provider.icon(QFileInfo(str(executable))).pixmap(size, scale)
+        if pixmap.isNull():
+            bundled = asset_dir() / f"{app_id}.png"
+            icon = QIcon(str(bundled)) if bundled.is_file() else svg_icon(app_id, 100)
+            pixmap = icon.pixmap(size, scale)
+        self.program_icons[app_id].setPixmap(pixmap)
+        self.program_icon_sources[app_id] = executable
+
     def _program_card(self, name: str, icon: str, description: str, action_title: str, action):
         outer, content = card_layout()
         title_row = QHBoxLayout()
         img = QLabel()
-        img.setPixmap(svg_icon(icon, 100).pixmap(QSize(55, 55)))
         img.setFixedSize(57, 57)
+        img.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.program_icons[icon] = img
+        self.set_program_icon(icon)
         title_row.addWidget(img)
         names = QVBoxLayout()
         names.addWidget(label(name, "CardTitle"))
@@ -1184,13 +1205,16 @@ class MainWindow(QMainWindow):
         self.status_message("Extensões do Brave: concluído." if ok else "Extensões do Brave: falha.")
 
     def refresh_program_cards(self):
-        installed = {key: installed_program(key) is not None for key in EXTRA_APPS}
+        installed = {key: installed_program(key) for key in EXTRA_APPS}
         for app_id, (primary, upgrade, _, _) in self.program_controls.items():
             key = program_key(app_id)
+            if app_id in NATIVE_PROGRAM_ICONS:
+                target = installed[key]
+                self.set_program_icon(app_id, target if isinstance(target, Path) else None)
             primary.setText("Abrir" if installed[key] else "Instalar")
             primary.setVisible(self.installing_program != key)
             primary.setEnabled(not self.installing_program)
-            upgrade.setVisible(installed[key] and key in self.upgradeable_programs
+            upgrade.setVisible(installed[key] is not None and key in self.upgradeable_programs
                                and self.installing_program != key)
             upgrade.setEnabled(not self.installing_program)
 

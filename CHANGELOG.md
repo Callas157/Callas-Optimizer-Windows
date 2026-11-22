@@ -1,3 +1,8 @@
+## v8.9.21 — Ícones de aplicativos e abertura do WinUtil
+
+- Steam, Discord, Epic Games, Medal, Logitech G HUB e Wise usam os ícones distribuídos pelos fabricantes. O Callas usa o executável instalado como fonte sempre que possível.
+- O botão WinUtil abre a interface da versão estável 26.11.13 após a confirmação do UAC. O Callas obtém o script oficial e confere seu SHA-256 antes de iniciar.
+
 ## v8.9.20 — Detecção do Medal instalado
 
 - O cartão do Medal reconhece o caminho do atalho atual e instalações anteriores. Quando encontrado, mostra **Abrir** e usa o executável instalado.

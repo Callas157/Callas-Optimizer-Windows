@@ -43,6 +43,9 @@ assert win.chatgpt_card in win.all_program_cards
 assert win.codex_card in win.all_program_cards
 for card in (win.discord_card, win.steam_card, win.epic_card, win.wise_card):
     assert card in win.all_program_cards
+for key in ("steam", "discord", "epic", "medal", "lghub", "wise"):
+    assert (root / "assets" / "icons" / f"{key}.png").is_file()
+    assert not win.program_icons[key].pixmap().isNull()
 with patch("app.installed_program", return_value=None):
     win.refresh_program_cards()
     primary, upgrade, bar, status = win.program_controls["discord"]

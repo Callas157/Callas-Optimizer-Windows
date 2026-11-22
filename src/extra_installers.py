@@ -418,13 +418,17 @@ def _check_nvidia_gpu() -> None:
         raise RuntimeError("O Windows não identificou uma GPU NVIDIA compatível.")
 
 
+def official_https_opener(hosts: set[str]):
+    context = truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    return urllib.request.build_opener(
+        urllib.request.HTTPSHandler(context=context),
+        _OfficialRedirects(hosts),
+    )
+
+
 def _download_setup(app, executable: Path, notify) -> None:
     notify("Baixando…", -1)
-    context = truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
-    opener = urllib.request.build_opener(
-        urllib.request.HTTPSHandler(context=context),
-        _OfficialRedirects(app["hosts"]),
-    )
+    opener = official_https_opener(app["hosts"])
     request = urllib.request.Request(app["url"], headers={"User-Agent": "CallasOptima"})
     maximum = 512 * 1024 * 1024
     magic = bytes.fromhex("D0CF11E0A1B11AE1") if executable.suffix == ".msi" else b"MZ"
