@@ -81,13 +81,18 @@ try {
         } while ($limit.Elapsed.TotalSeconds -lt 20)
         if (!$instance.MainWindowHandle) { throw 'A janela do Callas de teste não abriu.' }
     }
-    $arguments = '/CALLASUPDATE /NORESTART /NOCLOSEAPPLICATIONS /SP- /DIR="' + $destination + '"'
+    $setupLog = Join-Path $testRoot 'interactive-upgrade.log'
+    $arguments = '/CALLASUPDATE /NORESTART /NOCLOSEAPPLICATIONS /SP- /DIR="' + $destination + '" /LOG="' + $setupLog + '"'
     $setup = Start-Process -FilePath $CurrentSetup -ArgumentList $arguments -PassThru
     if (!$setup.WaitForExit(90000)) {
         Stop-Process -Id $setup.Id -ErrorAction SilentlyContinue
+        if (Test-Path -LiteralPath $setupLog) { Get-Content -LiteralPath $setupLog -Tail 70 }
         throw 'O Setup ficou esperando interação ou não conseguiu fechar o aplicativo.'
     }
-    if ($setup.ExitCode -ne 0) { throw "Atualização com Callas aberto falhou: $($setup.ExitCode)" }
+    if ($setup.ExitCode -ne 0) {
+        if (Test-Path -LiteralPath $setupLog) { Get-Content -LiteralPath $setupLog -Tail 70 }
+        throw "Atualização com Callas aberto falhou: $($setup.ExitCode)"
+    }
     foreach ($instance in $instances) {
         if (!$instance.HasExited) { throw 'Uma janela antiga permaneceu aberta após a instalação.' }
     }

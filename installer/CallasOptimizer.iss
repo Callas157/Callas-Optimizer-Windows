@@ -50,11 +50,14 @@ Filename: "{app}\{#MyAppExe}"; Description: "Iniciar Callas Optimizer"; Flags: n
 [Code]
 var
   RaisedUpdateWizard: Boolean;
+  QueuedUpdateInstall: Boolean;
 
 function SetWindowPos(Window, InsertAfter: HWND; X, Y, Width, Height: Integer; Flags: Cardinal): Boolean;
   external 'SetWindowPos@user32.dll stdcall';
 function SetForegroundWindow(Window: HWND): Boolean;
   external 'SetForegroundWindow@user32.dll stdcall';
+function PostMessageW(Window: HWND; Msg: Cardinal; WParam, LParam: LongWord): Boolean;
+  external 'PostMessageW@user32.dll stdcall';
 
 function IsCallasUpdate: Boolean;
 var
@@ -69,7 +72,7 @@ end;
 function ShouldSkipPage(PageID: Integer): Boolean;
 begin
   Result := IsCallasUpdate and ((PageID = wpWelcome) or (PageID = wpSelectDir) or
-    (PageID = wpSelectTasks) or (PageID = wpReady) or (PageID = wpFinished));
+    (PageID = wpSelectTasks) or (PageID = wpFinished));
 end;
 
 function PrepareToInstall(var NeedsRestart: Boolean): String;
@@ -111,4 +114,12 @@ begin
   end
   else
     SetWindowPos(WizardForm.Handle, HWND(-2), 0, 0, 0, 0, $0013);
+
+  { Versões anteriores não enviam /SILENT. O Inno sempre mostra wpReady
+    inicialmente e a confirmação já foi feita dentro do Callas. }
+  if (CurPageID = wpReady) and not WizardSilent and not QueuedUpdateInstall then
+  begin
+    QueuedUpdateInstall := True;
+    PostMessageW(WizardForm.NextButton.Handle, $00F5, 0, 0);
+  end;
 end;
