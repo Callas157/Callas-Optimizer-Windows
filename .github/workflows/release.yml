@@ -84,6 +84,8 @@ jobs:
           Remove-Item -LiteralPath $uacPath -Force
       - name: Testar salto direto 8.9.3 para a versao atual
         shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           $ErrorActionPreference = 'Stop'
           & ./scripts/test_direct_upgrade.ps1 -CurrentSetup (Resolve-Path 'dist/Callas_Optimizer_Setup_x64.exe').Path

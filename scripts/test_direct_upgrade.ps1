@@ -12,8 +12,14 @@ if (!(Test-Path -LiteralPath $CurrentSetup -PathType Leaf)) { throw 'Setup novo 
 if ($Repository -cne 'Callas157/Callas-Optimizer-Windows') { throw 'Repositorio nao autorizado' }
 if ($BaselineTag -cne 'v8.9.3') { throw 'Versao base nao permitida neste teste' }
 $headers=@{'User-Agent'='CallasOptimizer-UpgradeSmoke'; 'Accept'='application/vnd.github+json'}
+$apiHeaders=$headers.Clone()
+# O token temporário do GitHub Actions aumenta o limite da API no runner.
+# Nunca é salvo em logs, artefatos ou no programa do usuário.
+if ($env:GITHUB_TOKEN) {
+    $apiHeaders['Authorization']="Bearer $env:GITHUB_TOKEN"
+}
 $api="https://api.github.com/repos/$Repository/releases/tags/$BaselineTag"
-$release=Invoke-RestMethod -Uri $api -Headers $headers -TimeoutSec 30
+$release=Invoke-RestMethod -Uri $api -Headers $apiHeaders -TimeoutSec 30
 if ($release.draft -or $release.prerelease -or $release.tag_name -cne $BaselineTag) {
     throw 'Release base inesperada'
 }
