@@ -1,5 +1,14 @@
 # Histórico de versões — Callas Optimizer Windows
 
+## v8.9.13 — Salto direto entre versões
+- Formalizado o contrato de atualização cumulativa: apenas a última Release estável e seu Setup completo.
+- Teste de migração de instalação 8.9.3 direto para a versão atual, sem intermediárias, com instalação e inicialização da GUI.
+- Testes protegem AppId e caminhos de instalação para preservar a compatibilidade.
+- Documentada a limitação irrecuperável do atualizador das antigas versões portáteis 8.9.0–8.9.2, que não têm mais assets correspondentes.
+- Nenhum EXE portátil é redistribuído.
+
+
+
 ## v8.9.12 — ChatGPT e Codex em Programas
 - ChatGPT e Codex adicionados à Central de Programas, total de sete cartões.
 - Os dois cartões usam o mesmo canal oficial do ChatGPT para desktop, que já contém Codex.

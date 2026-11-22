@@ -43,6 +43,24 @@ class UpdateContract(unittest.TestCase):
         self.assertIn('ProductName.Trim()', UPDATER)
         self.assertIn('Abrindo UAC do instalador:', UPDATER)
 
+    def test_direct_cumulative_upgrade(self):
+        # A ultima versao contem todas as mudancas; nao executamos upgrades
+        # intermediarios nem dependemos de assets portateis antigos.
+        self.assertIn("'/releases/latest'", UPDATER)
+        self.assertIn("if ($latest.Version -le [version]$CurrentVersion)", UPDATER)
+        self.assertIn("Callas_Optimizer_Setup_x64.exe", UPDATER)
+        self.assertIn("Start-Process -FilePath $staged", UPDATER)
+        installer=(ROOT / 'installer/CallasOptimizer.iss').read_text(encoding='utf-8')
+        self.assertIn("AppId={{33D8076A-342F-4AF7-8D18-1885BF08FC04}", installer)
+        self.assertIn('DefaultDirName={autopf}\\Callas Optimizer', installer)
+        self.assertIn('#define MyAppExe "Callas_Optimizer_Windows_x64.exe"', installer)
+        smoke=(ROOT / 'scripts/test_direct_upgrade.ps1').read_text(encoding='utf-8')
+        for term in ('v8.9.3','Get-FileHash','Install-Silent $oldSetup',
+                     "Install-Silent $CurrentSetup", "'--self-test'"):
+            self.assertIn(term, smoke)
+        workflow=(ROOT / '.github/workflows/release.yml').read_text(encoding='utf-8')
+        self.assertIn("scripts/test_direct_upgrade.ps1", workflow)
+
     def test_release_sha256(self):
         self.assertIn('Get-FileHash', UPDATER)
         self.assertIn('Confirm-WindowsExe $staged', UPDATER)

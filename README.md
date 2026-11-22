@@ -12,6 +12,15 @@
 **[Baixar a versão estável mais recente](https://github.com/Callas157/Callas-Optimizer-Windows/releases/latest)**
 </div>
 
+## v8.9.13 — Atualização cumulativa entre versões
+
+- **Salto direto para a última Release estável:** o atualizador procura `releases/latest`, compara versões e baixa apenas o **Setup completo** da versão mais recente, sem executar cada atualização intermediária.
+- **Compatibilidade mantida a partir do Setup 8.9.3**: Inno Setup preserva o mesmo AppId, nome de executável e diretório de instalação. O pipeline testa uma instalação 8.9.3 atualizada diretamente para o Setup atual, incluindo abertura da interface e bibliotecas Python/Qt.
+- **Versões portáteis 8.9.0 a 8.9.2:** não podem receber esse salto pelo atualizador original porque os arquivos portáteis foram retirados das Releases. Para migrar, instale manualmente a versão estável mais recente pela página oficial de Releases. Não será reintroduzido executável portátil.
+- **Recuperação:** uma instalação antiga que não abre, como a 8.9.4 em alguns PCs, exige executar o Setup atual por cima.
+- Os testes automatizados verificam o salto do Setup e a estrutura da instalação. O fluxo completo de UAC e atualização dentro de cada versão antiga ainda depende de validação prática no Windows 11. Atualizações futuras devem manter compatibilidade ou documentar migração explícita.
+- Dados e logs em `%LOCALAPPDATA%\\CallasTeck` e preferências do usuário devem permanecer fora da pasta de instalação; não apagamos essas pastas durante a atualização.
+
 ## v8.9.12 — ChatGPT e Codex na Central de Programas
 
 - Adicionados dois cartões visuais: **ChatGPT** e **Codex**, na seção **Programas**, ao lado dos aplicativos existentes.
