@@ -12,6 +12,17 @@
 **[Baixar a versão estável mais recente](https://github.com/Callas157/Callas-Optimizer-Windows/releases/latest)**
 </div>
 
+## v8.9.6 — Manutenção em Python e correção do carregamento
+
+- Motor de manutenção migrado para **Python/PySide6**, com ações individuais nas 13 funções. Não executa mais o BAT antigo.
+- As operações administrativas usam os próprios utilitários do Windows (PowerShell, PowerCfg, DISM, SFC, SC, Registro), com confirmação, logs e backups dos ajustes suportados.
+- Instalador **PyInstaller onedir**: os componentes Python/Qt são instalados em Program Files, sem extração temporária `_MEI` a cada inicialização.
+- O build do Windows é interrompido se o executável instalado não abrir nos testes.
+- Confirmações em **português** (Sim/Não), menu lateral maior e ícones SVG.
+- Apenas **Setup.exe** nas Releases. Sem edição portátil.
+- Quem está com a 8.9.4 que não abre deve **instalar o novo Setup manualmente por cima**.
+- Importante: compatibilidade com uma instalação específica do Windows 11 IoT LTSC, UAC e todas as ações de manutenção ainda requerem validação prática. O SmartScreen pode continuar mostrando alerta até haver uma assinatura digital confiável.
+
 ## v8.9.5 — Correção da DLL Python e interface em português
 - Corrigido empacotamento para PyInstaller `--onedir` instalado com Python/Qt e dependências permanentes em `Program Files` (evita extração `_MEI` a cada abertura).
 - Instalador inclui a pasta `_internal`, e testes falham se `python312.dll` ou PySide6 estiverem ausentes.
@@ -44,13 +55,13 @@ A interface fixa anterior foi substituída por uma nova aplicação **Python + P
 - **Programas:** ícones vetoriais reais do Brave e NVIDIA App, com instalação oficial e gerenciamento reversível de extensões SteamDB / Bonjourr.
 - **Atualizações (11):** consulta a última Release estável, pede confirmação e verifica tamanho, formato PE e SHA-256 do Setup antes de iniciar a atualização.
 - **Registros:** visualização dos logs das operações na interface.
-- **Ferramentas 1–6, 8–10, 12–13:** mantidas sem mudar o funcionamento do motor BAT **8.8** (uma janela de console ainda é aberta para os submenus antigos). Elas serão migradas progressivamente para a nova UI.
+- **Ferramentas 1–6, 8–10, 12–13:** operações em Python com controles de Registro, energia, serviços, DNS, DISM, SFC e restauração. Remoção do Edge pode não ser permitida em todas as edições; WinUtil abre o projeto oficial.
 
 ## Windows e requisitos
 
 **Prioridade:** Windows 11 x64 Pro, Enterprise e IoT Enterprise LTSC. Windows 10 e ARM64 não são alvos testados.
 
-O Setup já inclui o aplicativo e as dependências Python/Qt; não é necessário instalar Python. A primeira execução extrai os scripts de manutenção para `%LOCALAPPDATA%\CallasTeck`. A compilação inclui somente dependências usadas pelo projeto.
+O Setup inclui Python/Qt em Program Files, sem depender de Python instalado no computador. Os scripts auxiliares de Windows ficam em `%LOCALAPPDATA%\CallasTeck`. A compilação inclui somente dependências usadas pelo projeto.
 
 1. Abra **[Releases](https://github.com/Callas157/Callas-Optimizer-Windows/releases/latest)**.
 2. Baixe `Callas_Optimizer_Setup_x64.exe` (único EXE distribuído).

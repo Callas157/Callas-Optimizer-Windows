@@ -1,4 +1,4 @@
-"""Callas Optimizer Windows 8.9.5 — Runtime instalado e interface PT-BR.
+"""Callas Optimizer Windows 8.9.6 — Manutenção em Python e runtime instalado.
 
 Python/PySide6. Operacoes legadas ainda reutilizam o BAT original, mas
 limpeza, atualizacoes, navegacao e painel de logs sao controles nativos.
@@ -29,7 +29,7 @@ from PySide6.QtWidgets import (
 from cleaner import clean_folders, empty_recycle_bin, format_size, known_temp_folders
 from windows_actions import ACTIONS, BY_ROUTE, HOME as ACTION_HOME, worker as run_windows_action
 
-APP_VERSION = "8.9.5"
+APP_VERSION = "8.9.6"
 REPO = "Callas157/Callas-Optimizer-Windows"
 PROJECT_URL = f"https://github.com/{REPO}"
 DATA_DIR = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "CallasTeck"
@@ -617,7 +617,7 @@ class MainWindow(QMainWindow):
         l.addWidget(label("CALLAS OPTIMIZER  /  WINDOWS EDITION", "CardTitle"))
         l.addWidget(label(f"Versão {APP_VERSION} · Python + PySide6 / Qt · Windows x64"))
         l.addWidget(label("Janela com maximização e redimensionamento; telas específicas; ícones oficiais de identificação; atualizações com confirmação."))
-        l.addWidget(label("As funções avançadas ainda utilizam o motor BAT 8.8 enquanto migram gradualmente para módulos nativos."))
+        l.addWidget(label("Todas as ferramentas de manutenção utilizam um executor Python e comandos oficiais do Windows, com UAC quando necessário."))
         l.addWidget(label("Modo de uso: " + ("Instalado em Program Files" if installed_mode() else "Portátil")))
         if not installed_mode():
             l.addWidget(label("Para instalar, criar atalhos e aparecer em Aplicativos Instalados, utilize o Setup oficial."))

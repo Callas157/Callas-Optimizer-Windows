@@ -1,5 +1,18 @@
 # Histórico de versões — Callas Optimizer Windows
 
+## v8.9.6 — Manutenção em Python e correção do carregamento
+
+- Motor de manutenção migrado para **Python/PySide6**, com ações individuais nas 13 funções. Não executa mais o BAT antigo.
+- As operações administrativas usam os próprios utilitários do Windows (PowerShell, PowerCfg, DISM, SFC, SC, Registro), com confirmação, logs e backups dos ajustes suportados.
+- Instalador **PyInstaller onedir**: os componentes Python/Qt são instalados em Program Files, sem extração temporária `_MEI` a cada inicialização.
+- O build do Windows é interrompido se o executável instalado não abrir nos testes.
+- Confirmações em **português** (Sim/Não), menu lateral maior e ícones SVG.
+- Apenas **Setup.exe** nas Releases. Sem edição portátil.
+- Quem está com a 8.9.4 que não abre deve **instalar o novo Setup manualmente por cima**.
+- Importante: compatibilidade com uma instalação específica do Windows 11 IoT LTSC, UAC e todas as ações de manutenção ainda requerem validação prática. O SmartScreen pode continuar mostrando alerta até haver uma assinatura digital confiável.
+
+
+
 ## v8.9.5 — Correção da DLL Python e interface em português
 - Corrigido empacotamento para PyInstaller `--onedir` instalado com Python/Qt e dependências permanentes em `Program Files` (evita extração `_MEI` a cada abertura).
 - Instalador inclui a pasta `_internal`, e testes falham se `python312.dll` ou PySide6 estiverem ausentes.
