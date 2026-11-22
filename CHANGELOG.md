@@ -1,5 +1,14 @@
 # Histórico de versões — Callas Optimizer Windows
 
+## v8.9.4 — Ícone e atalhos do Windows
+- Instalador passa a instalar o arquivo de ícone `CallasOptimizer.ico` no diretório do programa.
+- Área de Trabalho e menu Iniciar apontam explicitamente para o ícone instalado.
+- AppUserModelID sincronizado entre os atalhos e a interface Qt, para integração com a barra de tarefas.
+- Nova validação no GitHub Actions instala o Setup num runner Windows e verifica os atalhos e o arquivo ICO.
+- Mantida a distribuição apenas por Setup (sem versão portátil).
+- A assinatura digital segue pendente; o alerta do SmartScreen pode persistir.
+
+
 ## v8.9.3 — Windows Setup (distribuição corrigida)
 - Removidos os downloads portáteis das Releases e o hash associado a eles.
 - Publicações futuras oferecem somente o Setup e o arquivo de integridade.

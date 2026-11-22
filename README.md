@@ -12,6 +12,12 @@
 **[Baixar a versão estável mais recente](https://github.com/Callas157/Callas-Optimizer-Windows/releases/latest)**
 </div>
 
+## v8.9.4 — Ícone corrigido na Área de Trabalho e no menu Iniciar
+
+O instalador agora copia `CallasOptimizer.ico` para a pasta do aplicativo e os atalhos usam **IconFilename explícito**, sem depender da extração do ícone do executável. A identificação AppUserModelID é igual à usada pelo Qt, para consistência na barra de tarefas. Um teste de instalação real no Windows verifica destino e ícone dos atalhos durante o GitHub Actions.
+
+Para corrigir um atalho branco da versão 8.9.3, instale a 8.9.4 por cima: não é preciso desinstalar primeiro. O Windows pode demorar a atualizar o cache de ícones; se necessário, atualize a Área de Trabalho ou reinicie o Explorer.
+
 ## v8.9.3 — Instalação e ícone do Windows
 
 **Recomendado:** baixe `Callas_Optimizer_Setup_x64.exe` na Release. O Setup instala em Program Files, cria atalho no Iniciar, oferece atalho de Área de Trabalho, integra com Aplicativos Instalados e inclui desinstalador. Não existe download de versão portátil.

@@ -1,4 +1,4 @@
-"""Callas Optimizer Windows 8.9.3 — Interface Qt com instalador Windows.
+"""Callas Optimizer Windows 8.9.4 — Atalhos Windows com icone proprio.
 
 Python/PySide6. Operacoes legadas ainda reutilizam o BAT original, mas
 limpeza, atualizacoes, navegacao e painel de logs sao controles nativos.
@@ -28,7 +28,7 @@ from PySide6.QtWidgets import (
 
 from cleaner import clean_folders, empty_recycle_bin, format_size, known_temp_folders
 
-APP_VERSION = "8.9.3"
+APP_VERSION = "8.9.4"
 REPO = "Callas157/Callas-Optimizer-Windows"
 PROJECT_URL = f"https://github.com/{REPO}"
 LEGACY_SCRIPT = "Callas_Optimizer_V8_8_GUI_Engine.bat"
@@ -121,11 +121,17 @@ def asset_dir() -> Path:
 
 
 def app_icon() -> QIcon:
-    ico = asset_dir() / "callas.ico"
-    if ico.is_file():
-        icon = QIcon(str(ico))
-        if not icon.isNull():
-            return icon
+    # Na instalacao, usar o mesmo ICO persistente dos atalhos do Windows.
+    # Isso evita depender do caminho temporario usado pelo PyInstaller onefile.
+    candidates = []
+    if getattr(sys, "frozen", False):
+        candidates.append(Path(sys.executable).resolve().parent / "CallasOptimizer.ico")
+    candidates.append(asset_dir() / "callas.ico")
+    for ico in candidates:
+        if ico.is_file():
+            icon = QIcon(str(ico))
+            if not icon.isNull():
+                return icon
     return svg_icon("callas")
 
 

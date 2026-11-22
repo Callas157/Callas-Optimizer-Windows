@@ -59,6 +59,43 @@ jobs:
           & $iscc "installer\CallasOptimizer.iss"
           if ($LASTEXITCODE -ne 0) { throw 'Erro ao compilar instalador' }
           if (-not (Test-Path "dist/Callas_Optimizer_Setup_x64.exe")) { throw "Setup nao gerado" }
+      - name: Testar instalacao e icones dos atalhos no Windows
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $setup = (Resolve-Path 'dist/Callas_Optimizer_Setup_x64.exe').Path
+          $dest = Join-Path $env:RUNNER_TEMP 'CallasOptimizerIconSmoke'
+          $arguments = '/VERYSILENT /NORESTART /SUPPRESSMSGBOXES /TASKS=desktopicon /DIR="' + $dest + '"'
+          $process = Start-Process -FilePath $setup -ArgumentList $arguments -Wait -PassThru
+          if ($process.ExitCode -ne 0) { throw "Setup de teste falhou: $($process.ExitCode)" }
+          $app = Join-Path $dest 'Callas_Optimizer_Windows_x64.exe'
+          $ico = Join-Path $dest 'CallasOptimizer.ico'
+          if (-not (Test-Path -LiteralPath $app -PathType Leaf)) { throw 'Executavel instalado ausente' }
+          if (-not (Test-Path -LiteralPath $ico -PathType Leaf)) { throw 'Arquivo ICO instalado ausente' }
+          Add-Type -AssemblyName System.Drawing
+          $icon = [System.Drawing.Icon]::new($ico)
+          try { if ($icon.Width -lt 16) { throw 'ICO instalado invalido' } }
+          finally { $icon.Dispose() }
+          $startLinks = @(
+            (Join-Path $env:ProgramData 'Microsoft\Windows\Start Menu\Programs\Callas Optimizer.lnk'),
+            (Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\Callas Optimizer.lnk')
+          )
+          $desktopLinks = @(
+            (Join-Path $env:PUBLIC 'Desktop\Callas Optimizer.lnk'),
+            (Join-Path $env:USERPROFILE 'Desktop\Callas Optimizer.lnk')
+          )
+          $shell = New-Object -ComObject WScript.Shell
+          foreach ($candidates in @($startLinks, $desktopLinks)) {
+            $link = $candidates | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | Select-Object -First 1
+            if (-not $link) { throw "Atalho nao criado: $($candidates -join ', ')" }
+            $shortcut = $shell.CreateShortcut($link)
+            if ($shortcut.TargetPath -ine $app) { throw "Destino errado no atalho $link : $($shortcut.TargetPath)" }
+            if ($shortcut.IconLocation -notmatch '(?i)CallasOptimizer\.ico') {
+              throw "Icone errado no atalho $link : $($shortcut.IconLocation)"
+            }
+          }
+          Write-Host 'Instalacao e icones dos atalhos validados no Windows.'
+
       - name: Validar executaveis e hashes
         run: python scripts/verify_build.py
       - name: Publicar somente Setup na Release

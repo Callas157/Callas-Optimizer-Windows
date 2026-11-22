@@ -20,7 +20,7 @@ ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 WizardStyle=modern
 SetupIconFile=..\assets\icons\callas.ico
-UninstallDisplayIcon={app}\{#MyAppExe}
+UninstallDisplayIcon={app}\CallasOptimizer.ico
 OutputDir=..\dist
 OutputBaseFilename=Callas_Optimizer_Setup_x64
 Compression=lzma2/max
@@ -34,10 +34,11 @@ Name: "brazilianportuguese"; MessagesFile: "compiler:Languages\BrazilianPortugue
 Name: "desktopicon"; Description: "Criar atalho na area de trabalho"; GroupDescription: "Atalhos:"; Flags: unchecked
 [Files]
 Source: "..\dist\{#MyAppExe}"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\assets\icons\callas.ico"; DestDir: "{app}"; DestName: "CallasOptimizer.ico"; Flags: ignoreversion
 Source: "installed.marker"; DestDir: "{app}"; Flags: ignoreversion
 [Icons]
-Name: "{autoprograms}\Callas Optimizer"; Filename: "{app}\{#MyAppExe}"
-Name: "{autodesktop}\Callas Optimizer"; Filename: "{app}\{#MyAppExe}"; Tasks: desktopicon
+Name: "{autoprograms}\Callas Optimizer"; Filename: "{app}\{#MyAppExe}"; WorkingDir: "{app}"; IconFilename: "{app}\CallasOptimizer.ico"; AppUserModelID: "CallasTeck.CallasOptimizer.Windows"
+Name: "{autodesktop}\Callas Optimizer"; Filename: "{app}\{#MyAppExe}"; WorkingDir: "{app}"; IconFilename: "{app}\CallasOptimizer.ico"; AppUserModelID: "CallasTeck.CallasOptimizer.Windows"; Tasks: desktopicon
 [Registry]
 Root: HKLM; Subkey: "Software\CallasTeck\CallasOptimizer"; ValueType: string; ValueName: "InstallDir"; ValueData: "{app}"; Flags: uninsdeletekey
 [Run]
