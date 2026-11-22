@@ -20,6 +20,7 @@ if os.name != 'nt':
 icon_b64 = ROOT / 'assets/icons/callas.ico.b64'
 icon_file = ROOT / 'assets/icons/callas.ico'
 icon_file.write_bytes(base64.b64decode(icon_b64.read_text(encoding='ascii')))
+assert icon_file.read_bytes()[:4] == b'\x00\x00\x01\x00', 'Arquivo ICO invalido'
 
 source = ROOT / 'src'
 args = [sys.executable, '-m', 'PyInstaller', '--noconfirm', '--clean',

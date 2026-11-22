@@ -19,4 +19,7 @@ if "Callas157/Callas-Optimizer-Windows" not in updater:
     sys.exit('Updater apontando para repo errado')
 if 'Callas157/arch-install' in updater:
     sys.exit('Referencia indevida ao projeto Linux')
-print('Versionamento, GUI e repositorio validados:', tag)
+installer=(root/'installer/CallasOptimizer.iss').read_text(encoding='utf-8')
+if 'GetEnv("CALLAS_VERSION")' not in installer:
+    sys.exit('Instalador com versao fixa')
+print('Versionamento, GUI, instalador e repositorio validados:', tag)

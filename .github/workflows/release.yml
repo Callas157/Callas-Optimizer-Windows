@@ -45,13 +45,22 @@ jobs:
         run: python tests/smoke_gui.py
       - name: Gerar aplicativo Windows x64
         run: python scripts/build.py
-      - name: Verificar executavel e hash
+      - name: Preparar Inno Setup 6
         shell: pwsh
         run: |
-          python scripts/verify_build.py
-          $record = (Get-Content dist/SHA256SUMS.txt -Raw).Trim().Split(' ', [StringSplitOptions]::RemoveEmptyEntries)
-          $hash = (Get-FileHash dist/Callas_Optimizer_Windows_x64.exe -Algorithm SHA256).Hash
-          if ($hash -ne $record[0].ToUpperInvariant()) { throw 'Hash de pacote divergente' }
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { choco install innosetup --no-progress -y }
+          if (-not (Test-Path $iscc)) { throw 'Inno Setup 6 nao instalado' }
+      - name: Gerar instalador Windows
+        shell: pwsh
+        run: |
+          $env:CALLAS_VERSION = (Get-Content VERSION -Raw).Trim()
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          & $iscc "installer\CallasOptimizer.iss"
+          if ($LASTEXITCODE -ne 0) { throw 'Erro ao compilar instalador' }
+          if (-not (Test-Path "dist/Callas_Optimizer_Setup_x64.exe")) { throw "Setup nao gerado" }
+      - name: Validar executaveis e hashes
+        run: python scripts/verify_build.py
       - name: Publicar Release estavel (se nova)
         shell: pwsh
         env:
@@ -64,6 +73,7 @@ jobs:
           }
           gh release create $env:RELEASE_TAG `
             dist/Callas_Optimizer_Windows_x64.exe `
+            dist/Callas_Optimizer_Setup_x64.exe `
             dist/SHA256SUMS.txt `
             --target $env:GITHUB_SHA `
             --title "Callas Optimizer $env:RELEASE_TAG" `

@@ -12,6 +12,14 @@
 **[Baixar a versão estável mais recente](https://github.com/Callas157/Callas-Optimizer-Windows/releases/latest)**
 </div>
 
+## v8.9.3 — Instalação e ícone do Windows
+
+**Recomendado:** baixe `Callas_Optimizer_Setup_x64.exe` na Release. O Setup instala em Program Files, cria atalho no Iniciar, oferece atalho de Área de Trabalho, integra com Aplicativos Instalados e inclui desinstalador. A versão portátil permanece disponível.
+
+O atualizador distingue o app instalado (Setup oficial validado + UAC) do portátil (substituição do EXE + backup). A interface, navegação e limpeza já são Python/PySide6, mas 11 opções avançadas ainda executam o motor BAT legado 8.8.
+
+O executável e o Setup não têm assinatura Authenticode; o SmartScreen pode alertar. Não desative o Windows Defender.
+
 ## O que mudou na versão 8.9.2
 
 A interface fixa anterior foi substituída por uma nova aplicação **Python + PySide6 (Qt)**. Agora ela possui **maximizar, redimensionamento livre, barras de rolagem, páginas individuais para as 13 opções** e layout de aplicativos que se adapta à largura da janela.
@@ -47,7 +55,7 @@ Consulta: `https://api.github.com/repos/Callas157/Callas-Optimizer-Windows/relea
 - Logs do atualizador em `%LOCALAPPDATA%\CallasTeck\atualizacoes.log`.
 - O EXE publicado deve ter **100 MiB ou menos** para continuar compatível com atualizadores das versões 8.9.0/8.9.1.
 
-A troca requer permissão para escrever na pasta do executável. Ao usar uma pasta protegida como `Program Files`, mova o programa para a pasta do usuário ou ajuste permissões com cuidado.
+A edição instalada usa o Setup com UAC para atualizar Program Files. A versão portátil exige pasta gravável. Instalação interrompida não tem garantia de rollback transacional.
 
 ## Desenvolvimento
 
@@ -82,7 +90,7 @@ Para gerar o executável, `py -3.12 scripts\build.py` em uma máquina Windows x6
 
 A limpeza deve ser usada com os aplicativos fechados. Arquivos bloqueados são ignorados; opções de limpeza adicionais exigem confirmação. Não se promete eliminar todos os temporários do sistema nem recuperar dados apagados.
 
-**Testes:** há testes de código e de interface sem exibição no pipeline Windows. Execução real com permissões UAC e atualização ponta a ponta em Windows 11 devem ser verificadas antes de considerar a versão plenamente validada.
+**Testes:** build e testes estruturais no pipeline Windows. Instalação, desinstalação, UAC e atualização ponta a ponta ainda precisam de teste real no Windows 11.
 
 ---
 

@@ -1,4 +1,4 @@
-"""Callas Optimizer Windows 8.9.2 — Interface Qt responsiva.
+"""Callas Optimizer Windows 8.9.3 — Interface Qt com instalador Windows.
 
 Python/PySide6. Operacoes legadas ainda reutilizam o BAT original, mas
 limpeza, atualizacoes, navegacao e painel de logs sao controles nativos.
@@ -28,7 +28,7 @@ from PySide6.QtWidgets import (
 
 from cleaner import clean_folders, empty_recycle_bin, format_size, known_temp_folders
 
-APP_VERSION = "8.9.2"
+APP_VERSION = "8.9.3"
 REPO = "Callas157/Callas-Optimizer-Windows"
 PROJECT_URL = f"https://github.com/{REPO}"
 LEGACY_SCRIPT = "Callas_Optimizer_V8_8_GUI_Engine.bat"
@@ -118,6 +118,20 @@ QMessageBox { background: #152137; }
 def asset_dir() -> Path:
     base = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[1]))
     return base / "assets" / "icons"
+
+
+def app_icon() -> QIcon:
+    ico = asset_dir() / "callas.ico"
+    if ico.is_file():
+        icon = QIcon(str(ico))
+        if not icon.isNull():
+            return icon
+    return svg_icon("callas")
+
+
+def installed_mode() -> bool:
+    return bool(getattr(sys, "frozen", False) and
+                (Path(sys.executable).resolve().parent / "installed.marker").is_file())
 
 
 def runtime_dir() -> Path:
@@ -237,7 +251,7 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle(f"Callas Optimizer {APP_VERSION}  |  Windows Edition")
-        self.setWindowIcon(svg_icon("callas"))
+        self.setWindowIcon(app_icon())
         # Borda e controles nativos (incluindo maximizar); a janela pode ser redimensionada.
         self.setMinimumSize(810, 570)
         self.resize(1200, 815)
@@ -285,7 +299,7 @@ class MainWindow(QMainWindow):
         brand = QHBoxLayout()
         brand.setSpacing(12)
         logo = QLabel()
-        logo.setPixmap(svg_icon("callas", 96).pixmap(43, 43))
+        logo.setPixmap(app_icon().pixmap(43, 43))
         brand.addWidget(logo)
         words = QVBoxLayout()
         words.setSpacing(0)
@@ -502,7 +516,8 @@ class MainWindow(QMainWindow):
         col = self._page("updates", "Atualizações", "Verificação automática pelo GitHub Releases, sempre com sua autorização.")
         c, inner = card_layout()
         inner.addWidget(label("CANAL ESTÁVEL", "Section"))
-        inner.addWidget(label("Versão instalada: " + APP_VERSION, "CardTitle"))
+        inner.addWidget(label("Versão atual: " + APP_VERSION, "CardTitle"))
+        inner.addWidget(label("Instalado em Program Files" if installed_mode() else "Edição portátil — instalador em Sobre"))
         self.update_note = label("Pronto para consultar as Releases oficiais.")
         inner.addWidget(self.update_note)
         self.update_progress = QProgressBar()
@@ -520,7 +535,7 @@ class MainWindow(QMainWindow):
         auto.setChecked(self.settings.value("auto_update", True, type=bool))
         auto.toggled.connect(lambda flag: self.settings.setValue("auto_update", flag))
         controls.addWidget(auto)
-        controls.addWidget(label("A nova versão só substitui o executável depois de download completo, SHA-256, validação de arquitetura e backup."))
+        controls.addWidget(label("Só instala após confirmar e verificar SHA-256. Program Files usa Setup oficial com UAC; edição portátil mantém backup."))
         col.addWidget(options)
         col.addStretch()
 
@@ -545,6 +560,10 @@ class MainWindow(QMainWindow):
         l.addWidget(label(f"Versão {APP_VERSION} · Python + PySide6 / Qt · Windows x64"))
         l.addWidget(label("Janela com maximização e redimensionamento; telas específicas; ícones oficiais de identificação; atualizações com confirmação."))
         l.addWidget(label("As funções avançadas ainda utilizam o motor BAT 8.8 enquanto migram gradualmente para módulos nativos."))
+        l.addWidget(label("Modo de uso: " + ("Instalado em Program Files" if installed_mode() else "Portátil")))
+        if not installed_mode():
+            l.addWidget(label("Para instalar, criar atalhos e aparecer em Aplicativos Instalados, utilize o Setup oficial."))
+            l.addWidget(action_button("BAIXAR SETUP OFICIAL", lambda: webbrowser.open(PROJECT_URL + "/releases/latest"), True))
         l.addWidget(action_button("ABRIR REPOSITÓRIO", lambda: webbrowser.open(PROJECT_URL), True))
         col.addWidget(about)
         col.addStretch()
@@ -655,8 +674,10 @@ class MainWindow(QMainWindow):
         self.update_note.setText("Consultando a última Release estável...")
         self.update_progress.setRange(0, 0)
         try:
-            self._spawn_update(["-Check", "-CurrentVersion", APP_VERSION,
-                                "-StatusFile", str(self.update_status)])
+            args = ["-Check", "-CurrentVersion", APP_VERSION, "-StatusFile", str(self.update_status)]
+            if installed_mode():
+                args.append("-Installed")
+            self._spawn_update(args)
         except Exception as e:
             self.update_failed(str(e))
             return
@@ -738,9 +759,11 @@ class MainWindow(QMainWindow):
         self.update_progress.setRange(0, 0)
         self.update_note.setText("Baixando, validando e preparando a nova versão. Mantenha o aplicativo aberto.")
         try:
-            self._spawn_update(["-Install", "-CurrentVersion", APP_VERSION,
-                                "-StatusFile", str(self.update_status),
-                                "-Target", str(Path(sys.executable).resolve()), "-WaitPid", str(os.getpid())])
+            args = ["-Install", "-CurrentVersion", APP_VERSION, "-StatusFile", str(self.update_status),
+                    "-Target", str(Path(sys.executable).resolve()), "-WaitPid", str(os.getpid())]
+            if installed_mode():
+                args.append("-Installed")
+            self._spawn_update(args)
         except Exception as e:
             self.update_failed(str(e))
             return
@@ -797,7 +820,13 @@ def main():
         if os.environ.get("QT_QPA_PLATFORM") != "offscreen":
             raise SystemExit("O Callas Optimizer Windows precisa de Windows 11.")
     QApplication.setAttribute(Qt.ApplicationAttribute.AA_EnableHighDpiScaling, True) if hasattr(Qt.ApplicationAttribute, 'AA_EnableHighDpiScaling') else None
+    if os.name == "nt":
+        try:
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("CallasTeck.CallasOptimizer.Windows")
+        except (OSError, AttributeError):
+            pass
     app = QApplication(sys.argv)
+    app.setWindowIcon(app_icon())
     app.setStyle("Fusion")
     app.setStyleSheet(STYLE)
     window = MainWindow()

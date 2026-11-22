@@ -1,5 +1,12 @@
 # Histórico de versões — Callas Optimizer Windows
 
+## v8.9.3 — Windows Setup
+- Ícone Callas no EXE e na janela; instalador Inno para Program Files e menu Iniciar.
+- Desinstalador, entrada em Aplicativos Instalados, atalho opcional na área de trabalho.
+- Updater com canal Setup instalado, validação SHA-256 e solicitação UAC.
+- Release com EXE portátil e instalador; ainda sem assinatura digital.
+- Motor BAT 8.8 segue nas 11 opções avançadas.
+
 ## v8.9.2 — Nova interface gráfica responsiva (Python + Qt)
 
 - Interface inteiramente redesenhada em **Python e PySide6/Qt**: janela redimensionável, maximização nativa, barras de rolagem e layout adaptável.

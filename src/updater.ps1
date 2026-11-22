@@ -7,13 +7,14 @@ param(
     [Parameter(Mandatory=$true)][string]$CurrentVersion,
     [Parameter(Mandatory=$true)][string]$StatusFile,
     [Parameter(Mandatory=$true, ParameterSetName='Install')][string]$Target,
-    [Parameter(Mandatory=$true, ParameterSetName='Install')][ValidateRange(1,2147483647)][int]$WaitPid
+    [Parameter(Mandatory=$true, ParameterSetName='Install')][ValidateRange(1,2147483647)][int]$WaitPid,
+    [switch]$Installed
 )
 
 $ErrorActionPreference='Stop'
 $ProgressPreference='SilentlyContinue'
 $Repository='Callas157/Callas-Optimizer-Windows'
-$AssetName='Callas_Optimizer_Windows_x64.exe'
+$AssetName = if ($Installed) { 'Callas_Optimizer_Setup_x64.exe' } else { 'Callas_Optimizer_Windows_x64.exe' }
 $ApiUrl='https://api.github.com/repos/'+$Repository+'/releases/latest'
 $HomeFolder=Join-Path $env:LOCALAPPDATA 'CallasTeck'
 $LogPath=Join-Path $HomeFolder 'atualizacoes.log'
@@ -41,10 +42,10 @@ function Get-Latest {
     $expected='https://github.com/'+$Repository+'/releases/download/'+$tag+'/'+$AssetName
     if ([string]$asset[0].browser_download_url -cne $expected) { throw 'URL da release inesperada.' }
     if ([string]$asset[0].digest -cnotmatch '^sha256:[0-9a-fA-F]{64}$') { throw 'Release sem digest SHA-256.' }
-    if ([long]$asset[0].size -lt 10000 -or [long]$asset[0].size -gt 100MB) { throw 'Tamanho de executavel inesperado.' }
+    if ([long]$asset[0].size -lt 10000 -or [long]$asset[0].size -gt 250MB) { throw 'Tamanho de executavel inesperado.' }
     return @{Tag=$tag; Version=[version]$tag.Substring(1); Url=$expected; SHA256=([string]$asset[0].digest).Substring(7).ToUpperInvariant(); Size=[long]$asset[0].size}
 }
-function Confirm-WindowsExe([string]$path) {
+function Confirm-WindowsExe([string]$path,[switch]$Installer) {
     $f=[IO.File]::OpenRead($path)
     try {
         if ($f.Length -lt 1024) { throw 'Executavel invalido.' }
@@ -54,7 +55,10 @@ function Confirm-WindowsExe([string]$path) {
         $offset=$r.ReadInt32()
         if ($offset -le 0 -or $offset -ge ($f.Length-24)) { throw 'Cabecalho PE invalido.' }
         $f.Position=$offset
-        if ($r.ReadUInt32() -ne 0x00004550 -or $r.ReadUInt16() -ne 0x8664) { throw 'Arquivo nao e um PE Windows x64.' }
+        if ($r.ReadUInt32() -ne 0x00004550) { throw 'Assinatura PE invalida.' }
+        $machine = $r.ReadUInt16()
+        if ($Installer -and $machine -notin @(0x014c,0x8664)) { throw 'Instalador nao e Windows PE.' }
+        if (-not $Installer -and $machine -ne 0x8664) { throw 'Aplicativo nao e Windows x64.' }
     } finally { $f.Dispose() }
 }
 function Move-Retry([string]$source,[string]$destination) {
@@ -86,7 +90,7 @@ function Download-Verified([hashtable]$latest,[string]$staged) {
     if ($file.Length -ne $latest.Size) { throw 'Tamanho baixado diferente da Release.' }
     $hash=(Get-FileHash -LiteralPath $staged -Algorithm SHA256).Hash.ToUpperInvariant()
     if ($hash -cne $latest.SHA256) { throw 'Falha na validacao SHA-256.' }
-    Confirm-WindowsExe $staged
+    Confirm-WindowsExe $staged -Installer:$Installed
     Log ('Download e validacao PE64/SHA256 concluidos para '+$latest.Tag)
 }
 try {
@@ -108,6 +112,30 @@ try {
     $stageDir=Join-Path $HomeFolder 'updates'
     New-Item -ItemType Directory -Path $stageDir -Force | Out-Null
     $staged=Join-Path $stageDir ([guid]::NewGuid().ToString('N')+'.exe')
+    if ($Installed) {
+        try {
+            if (-not (Test-Path -LiteralPath (Join-Path $targetDir 'installed.marker') -PathType Leaf)) {
+                throw 'Instalacao nao reconhecida pelo Setup.'
+            }
+            Download-Verified $latest $staged
+            Status 'READY'
+            Log ('Setup validado; aguardando fechamento do PID '+$WaitPid)
+            $process=Get-Process -Id $WaitPid -ErrorAction SilentlyContinue
+            if ($process) { Wait-Process -Id $WaitPid -Timeout 60 -ErrorAction Stop }
+            $setup=Start-Process -FilePath $staged -ArgumentList '/SILENT /NORESTART /CLOSEAPPLICATIONS /SUPPRESSMSGBOXES' -Verb RunAs -PassThru -Wait -ErrorAction Stop
+            if ($setup.ExitCode -ne 0) { throw ('Setup devolveu codigo '+$setup.ExitCode) }
+            if (-not (Test-Path -LiteralPath $fullTarget -PathType Leaf)) { throw 'Executavel ausente apos Setup.' }
+            Log ('Setup aplicado: '+$latest.Tag)
+            Start-Process -FilePath $fullTarget -ErrorAction Stop | Out-Null
+            exit 0
+        } catch {
+            Log ('Falha no Setup instalado: '+$_.Exception.Message)
+            try { if (Test-Path -LiteralPath $fullTarget) { Start-Process -FilePath $fullTarget -ErrorAction Stop | Out-Null } } catch {}
+            throw
+        } finally {
+            Remove-Item -LiteralPath $staged -Force -ErrorAction SilentlyContinue
+        }
+    }
     $neighbor=Join-Path $targetDir ('.callas-update-'+[guid]::NewGuid().ToString('N')+'.exe')
     $backup=$fullTarget+'.backup-'+(Get-Date -Format 'yyyyMMdd-HHmmss')
     $originalMoved=$false
