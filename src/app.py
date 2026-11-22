@@ -757,7 +757,8 @@ class MainWindow(QMainWindow):
         self.extra_installer.progress.connect(self.extra_status.setText)
         self.extra_installer.result.connect(
             lambda ok, msg, key=app_id: self.extra_installer_done(ok, msg, key))
-        self.extra_installer.finished.connect(self.extra_installer.deleteLater)
+        # Mantenha o objeto da thread ate a proxima acao.
+        # deleteLater aqui deixaria uma referencia invalida em self.extra_installer.
         self.extra_installer.start()
 
     def extra_installer_done(self, ok: bool, message: str, app_id: str):

@@ -103,7 +103,9 @@ def download_and_open(app_id: str, notify=None) -> str:
     folder = ROOT / app_id
     folder.mkdir(parents=True, exist_ok=True)
     executable = folder / app["filename"]
-    part = folder / (app["filename"] + ".download")
+    # Uma extensao .exe permite a verificacao Authenticode pelo Windows,
+    # inclusive em edicoes Enterprise sem associacao para arquivos .download.
+    part = folder / (Path(app["filename"]).stem + ".parcial.exe")
     notify(f"Baixando {app['name']} do fornecedor oficial...")
     opener = urllib.request.build_opener(_OfficialRedirects(app["hosts"]))
     request = urllib.request.Request(app["url"], headers={"User-Agent": "CallasOptimizer/8.9.7"})
