@@ -54,11 +54,11 @@ class ExtraInstallersTest(unittest.TestCase):
         self.assertEqual(v["hosts"], {"download.virtualbox.org"})
         self.assertEqual(v["filename"], "VirtualBox-Windows-Setup.exe")
         self.assertEqual(WINGET_IDS["virtualbox"], "Oracle.VirtualBox")
-        self.assertIn(r"Oracle\\VirtualBox\\VirtualBox.exe", PROGRAM_PATHS["virtualbox"])
+        self.assertIn(r"Oracle\VirtualBox\VirtualBox.exe", PROGRAM_PATHS["virtualbox"])
         sample = 'VirtualBox-7.2.22-175245-Win.exe'
         url, digest = parse_virtualbox_release(
             "7.2.22", f'<a href="{sample}">{sample}</a>',
-            'a'*64 + ' *' + sample + '\\n')
+            'a'*64 + ' *' + sample + '\n')
         self.assertEqual(url, "https://download.virtualbox.org/virtualbox/7.2.22/" + sample)
         self.assertEqual(digest, "a"*64)
         with self.assertRaises(RuntimeError):
