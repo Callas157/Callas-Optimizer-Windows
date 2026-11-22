@@ -12,6 +12,12 @@
 **[Baixar a versão estável mais recente](https://github.com/Callas157/Callas-Optimizer-Windows/releases/latest)**
 </div>
 
+## v8.9.8 — Confiabilidade dos downloads
+- Ajustada a verificação da assinatura Authenticode do arquivo temporário com extensão executável.
+- Corrigido o ciclo de vida do trabalhador de download para possibilitar instalar vários programas em sequência, sem referência Qt inválida.
+- Canal oficial de atualização e distribuição preservados, com apenas um Setup x64 em Releases.
+- Verificações locais e testes automatizados de segurança; download real e instalação em Windows 11 IoT LTSC ainda precisam de validação no computador do usuário.
+
 ## v8.9.7 — Medal, Logitech G HUB e Spotify
 
 - A Central de aplicativos agora oferece **5 programas**: Brave, NVIDIA App, Medal, Logitech G HUB e Spotify.

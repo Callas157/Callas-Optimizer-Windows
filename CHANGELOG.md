@@ -1,5 +1,13 @@
 # Histórico de versões — Callas Optimizer Windows
 
+## v8.9.8 — Correções dos instaladores extras
+- Verificação digital sobre o executável temporário (.exe), não um arquivo de extensão desconhecida.
+- Thread de download reaproveitável para instalar Medal, Logitech G HUB e Spotify na mesma sessão.
+- Teste de restrição HTTPS e domínios dos fornecedores.
+- Publicação protege contra commits ultrapassados quando novas versões surgem durante o build.
+
+
+
 ## v8.9.7 — Novos instaladores de aplicativos
 - Medal (clipes de jogos), Logitech G HUB e Spotify adicionados à Central de aplicativos.
 - Download direto por HTTPS oficial, assinatura digital do fornecedor obrigatória, sem WinGet.

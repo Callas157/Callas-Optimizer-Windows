@@ -114,6 +114,16 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          # Publica apenas o commit mais recente da main; uma alteracao durante o
+          # build nao deve gerar release intermediaria nem sobrescrever arquivos.
+          if ($env:GITHUB_REF -eq 'refs/heads/main') {
+            $head = gh api "repos/$env:GITHUB_REPOSITORY/branches/main" --jq .commit.sha
+            if ($LASTEXITCODE -ne 0) { throw 'Falha ao consultar branch main' }
+            if ($head.Trim() -ne $env:GITHUB_SHA) {
+              Write-Host 'Build superado por commit mais recente; publicacao cancelada.'
+              exit 0
+            }
+          }
           gh release view $env:RELEASE_TAG *> $null
           if ($LASTEXITCODE -eq 0) {
             # Release existente: preservar o Setup ja publicado, recalcular checksum

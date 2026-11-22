@@ -2,6 +2,9 @@
 import ast
 from pathlib import Path
 import unittest
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+from extra_installers import _safe_https, CATALOG
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -29,3 +32,16 @@ class ExtraInstallersTest(unittest.TestCase):
         version = (ROOT/'VERSION').read_text(encoding='utf-8').strip()
         self.assertIn('APP_VERSION = "' + version + '"',
                       (ROOT/'src/app.py').read_text(encoding='utf-8'))
+
+    def test_official_https_only(self):
+        for app in CATALOG.values():
+            self.assertTrue(_safe_https(app["url"], app["hosts"]))
+            self.assertFalse(_safe_https(app["url"].replace("https://", "http://"), app["hosts"]))
+            self.assertFalse(_safe_https("https://phishing.invalid/" + app["url"], app["hosts"]))
+            self.assertTrue(app["publisher"])
+
+    def test_staging_uses_exe(self):
+        installer = (ROOT / "src/extra_installers.py").read_text(encoding="utf-8")
+        self.assertIn(".parcial.exe", installer)
+        app = (ROOT / "src/app.py").read_text(encoding="utf-8")
+        self.assertNotIn("self.extra_installer.finished.connect(self.extra_installer.deleteLater)", app)
