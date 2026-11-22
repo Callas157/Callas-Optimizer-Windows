@@ -32,11 +32,13 @@ class VirtualBoxTemplatesTest(unittest.TestCase):
 
     @patch.object(v, "get_vboxmanage", return_value=Path("VBoxManage.exe"))
     @patch.object(v, "_verify_guest_profile")
-    @patch.object(v, "_registered_names", return_value=set())
+    @patch.object(v, "_registered_names")
     @patch.object(v.shutil, "disk_usage")
     @patch.object(v, "_run")
     def test_creates_only_two_templates_without_isos(self, command, usage, names, profile, finder):
         usage.return_value.free = 100 * 1024**3
+        # Consulta inicial, primeira VM criada, segunda VM criada.
+        names.side_effect = [set(), {v.VM_NAMES[0]}, set(v.VM_NAMES)]
         with TemporaryDirectory() as folder:
             result = v.create_test_vms(Path(folder), lambda msg: None)
         self.assertIn("VMs novas: 2", result)
@@ -49,7 +51,6 @@ class VirtualBoxTemplatesTest(unittest.TestCase):
         self.assertFalse(any(str(word).lower().endswith(".iso") for c in calls for word in c))
         for call in calls:
             self.assertNotIn("delete", call)
-        self.assertIn("faltam", "faltam")  # sem dependências externas
 
     def test_requires_plenty_of_free_disk_before_creating(self):
         with TemporaryDirectory() as folder, (
