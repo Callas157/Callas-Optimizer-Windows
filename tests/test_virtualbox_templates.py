@@ -42,7 +42,7 @@ class VirtualBoxTemplatesTest(unittest.TestCase):
         with TemporaryDirectory() as folder:
             result = v.create_test_vms(Path(folder), lambda msg: None)
         self.assertIn("VMs novas: 2", result)
-        calls = [tuple(x.args[0][1:]) for x in command.call_args_list]
+        calls = [tuple(x.args[1:]) for x in command.call_args_list]
         self.assertEqual(sum(x[0] == "createvm" for x in calls), 2)
         self.assertEqual(sum(x[0] == "createmedium" for x in calls), 2)
         self.assertEqual(sum(x[0] == "modifynvram" and x[2] == "secureboot" for x in calls), 2)
