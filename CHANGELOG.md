@@ -1,3 +1,10 @@
+## v8.9.22 — Oracle VirtualBox (Windows)
+
+- Incluído o Oracle VirtualBox na Central de aplicativos, sem mudanças nas outras ferramentas.
+- A versão estável é resolvida no domínio oficial da Oracle, com verificação do SHA-256 publicado e assinatura digital Authenticode.
+- Detecção da instalação, botão Abrir, integração com WinGet quando disponível e ícone vetorial como fallback.
+- Interface responsiva e distribuição exclusiva via Callas Optimizer Setup preservadas.
+
 ## v8.9.21 — Ícones de aplicativos e abertura do WinUtil
 
 - Steam, Discord, Epic Games, Medal, Logitech G HUB e Wise usam os ícones distribuídos pelos fabricantes. O Callas usa o executável instalado como fonte sempre que possível.

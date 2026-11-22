@@ -37,13 +37,13 @@ win.goto('clean')
 assert win.stack.currentWidget() is win.pages['clean']
 win.goto('programs')
 assert win.stack.currentWidget() is win.pages['programs']
-assert len(win.all_program_cards) == 11
+assert len(win.all_program_cards) == 12
 assert all(not card is None for card in win.all_program_cards)
 assert win.chatgpt_card in win.all_program_cards
 assert win.codex_card in win.all_program_cards
-for card in (win.discord_card, win.steam_card, win.epic_card, win.wise_card):
+for card in (win.discord_card, win.steam_card, win.epic_card, win.wise_card, win.virtualbox_card):
     assert card in win.all_program_cards
-for key in ("steam", "discord", "epic", "medal", "lghub", "wise"):
+for key in ("steam", "discord", "epic", "medal", "lghub", "wise", "virtualbox"):
     assert (root / "assets" / "icons" / f"{key}.png").is_file()
     assert not win.program_icons[key].pixmap().isNull()
 with patch("app.installed_program", return_value=None):

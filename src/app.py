@@ -30,11 +30,11 @@ from extra_installers import (
     official_website, open_program, powershell_env, powershell_path, program_key, upgrade_program,
 )
 
-APP_VERSION = "8.9.21"
+APP_VERSION = "8.9.22"
 REPO = "Callas157/Callas-Optimizer-Windows"
 PROJECT_URL = f"https://github.com/{REPO}"
 DATA_DIR = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "CallasTeck"
-NATIVE_PROGRAM_ICONS = {"steam", "discord", "epic", "medal", "lghub", "wise"}
+NATIVE_PROGRAM_ICONS = {"steam", "discord", "epic", "medal", "lghub", "wise", "virtualbox"}
 
 # Um id selecionado corresponde a UMA pagina, com conteudo proprio.
 NAV_SECTIONS = [
@@ -1003,10 +1003,13 @@ class MainWindow(QMainWindow):
         self.wise_card = self._program_card(
             "Wise Program Uninstaller", "wise", "Desinstalação de aplicativos", "Instalar",
             lambda: self.install_extra("wise"))
+        self.virtualbox_card = self._program_card(
+            "Oracle VirtualBox", "virtualbox", "Crie e execute máquinas virtuais no Windows", "Instalar",
+            lambda: self.install_extra("virtualbox"))
         self.all_program_cards = [
             self.brave_card, self.nvidia_card, self.discord_card, self.steam_card,
-            self.epic_card, self.wise_card, self.medal_card, self.lghub_card,
-            self.spotify_card, self.chatgpt_card, self.codex_card,
+            self.epic_card, self.wise_card, self.virtualbox_card, self.medal_card,
+            self.lghub_card, self.spotify_card, self.chatgpt_card, self.codex_card,
         ]
         for index, card in enumerate(self.all_program_cards):
             self.program_grid.addWidget(card, index // 2, index % 2)

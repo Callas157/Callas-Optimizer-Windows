@@ -15,6 +15,14 @@
 **[Baixar a versão estável mais recente](https://github.com/Callas157/Callas-Optimizer-Windows/releases/latest)**
 </div>
 
+## v8.9.22 — Oracle VirtualBox na Central de Aplicativos
+
+- Adicionado **Oracle VirtualBox para Windows** como cartão na aba **Programas**, integrado ao layout adaptável e aos botões **Instalar / Abrir / Atualizar**.
+- Download da versão estável diretamente em `download.virtualbox.org`. O Callas consulta o arquivo oficial `LATEST-STABLE.TXT`, identifica o instalador `-Win.exe` e verifica o SHA-256 publicado em `SHA256SUMS`.
+- Antes de executar o instalador, exige assinatura Authenticode válida da Oracle; nenhuma extensão extra, imagem de máquina virtual ou pacote de terceiros é instalado pelo Callas.
+- Instalação é guiada pelo instalador oficial e pode solicitar UAC, instalação de drivers de rede ou reinicialização. A versão instalada é detectada em `Program Files\\Oracle\\VirtualBox`, e atualizações via WinGet funcionam quando disponíveis.
+- Preservados os demais aplicativos, funções, visual da Fênix e **Setup único** nas Releases. Não redistribuímos o VirtualBox dentro do instalador do Callas.
+
 ## v8.9.21 — Ícones de aplicativos e WinUtil
 
 - Steam, Discord, Epic Games, Medal, Logitech G HUB e Wise exibem o ícone do executável instalado. O pacote também traz cópias desses ícones para os cartões de aplicativos ainda não instalados. As marcas pertencem aos respectivos fabricantes.

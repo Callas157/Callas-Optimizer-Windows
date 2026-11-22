@@ -47,3 +47,32 @@ class ExtraInstallersTest(unittest.TestCase):
                         installer.index("_check_setup_exit(_run_setup(executable), app_id)"))
         app = (ROOT / "src/app.py").read_text(encoding="utf-8")
         self.assertNotIn("self.extra_installer.finished.connect(self.extra_installer.deleteLater)", app)
+
+    def test_virtualbox_catalogue_and_integrity(self):
+        from extra_installers import parse_virtualbox_release, WINGET_IDS, PROGRAM_PATHS
+        v = CATALOG["virtualbox"]
+        self.assertEqual(v["hosts"], {"download.virtualbox.org"})
+        self.assertEqual(v["filename"], "VirtualBox-Windows-Setup.exe")
+        self.assertEqual(WINGET_IDS["virtualbox"], "Oracle.VirtualBox")
+        self.assertIn(r"Oracle\\VirtualBox\\VirtualBox.exe", PROGRAM_PATHS["virtualbox"])
+        sample = 'VirtualBox-7.2.22-175245-Win.exe'
+        url, digest = parse_virtualbox_release(
+            "7.2.22", f'<a href="{sample}">{sample}</a>',
+            'a'*64 + ' *' + sample + '\\n')
+        self.assertEqual(url, "https://download.virtualbox.org/virtualbox/7.2.22/" + sample)
+        self.assertEqual(digest, "a"*64)
+        with self.assertRaises(RuntimeError):
+            parse_virtualbox_release("../7.2.22", sample, 'a'*64 + ' *' + sample)
+        with self.assertRaises(RuntimeError):
+            parse_virtualbox_release("7.2.22", sample, 'b'*64 + ' *other.exe')
+        src = (ROOT/"src/extra_installers.py").read_text(encoding="utf-8")
+        self.assertLess(src.index("actual_sha256.lower() != expected_sha256"),
+                        src.index('verify_authenticode(executable, app["publisher"])'))
+        self.assertLess(src.index('verify_authenticode(executable, app["publisher"])'),
+                        src.index('_check_setup_exit(_run_setup(executable), app_id)'))
+
+    def test_virtualbox_gui_card(self):
+        gui = (ROOT/"src/app.py").read_text(encoding="utf-8")
+        self.assertIn('self.virtualbox_card = self._program_card(', gui)
+        self.assertIn('self.install_extra("virtualbox")', gui)
+        self.assertIn('self.virtualbox_card, self.medal_card', gui)

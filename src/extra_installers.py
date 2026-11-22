@@ -62,6 +62,14 @@ CATALOG = {
         "publisher": r"Medal(?: B\.?V\.?|(?:,? Inc\.?))?",
         "filename": "MedalSetup.exe",
     },
+    "virtualbox": {
+        "name": "Oracle VirtualBox",
+        "url": "https://download.virtualbox.org/virtualbox/LATEST-STABLE.TXT",
+        "website": "https://www.virtualbox.org/wiki/Downloads",
+        "hosts": {"download.virtualbox.org"},
+        "publisher": r"Oracle(?: America,? Inc\.?| Corporation| and/or its affiliates)",
+        "filename": "VirtualBox-Windows-Setup.exe",
+    },
     "lghub": {
         "name": "Logitech G HUB",
         "url": "https://download01.logi.com/web/ftp/pub/techsupport/gaming/lghub_installer.exe",
@@ -109,6 +117,7 @@ WINGET_IDS = {
     "brave": "Brave.Brave", "discord": "Discord.Discord", "steam": "Valve.Steam",
     "epic": "EpicGames.EpicGamesLauncher", "wise": "WiseCleaner.WiseProgramUninstaller",
     "lghub": "Logitech.GHUB", "spotify": "Spotify.Spotify",
+    "virtualbox": "Oracle.VirtualBox",
 }
 
 PROGRAM_PATHS = {
@@ -120,6 +129,7 @@ PROGRAM_PATHS = {
     "medal": (r"Medal\current\Medal.exe", r"Medal\Medal.exe",
               r"Programs\Medal\Medal.exe", r"Medal\app-*\Medal.exe"),
     "lghub": (r"LGHUB\lghub.exe",),
+    "virtualbox": (r"Oracle\VirtualBox\VirtualBox.exe",),
     "spotify": (r"Spotify\Spotify.exe",),
     "epic": (r"Epic Games\Launcher\Portal\Binaries\Win64\EpicGamesLauncher.exe",),
     "wise": (r"Wise\Wise Program Uninstaller\WiseProgramUninstaller.exe",),
@@ -379,6 +389,51 @@ def _read_only_installer(path: Path):
         kernel.CloseHandle(handle)
 
 
+def _oracle_text(url: str, max_bytes: int = 64 * 1024) -> str:
+    """Busca somente metadados oficiais da Oracle via HTTPS verificado."""
+    hosts = {"download.virtualbox.org"}
+    if not _safe_https(url, hosts):
+        raise ValueError("Fonte Oracle não autorizada.")
+    opener = official_https_opener(hosts)
+    with opener.open(urllib.request.Request(url, headers={"User-Agent": "CallasOptima"}),
+                     timeout=30) as response:
+        if not _safe_https(response.geturl(), hosts):
+            raise RuntimeError("Redirecionamento inesperado da Oracle.")
+        body = response.read(max_bytes + 1)
+    if len(body) > max_bytes:
+        raise RuntimeError("Metadados Oracle maiores que o esperado.")
+    return body.decode("utf-8", errors="strict")
+
+
+def parse_virtualbox_release(stable_version: str, directory: str, sums: str) -> tuple[str, str]:
+    """Extrai o Windows host EXE e SHA-256 do índice oficial, sem aceitar betas."""
+    version = stable_version.strip()
+    if not re.fullmatch(r"\d+\.\d+\.\d+", version):
+        raise RuntimeError("Número de versão estável do VirtualBox inválido.")
+    candidates = set(re.findall(
+        rf"VirtualBox-{re.escape(version)}-(\d{{5,8}})-Win\.exe", directory,
+    ))
+    if len(candidates) != 1:
+        raise RuntimeError("Não foi localizado um único instalador Windows estável.")
+    filename = f"VirtualBox-{version}-{candidates.pop()}-Win.exe"
+    hashes = re.findall(rf"(?m)^([0-9a-fA-F]{{64}})\s+\*?{re.escape(filename)}\s*$", sums)
+    if len(hashes) != 1:
+        raise RuntimeError("SHA-256 do instalador VirtualBox não encontrado na Oracle.")
+    url = f"https://download.virtualbox.org/virtualbox/{version}/{filename}"
+    return url, hashes[0].lower()
+
+
+def resolve_virtualbox_release() -> tuple[str, str]:
+    """Resolve a última versão estável oficial, com o SHA-256 correspondente."""
+    base = "https://download.virtualbox.org/virtualbox/"
+    version = _oracle_text(base + "LATEST-STABLE.TXT", 64).strip()
+    if not re.fullmatch(r"\d+\.\d+\.\d+", version):
+        raise RuntimeError("A Oracle retornou uma versão estável inválida.")
+    directory = _oracle_text(base + version + "/")
+    sums = _oracle_text(base + version + "/SHA256SUMS")
+    return parse_virtualbox_release(version, directory, sums)
+
+
 def download_and_open(app_id: str, notify) -> None:
     """Executa apenas o instalador oficial verificado e espera a conclusão."""
     if os.name != "nt":
@@ -387,13 +442,24 @@ def download_and_open(app_id: str, notify) -> None:
         raise ValueError("Aplicativo não cadastrado.")
     if app_id == "nvidia":
         _check_nvidia_gpu()
-    app = CATALOG[app_id]
+    app = CATALOG[app_id].copy()
+    expected_sha256 = None
+    if app_id == "virtualbox":
+        notify("Consultando a versão estável oficial da Oracle…", -1)
+        app["url"], expected_sha256 = resolve_virtualbox_release()
     if not _safe_https(app["url"], app["hosts"]):
         raise ValueError("URL de download não autorizada.")
     ROOT.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix=f"{app_id}-", dir=ROOT, ignore_cleanup_errors=True) as folder:
         executable = Path(folder) / app["filename"]
         _download_setup(app, executable, notify)
+        if expected_sha256 is not None:
+            import hashlib
+            notify("Conferindo SHA-256 publicado pela Oracle…", -1)
+            with executable.open("rb") as stream:
+                actual_sha256 = hashlib.file_digest(stream, "sha256").hexdigest()
+            if actual_sha256.lower() != expected_sha256:
+                raise RuntimeError("SHA-256 do VirtualBox diferente do publicado pela Oracle.")
         # Preserva a marca de arquivo obtido da Internet em volumes NTFS.
         with open(f"{executable}:Zone.Identifier", "w", encoding="ascii") as zone:
             zone.write("[ZoneTransfer]\nZoneId=3\n")
