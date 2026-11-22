@@ -1,3 +1,12 @@
+## v8.9.16 — Painel Fênix interativo e responsivo
+
+- **Dashboard real, não apenas imagem:** destaque da Fênix, seis cartões clicáveis (Clean, Boost, Repair, Apps, Drivers e Atualizar), seção de saúde, programas de inicialização, armazenamento, modo jogo e ferramentas rápidas.
+- **Navegação em uma janela:** os cartões levam às páginas existentes no `QStackedWidget`; não criam processos ou janelas paralelas.
+- **Janela adaptável:** painel inicial reorganiza cartões em 1, 2 ou 3 colunas conforme a largura, mantendo o conteúdo acessível com rolagem.
+- **Ações reais e confirmadas:** diagnósticos abrem Reparar; inicialização abre `ms-settings:startupapps`; armazenamento usa capacidade real do disco; modo jogo abre suas ações existentes.
+- **Sem dados inventados:** a arte do README continua sendo uma prévia ilustrativa, não um monitor de CPU ou uma pontuação de saúde.
+- **Compatibilidade preservada:** mesmo AppId, EXE, diretório, atualizador cumulativo, instaladores oficiais e ícone Fênix.
+
 # Histórico de versões — Callas Optimizer Windows
 
 ## v8.9.15 — Arte Fênix aprovada

@@ -30,7 +30,7 @@ from cleaner import clean_folders, empty_recycle_bin, format_size, known_temp_fo
 from windows_actions import ACTIONS, BY_ROUTE, HOME as ACTION_HOME, worker as run_windows_action
 from extra_installers import CATALOG as EXTRA_APPS, download_and_open, official_website
 
-APP_VERSION = "8.9.15"
+APP_VERSION = "8.9.16"
 REPO = "Callas157/Callas-Optimizer-Windows"
 PROJECT_URL = f"https://github.com/{REPO}"
 DATA_DIR = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "CallasTeck"
@@ -88,6 +88,8 @@ QMainWindow, QWidget#MainRoot { background: #07091e; }
 QFrame#Sidebar { background: qlineargradient(x1:0,y1:0,x2:0.4,y2:1,stop:0 #0b0d2c,stop:0.65 #101131,stop:1 #19104a); border-right: 1px solid #4a297b; }
 QFrame#Topbar { background: #0b102a; border-bottom: 1px solid #37265a; }
 QFrame#Card { background: #111b37; border: 1px solid #403a71; border-radius: 15px; }
+QFrame#DashboardPanel { background: qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 #15173b,stop:1 #0c1e3f); border: 1px solid #595197; border-radius: 15px; }
+QLabel#Metric { font-size: 19px; font-weight: 700; color: #f2f9ff; }
 QFrame#QuickCard { background: qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 #27134e,stop:.55 #151c43,stop:1 #07274c); border: 1px solid #7954dc; border-radius: 18px; }
 QFrame#Hero { background: qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 #30135a,stop:.43 #101d4b,stop:1 #052b55); border: 2px solid #8159ff; border-radius: 21px; }
 QLabel#Header { font-size: 25px; font-weight: 700; color: #f8f7ff; }
@@ -483,75 +485,201 @@ class MainWindow(QMainWindow):
             self._legacy_page(route, op, title, description, warning)
 
     def _home_page(self):
-        """Dashboard Fênix: atalhos levam às páginas reais do mesmo QStackedWidget."""
-        col = self._page("home", "Callas Optima", "Seu centro de manutenção, desempenho e renovação do Windows.")
-        hero, box = card_layout("Hero")
+        """Painel Fênix interativo; todos os atalhos usam páginas da mesma janela."""
+        col = self._page(
+            "home", "Callas Optima",
+            "Desempenho e renovação do Windows 11. Escolha o que deseja fazer."
+        )
+
+        hero, hero_box = card_layout("Hero")
+        hero_box.setContentsMargins(27, 20, 23, 20)
         row = QHBoxLayout()
-        content = QVBoxLayout()
-        content.setSpacing(12)
-        content.addWidget(label("FÊNIX EDITION  •  v" + APP_VERSION, "Section"))
-        content.addWidget(label("Seu Windows no controle", "HeroTitle"))
-        content.addWidget(label(
-            "Limpeza, ajustes para jogos, reparos e aplicativos oficiais, "
-            "com cada ferramenta em uma seção da mesma janela."))
-        primary = action_button("EXPLORAR OTIMIZAÇÃO", lambda: self.goto("gamer"), True)
-        content.addWidget(primary)
-        content.addStretch()
-        row.addLayout(content, 3)
-        image = QLabel()
-        image.setPixmap(svg_icon("callas", 210).pixmap(QSize(205, 205)))
-        image.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        row.addWidget(image, 2)
-        box.addLayout(row)
+        text_col = QVBoxLayout()
+        text_col.setSpacing(10)
+        text_col.addWidget(label("FÊNIX EDITION  •  v" + APP_VERSION, "Section"))
+        text_col.addWidget(label("Seu Windows no controle", "HeroTitle"))
+        text_col.addWidget(label(
+            "Limpeza, reparos, aplicativos e ajustes de desempenho no mesmo lugar. "
+            "Cada ação abre sua própria seção, sem fechar esta janela."
+        ))
+        text_col.addWidget(label(
+            "Sem resultados fictícios: diagnósticos e modificações são realizados "
+            "somente quando você os solicita.", "Muted"
+        ))
+        controls = QHBoxLayout()
+        controls.addWidget(action_button(
+            "EXPLORAR OTIMIZAÇÃO", lambda: self.goto("gamer"), True
+        ))
+        controls.addWidget(action_button(
+            "VER DIAGNÓSTICOS", lambda: self.goto("repair")
+        ))
+        controls.addStretch()
+        text_col.addLayout(controls)
+        text_col.addStretch()
+        row.addLayout(text_col, 3)
+        phoenix = QLabel()
+        phoenix.setPixmap(svg_icon("callas", 220).pixmap(QSize(210, 210)))
+        phoenix.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        phoenix.setAccessibleName("Ícone da Fênix Callas Optima")
+        row.addWidget(phoenix, 2)
+        hero_box.addLayout(row)
         col.addWidget(hero)
 
-        col.addWidget(label("ACESSO RÁPIDO", "Section"))
-        tiles = QGridLayout()
-        tiles.setHorizontalSpacing(13)
-        tiles.setVerticalSpacing(13)
+        col.addWidget(label("FERRAMENTAS PRINCIPAIS", "Section"))
+        self.home_quick_grid = QGridLayout()
+        self.home_quick_grid.setSpacing(12)
+        self.home_tiles = []
         shortcuts = [
-            ("✦", "Clean", "Limpeza de arquivos temporários", "clean"),
-            ("↗", "Boost", "Ajustes de desempenho para jogos", "gamer"),
-            ("✚", "Repair", "Reparar arquivos e componentes", "repair"),
-            ("▦", "Apps", "Instaladores e programas oficiais", "programs"),
-            ("▣", "Drivers", "NVIDIA App e ferramentas oficiais", "drivers"),
-            ("↻", "Atualizar", "Versões estáveis do Callas Optima", "updates"),
+            ("Clean", "Limpeza segura de arquivos temporários", "clean"),
+            ("Boost", "Opções de desempenho e jogos", "gamer"),
+            ("Repair", "Diagnóstico e reparo do Windows", "repair"),
+            ("Apps", "Instalar programas oficiais", "programs"),
+            ("Drivers", "NVIDIA App e Windows Update", "drivers"),
+            ("Atualizar", "Verificar versões do Callas Optima", "updates"),
         ]
-        for index, (glyph, title, description, route) in enumerate(shortcuts):
-            tile, layout = card_layout("QuickCard")
-            layout.setContentsMargins(15, 14, 15, 12)
-            head = action_button(glyph + "  " + title + "    ›",
-                                 lambda _=False, target=route: self.goto(target))
-            head.setObjectName("Quick")
-            layout.addWidget(head)
-            layout.addWidget(label(description, "Muted"))
-            tiles.addWidget(tile, index // 3, index % 3)
-        col.addLayout(tiles)
+        for title, description, route in shortcuts:
+            tile, tile_box = card_layout("QuickCard")
+            tile_box.setContentsMargins(15, 15, 15, 15)
+            button = action_button(
+                title + "    ›", lambda _=False, destination=route: self.goto(destination)
+            )
+            button.setIcon(menu_icon(route))
+            button.setIconSize(QSize(25, 25))
+            button.setObjectName("Quick")
+            button.setMinimumHeight(43)
+            tile_box.addWidget(button)
+            tile_box.addWidget(label(description, "Muted"))
+            self.home_tiles.append(tile)
+        col.addLayout(self.home_quick_grid)
 
-        footer = QHBoxLayout()
-        health, h = card_layout()
-        h.addWidget(label("Saúde do sistema", "CardTitle"))
-        h.addWidget(label("Execute os diagnósticos do Windows para verificar a integridade. "
-                          "O Callas não atribui uma nota de saúde sem medição."))
-        h.addWidget(action_button("VER DIAGNÓSTICOS", lambda: self.goto("repair")))
-        footer.addWidget(health, 1)
-        space, sc = card_layout()
-        sc.addWidget(label("Armazenamento", "CardTitle"))
+        col.addWidget(label("SEU PC E ACESSOS RÁPIDOS", "Section"))
+        self.home_detail_grid = QGridLayout()
+        self.home_detail_grid.setSpacing(12)
+        self.home_panels = []
+
+        health, health_box = card_layout("DashboardPanel")
+        health_box.addWidget(label("Saúde do sistema", "CardTitle"))
+        health_box.addWidget(label(
+            "Verifique arquivos do Windows e componentes do sistema usando "
+            "as ferramentas oficiais de diagnóstico.", "Muted"
+        ))
+        health_box.addWidget(label(
+            "A integridade só é confirmada depois que o diagnóstico é executado."
+        ))
+        health_box.addWidget(action_button(
+            "ABRIR DIAGNÓSTICOS", lambda: self.goto("repair"), True
+        ))
+        health_box.addStretch()
+        self.home_panels.append(health)
+
+        startup, startup_box = card_layout("DashboardPanel")
+        startup_box.addWidget(label("Programas de inicialização", "CardTitle"))
+        startup_box.addWidget(label(
+            "Gerencie os aplicativos que iniciam com o Windows na tela oficial "
+            "de Configurações.", "Muted"
+        ))
+        startup_box.addWidget(action_button(
+            "GERENCIAR INICIALIZAÇÃO",
+            lambda: self.open_windows_settings("startupapps")
+        ))
+        self.home_panels.append(startup)
+
+        storage, storage_box = card_layout("DashboardPanel")
+        storage_box.addWidget(label("Armazenamento do sistema", "CardTitle"))
         try:
-            root = Path(os.environ.get("SystemDrive", "C:") + "\\") if os.name == "nt" else Path.home()
-            usage = shutil.disk_usage(root)
-            free = usage.free / (1024**3)
-            total = usage.total / (1024**3)
-            sc.addWidget(label(f"{free:.1f} GB livres de {total:.1f} GB"))
-            progress = QProgressBar()
-            progress.setValue(int(100 * (usage.total - usage.free) / usage.total))
-            sc.addWidget(progress)
+            drive = Path(os.environ.get("SystemDrive", "C:") + "\\") if os.name == "nt" else Path.home()
+            usage = shutil.disk_usage(drive)
+            free_gib = usage.free / (1024 ** 3)
+            total_gib = usage.total / (1024 ** 3)
+            storage_box.addWidget(label(
+                f"{free_gib:.1f} GB livres de {total_gib:.1f} GB", "Metric"
+            ))
+            occupied = int(100 * (usage.total - usage.free) / usage.total)
+            bar = QProgressBar()
+            bar.setValue(occupied)
+            storage_box.addWidget(bar)
         except (OSError, ZeroDivisionError):
-            sc.addWidget(label("Dados indisponíveis neste computador."))
-        sc.addWidget(action_button("ABRIR LIMPEZA", lambda: self.goto("clean")))
-        footer.addWidget(space, 1)
-        col.addLayout(footer)
+            storage_box.addWidget(label("Armazenamento indisponível nesta sessão."))
+        storage_box.addWidget(action_button(
+            "ABRIR LIMPEZA", lambda: self.goto("clean")
+        ))
+        self.home_panels.append(storage)
+
+        gaming, gaming_box = card_layout("DashboardPanel")
+        gaming_box.addWidget(label("Modo Jogo", "CardTitle"))
+        gaming_box.addWidget(label(
+            "Acesse ajustes de energia, jogos e serviços. "
+            "Nenhuma mudança é aplicada sem sua confirmação.", "Muted"
+        ))
+        gaming_box.addWidget(action_button(
+            "AJUSTES PARA JOGOS", lambda: self.goto("gamer"), True
+        ))
+        self.home_panels.append(gaming)
+
+        tools, tools_box = card_layout("DashboardPanel")
+        tools_box.addWidget(label("Ferramentas rápidas", "CardTitle"))
+        tools_box.addWidget(label("Acesse as funções existentes do Callas.", "Muted"))
+        quick_tools = QGridLayout()
+        for position, (title, route) in enumerate((
+            ("Rede e DNS", "network"),
+            ("Privacidade", "privacy"),
+            ("Restauração", "restore_point"),
+            ("Drivers", "drivers"),
+        )):
+            button = action_button(
+                title, lambda _=False, destination=route: self.goto(destination)
+            )
+            quick_tools.addWidget(button, position // 2, position % 2)
+        tools_box.addLayout(quick_tools)
+        self.home_panels.append(tools)
+
+        col.addLayout(self.home_detail_grid)
         col.addStretch()
+        self._refresh_home_layout(force=True)
+
+    def _refresh_home_layout(self, force: bool = False):
+        """Mantém os cartões legíveis em janelas pequenas e monitores maiores."""
+        if not hasattr(self, "home_quick_grid"):
+            return
+        width = self.width()
+        profile = "compact" if width < 1100 else ("wide" if width >= 1500 else "medium")
+        if not force and getattr(self, "_home_profile", None) == profile:
+            return
+        self._home_profile = profile
+        for grid in (self.home_quick_grid, self.home_detail_grid):
+            while grid.count():
+                grid.takeAt(0)
+        quick_columns = 2 if profile == "compact" else 3
+        for index, tile in enumerate(self.home_tiles):
+            self.home_quick_grid.addWidget(
+                tile, index // quick_columns, index % quick_columns
+            )
+        if profile == "compact":
+            for index, panel in enumerate(self.home_panels):
+                self.home_detail_grid.addWidget(panel, index, 0)
+        elif profile == "medium":
+            for index, panel in enumerate(self.home_panels):
+                self.home_detail_grid.addWidget(panel, index // 2, index % 2)
+        else:
+            health, startup, storage, gaming, tools = self.home_panels
+            self.home_detail_grid.addWidget(health, 0, 0, 2, 1)
+            self.home_detail_grid.addWidget(startup, 0, 1)
+            self.home_detail_grid.addWidget(gaming, 0, 2)
+            self.home_detail_grid.addWidget(storage, 1, 1)
+            self.home_detail_grid.addWidget(tools, 1, 2)
+
+    def open_windows_settings(self, page: str):
+        """Abre somente páginas aprovadas do Windows; não altera configurações."""
+        if page not in ("startupapps", "gaming-gamemode"):
+            return
+        if os.name != "nt":
+            QMessageBox.information(self, "Windows", "Disponível apenas no Windows 11.")
+            return
+        try:
+            os.startfile("ms-settings:" + page)
+            self.status_message("Configurações do Windows abertas: " + page)
+        except OSError as exc:
+            QMessageBox.warning(self, "Configurações", str(exc))
 
     def _drivers_page(self):
         col = self._page(
@@ -1108,6 +1236,7 @@ class MainWindow(QMainWindow):
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
+        self._refresh_home_layout()
         if not hasattr(self, "program_grid"):
             return
         # Reorganiza os cards sem posicoes absolutas, conforme a largura visivel.

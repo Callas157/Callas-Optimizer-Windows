@@ -15,6 +15,13 @@
 **[Baixar a versão estável mais recente](https://github.com/Callas157/Callas-Optimizer-Windows/releases/latest)**
 </div>
 
+## v8.9.16 — Dashboard Fênix responsivo e funcional
+
+- **Início interativo:** Clean, Boost, Repair, Apps, Drivers e Atualizar abrem páginas próprias dentro da mesma janela.
+- **Cartões de informações reais:** espaço de disco medido no PC, acesso a diagnósticos oficiais, apps de inicialização e ajustes de jogo. Nenhum percentual fictício de saúde ou otimização.
+- **Layout responsivo:** reorganiza cartões para funcionar também em janelas menores.
+- A imagem acima é a **arte de referência**, e não uma captura de resultados de diagnóstico. A interface em execução usa controles Qt e informações disponíveis no Windows.
+
 ## v8.9.15 — Fênix escolhida e imagem real da interface
 
 - **Ícone da Fênix aprovado:** a imagem selecionada foi adicionada como `assets/icons/phoenix-approved.png` e é usada na janela, no Setup, no menu Iniciar e nos atalhos.

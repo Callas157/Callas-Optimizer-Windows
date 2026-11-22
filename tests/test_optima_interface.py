@@ -17,6 +17,11 @@ class OptimaInterfaceContract(unittest.TestCase):
         self.assertIn('Callas Optima', gui)
         self.assertIn('def _drivers_page(', gui)
         self.assertIn('QStackedWidget()', gui)
+        self.assertIn('def _refresh_home_layout(', gui)
+        self.assertIn('def open_windows_settings(', gui)
+        self.assertIn('startupapps', gui)
+        self.assertIn('Armazenamento do sistema', gui)
+
         for title, route in [('Clean', 'clean'), ('Boost', 'gamer'), ('Repair', 'repair'),
                              ('Apps', 'programs'), ('Drivers', 'drivers'), ('Atualizar', 'updates')]:
             self.assertIn(f'"{title}"', gui)

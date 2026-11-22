@@ -16,6 +16,11 @@ app.processEvents()
 assert win.isVisible()
 assert win.minimumWidth() <= 810
 assert len(win.pages) == 18, len(win.pages)
+assert len(win.home_tiles) == 6
+assert len(win.home_panels) == 5
+assert hasattr(win, "home_detail_grid")
+assert callable(win.open_windows_settings)
+
 # Testar clique real nos cartões da tela inicial sem nova janela.
 win.goto('home')
 quick = win.pages['home'].findChildren(QPushButton)
