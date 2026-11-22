@@ -28,8 +28,9 @@ from PySide6.QtWidgets import (
 
 from cleaner import clean_folders, empty_recycle_bin, format_size, known_temp_folders
 from windows_actions import ACTIONS, BY_ROUTE, HOME as ACTION_HOME, worker as run_windows_action
+from extra_installers import CATALOG as EXTRA_APPS, download_and_open, official_website
 
-APP_VERSION = "8.9.6"
+APP_VERSION = "8.9.7"
 REPO = "Callas157/Callas-Optimizer-Windows"
 PROJECT_URL = f"https://github.com/{REPO}"
 DATA_DIR = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "CallasTeck"
@@ -207,6 +208,22 @@ def confirmar(parent, titulo: str, mensagem: str, padrao_sim: bool = False) -> b
     return caixa.clickedButton() is botao_sim
 
 
+class ExtraInstallerThread(QThread):
+    progress = Signal(str)
+    result = Signal(bool, str)
+
+    def __init__(self, app_id: str):
+        super().__init__()
+        self.app_id = app_id
+
+    def run(self):
+        try:
+            message = download_and_open(self.app_id, self.progress.emit)
+            self.result.emit(True, message)
+        except Exception as exc:
+            self.result.emit(False, str(exc))
+
+
 class CleanerThread(QThread):
     progress = Signal(str)
     complete = Signal(object)
@@ -309,6 +326,7 @@ class MainWindow(QMainWindow):
         self.resize(1200, 815)
         self.settings = QSettings("Callas", "OptimizerWindows")
         self.cleaner: CleanerThread | None = None
+        self.extra_installer: ExtraInstallerThread | None = None
         self.updater_process: subprocess.Popen | None = None
         self.update_mode = ""
         self.update_status = DATA_DIR / ("updater-" + uuid.uuid4().hex + ".status")
@@ -464,7 +482,7 @@ class MainWindow(QMainWindow):
         row = QHBoxLayout()
         for title, desc, target in [
             ("13", "Ferramentas de manutenção", "gamer"),
-            ("2", "Instaladores oficiais", "programs"),
+            ("5", "Instaladores oficiais", "programs"),
             ("GitHub", "Atualizações com confirmação", "updates"),
         ]:
             tile, tcol = card_layout()
@@ -557,9 +575,24 @@ class MainWindow(QMainWindow):
         self.nvidia_card = self._program_card(
             "NVIDIA App", "nvidia", "Instalação oficial; não muda o driver sozinho", "BAIXAR / INSTALAR",
             lambda: self.ps_action("install_nvidia.ps1", "NVIDIA App"))
-        self.program_grid.addWidget(self.brave_card, 0, 0)
-        self.program_grid.addWidget(self.nvidia_card, 0, 1)
+        self.medal_card = self._program_card(
+            "Medal", "medal", "Gravação de clipes e melhores momentos", "BAIXAR INSTALADOR",
+            lambda: self.install_extra("medal"))
+        self.lghub_card = self._program_card(
+            "Logitech G HUB", "lghub", "Configuração de periféricos Logitech G", "BAIXAR INSTALADOR",
+            lambda: self.install_extra("lghub"))
+        self.spotify_card = self._program_card(
+            "Spotify", "spotify", "Aplicativo de música para Windows", "BAIXAR INSTALADOR",
+            lambda: self.install_extra("spotify"))
+        self.all_program_cards = [
+            self.brave_card, self.nvidia_card, self.medal_card,
+            self.lghub_card, self.spotify_card,
+        ]
+        for index, card in enumerate(self.all_program_cards):
+            self.program_grid.addWidget(card, index // 2, index % 2)
         col.addLayout(self.program_grid)
+        self.extra_status = label("Novos instaladores: download oficial, assinatura digital verificada e abertura guiada.")
+        col.addWidget(self.extra_status)
         c, box = card_layout()
         box.addWidget(label("EXTENSÕES DO BRAVE", "Section"))
         box.addWidget(label("SteamDB e Bonjourr podem ser configurados por política local. Isso faz o Brave exibir 'Gerenciado pela organização'."))
@@ -709,6 +742,40 @@ class MainWindow(QMainWindow):
             self.status_message(f"{name}: ferramenta aberta no PowerShell.")
         except Exception as e:
             QMessageBox.critical(self, "Não foi possível iniciar", str(e))
+
+    def install_extra(self, app_id: str):
+        if self.extra_installer and self.extra_installer.isRunning():
+            QMessageBox.information(self, "Download em andamento", "Conclua o download atual antes de iniciar outro.")
+            return
+        name = EXTRA_APPS[app_id]["name"]
+        if not confirmar(self, "Instalador oficial",
+                         f"Baixar o instalador de {name} pelo site oficial?\n"
+                         "A assinatura digital será conferida antes de abrir o arquivo."):
+            return
+        self.extra_status.setText(f"Preparando o download de {name}...")
+        self.extra_installer = ExtraInstallerThread(app_id)
+        self.extra_installer.progress.connect(self.extra_status.setText)
+        self.extra_installer.result.connect(
+            lambda ok, msg, key=app_id: self.extra_installer_done(ok, msg, key))
+        self.extra_installer.finished.connect(self.extra_installer.deleteLater)
+        self.extra_installer.start()
+
+    def extra_installer_done(self, ok: bool, message: str, app_id: str):
+        name = EXTRA_APPS[app_id]["name"]
+        self.extra_status.setText(
+            f"{name}: instalador aberto." if ok else f"{name}: download não concluído.")
+        if ok:
+            QMessageBox.information(self, "Instalador oficial", message)
+        else:
+            caixa = QMessageBox(self)
+            caixa.setWindowTitle("Falha no download")
+            caixa.setText(f"Não foi possível preparar o {name}.\n\n{message}")
+            caixa.setIcon(QMessageBox.Icon.Warning)
+            website = caixa.addButton("Abrir site oficial", QMessageBox.ButtonRole.ActionRole)
+            caixa.addButton("Fechar", QMessageBox.ButtonRole.RejectRole)
+            caixa.exec()
+            if caixa.clickedButton() is website:
+                webbrowser.open(official_website(app_id))
 
     def start_clean(self):
         if self.cleaner and self.cleaner.isRunning():
@@ -902,12 +969,18 @@ class MainWindow(QMainWindow):
         if getattr(self, "_program_stacked", None) == narrow:
             return
         self._program_stacked = narrow
-        self.program_grid.removeWidget(self.brave_card)
-        self.program_grid.removeWidget(self.nvidia_card)
-        self.program_grid.addWidget(self.brave_card, 0, 0)
-        self.program_grid.addWidget(self.nvidia_card, 1 if narrow else 0, 0 if narrow else 1)
+        columns = 1 if narrow else 2
+        for card in self.all_program_cards:
+            self.program_grid.removeWidget(card)
+        for index, card in enumerate(self.all_program_cards):
+            self.program_grid.addWidget(card, index // columns, index % columns)
 
     def closeEvent(self, event):
+        if self.extra_installer and self.extra_installer.isRunning():
+            QMessageBox.information(self, "Download em andamento",
+                                    "Conclua o download do instalador antes de fechar.")
+            event.ignore()
+            return
         if self.cleaner and self.cleaner.isRunning():
             QMessageBox.information(self, "Limpeza em andamento", "Cancele ou conclua a Limpeza Total antes de fechar o aplicativo.")
             event.ignore()

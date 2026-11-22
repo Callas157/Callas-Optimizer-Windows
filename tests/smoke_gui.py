@@ -20,6 +20,8 @@ win.goto('clean')
 assert win.stack.currentWidget() is win.pages['clean']
 win.goto('programs')
 assert win.stack.currentWidget() is win.pages['programs']
+assert len(win.all_program_cards) == 5
+assert all(not card is None for card in win.all_program_cards)
 win.resize(930, 610)
 app.processEvents()
 win.showMaximized()

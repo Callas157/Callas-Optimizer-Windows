@@ -12,6 +12,15 @@
 **[Baixar a versão estável mais recente](https://github.com/Callas157/Callas-Optimizer-Windows/releases/latest)**
 </div>
 
+## v8.9.7 — Medal, Logitech G HUB e Spotify
+
+- A Central de aplicativos agora oferece **5 programas**: Brave, NVIDIA App, Medal, Logitech G HUB e Spotify.
+- Medal, Logitech G HUB e Spotify podem ser baixados diretamente no programa, sem depender do WinGet (inclusive IoT LTSC).
+- Downloads limitados a servidores HTTPS do fornecedor, com validação de executável e **assinatura Authenticode do editor** antes de abrir o instalador original.
+- Se o servidor mudar ou o arquivo não tiver assinatura válida, o Callas não executa o arquivo e oferece o site oficial para baixar manualmente.
+- Cards com ícones vetoriais e reorganização automática ao redimensionar a janela.
+- Mantido o Setup como único executável publicado em Releases; Windows 11 x64 é o alvo de suporte.
+
 ## v8.9.6 — Manutenção em Python e correção do carregamento
 
 - Motor de manutenção migrado para **Python/PySide6**, com ações individuais nas 13 funções. Não executa mais o BAT antigo.

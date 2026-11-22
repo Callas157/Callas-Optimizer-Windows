@@ -1,5 +1,12 @@
 # Histórico de versões — Callas Optimizer Windows
 
+## v8.9.7 — Novos instaladores de aplicativos
+- Medal (clipes de jogos), Logitech G HUB e Spotify adicionados à Central de aplicativos.
+- Download direto por HTTPS oficial, assinatura digital do fornecedor obrigatória, sem WinGet.
+- Ícones vetoriais para os novos programas, layout adaptativo e fallback para sites oficiais.
+- Apenas instalador Setup no GitHub Releases, com verificação de SHA-256 e mecanismo de atualização preservado.
+
+
 ## v8.9.6 — Manutenção em Python e correção do carregamento
 
 - Motor de manutenção migrado para **Python/PySide6**, com ações individuais nas 13 funções. Não executa mais o BAT antigo.
