@@ -25,12 +25,11 @@ class VirtualBoxTemplatesTest(unittest.TestCase):
         ))
 
     @patch.object(v, "get_vboxmanage", return_value=Path("VBoxManage.exe"))
-    @patch.object(v, "_verify_guest_profile")
     @patch.object(v, "_registered_names", return_value=set(v.VM_NAMES))
     @patch.object(v, "_vm_state", return_value="poweroff")
     @patch.object(v, "_verify_guest_profile")
     @patch.object(v, "_run")
-    def test_update_existing_without_touching_disks(self, commands, profile, states, names):
+    def test_update_existing_without_touching_disks(self, commands, profile, states, names, finder):
         with TemporaryDirectory() as folder:
             result = v.create_test_vms(Path(folder), lambda msg: None)
         self.assertIn("Existentes atualizadas: 2", result)
@@ -41,11 +40,12 @@ class VirtualBoxTemplatesTest(unittest.TestCase):
             self.assertNotIn("unregistervm", call.args)
             self.assertNotIn("createmedium", call.args)
 
+    @patch.object(v, "get_vboxmanage", return_value=Path("VBoxManage.exe"))
     @patch.object(v, "_registered_names", return_value=set(v.VM_NAMES))
     @patch.object(v, "_vm_state", return_value="running")
     @patch.object(v, "_verify_guest_profile")
     @patch.object(v, "_run")
-    def test_running_vm_is_never_modified(self, commands, profile, states, names):
+    def test_running_vm_is_never_modified(self, commands, profile, states, names, finder):
         with TemporaryDirectory() as folder:
             result = v.create_test_vms(Path(folder), lambda msg: None)
         self.assertIn("Não alteradas (ligadas/suspensas): 2", result)
@@ -62,7 +62,7 @@ class VirtualBoxTemplatesTest(unittest.TestCase):
         names.side_effect = [set(), {v.VM_NAMES[0]}, set(v.VM_NAMES)]
         with TemporaryDirectory() as folder:
             result = v.create_test_vms(Path(folder), lambda msg: None)
-        self.assertIn("VMs novas: 2", result)
+        self.assertIn("Novas: 2", result)
         calls = [tuple(x.args[1:]) for x in command.call_args_list]
         self.assertEqual(sum(x[0] == "createvm" for x in calls), 2)
         self.assertEqual(sum(x[0] == "createmedium" for x in calls), 2)
