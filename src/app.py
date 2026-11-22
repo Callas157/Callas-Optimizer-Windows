@@ -30,7 +30,7 @@ from cleaner import clean_folders, empty_recycle_bin, format_size, known_temp_fo
 from windows_actions import ACTIONS, BY_ROUTE, HOME as ACTION_HOME, worker as run_windows_action
 from extra_installers import CATALOG as EXTRA_APPS, download_and_open, official_website
 
-APP_VERSION = "8.9.10"
+APP_VERSION = "8.9.11"
 REPO = "Callas157/Callas-Optimizer-Windows"
 PROJECT_URL = f"https://github.com/{REPO}"
 DATA_DIR = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "CallasTeck"
@@ -39,19 +39,19 @@ DATA_DIR = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "CallasTeck"
 NAV_SECTIONS = [
     ("VISÃO GERAL", [("home", "Início", "⌂"), ("programs", "Programas", "▦")]),
     ("MANUTENÇÃO", [
-        ("gamer", "1  Modo Gamer", "⚡"),
-        ("edge", "2  Microsoft Edge", "◇"),
-        ("windows_update", "3  Windows Update", "↻"),
-        ("network", "4  Rede e DNS", "◎"),
-        ("privacy", "5  Privacidade", "◉"),
-        ("repair", "6  Reparar Windows", "✚"),
-        ("clean", "7  Limpeza Total", "♻"),
-        ("classic", "8  Menu clássico", "▤"),
-        ("shutdown", "9  Desligamento", "⏻"),
-        ("winutil", "10  WinUtil", "▣"),
-        ("updates", "11  Atualizações", "↓"),
-        ("restore_point", "12  Ponto de restauração", "✦"),
-        ("restore", "13  Restaurar padrões", "↩"),
+        ("gamer", "Modo Gamer", "⚡"),
+        ("edge", "Microsoft Edge", "◇"),
+        ("windows_update", "Windows Update", "↻"),
+        ("network", "Rede e DNS", "◎"),
+        ("privacy", "Privacidade", "◉"),
+        ("repair", "Reparar Windows", "✚"),
+        ("clean", "Limpeza Total", "♻"),
+        ("classic", "Menu clássico", "▤"),
+        ("shutdown", "Desligamento", "⏻"),
+        ("winutil", "WinUtil", "▣"),
+        ("updates", "Atualizações", "↓"),
+        ("restore_point", "Ponto de restauração", "✦"),
+        ("restore", "Restaurar padrões", "↩"),
     ]),
     ("CENTRAL", [("logs", "Registros", "≡"), ("about", "Sobre", "ⓘ")]),
 ]

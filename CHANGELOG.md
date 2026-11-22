@@ -1,5 +1,12 @@
 # Histórico de versões — Callas Optimizer Windows
 
+## v8.9.11 — Menu sem números
+- Removidos os números de todos os 13 itens da navegação, mantendo nomes e ícones.
+- Preservadas rotas, funcionalidades e agrupamento Início / Programas / Manutenção / Central.
+- Teste automático confirma que nenhum item aparece com prefixo numérico.
+
+
+
 ## v8.9.10 — Validação de identidade antes de solicitar UAC
 - Verifica nome e metadados de produto do Setup validado antes da elevação.
 - Mantém nome legível no arquivo baixado, com diagnóstico no log e checagem no Windows Actions.

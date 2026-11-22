@@ -56,8 +56,18 @@ class UpdateContract(unittest.TestCase):
     def test_maintains_13_menu_routes(self):
         for num in (1,2,3,4,5,6,8,9,10,12,13):
             self.assertRegex(APP, rf'\({num},\s*"')
-        self.assertIn('("clean", "7  Limpeza Total"', APP)
-        self.assertIn('("updates", "11  Atualizações"', APP)
+        nav = APP.split("NAV_SECTIONS = [", 1)[1].split("LEGACY = {", 1)[0]
+        for route, title in (
+            ("gamer", "Modo Gamer"), ("edge", "Microsoft Edge"),
+            ("windows_update", "Windows Update"), ("network", "Rede e DNS"),
+            ("privacy", "Privacidade"), ("repair", "Reparar Windows"),
+            ("clean", "Limpeza Total"), ("classic", "Menu clássico"),
+            ("shutdown", "Desligamento"), ("winutil", "WinUtil"),
+            ("updates", "Atualizações"), ("restore_point", "Ponto de restauração"),
+            ("restore", "Restaurar padrões"),
+        ):
+            self.assertIn(f'("{route}", "{title}"', nav)
+        self.assertNotRegex(nav, r'\("[^"]+",\s*"[0-9]+\s')
     def test_source_assets_present(self):
         for p in ('assets/icons/brave.svg', 'assets/icons/nvidia.svg', 'assets/icons/callas.svg',
                   'src/windows_actions.py', 'src/updater.ps1',

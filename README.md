@@ -12,6 +12,13 @@
 **[Baixar a versão estável mais recente](https://github.com/Callas157/Callas-Optimizer-Windows/releases/latest)**
 </div>
 
+## v8.9.11 — Navegação sem numeração
+
+- Os 13 itens de manutenção agora mostram **apenas os nomes e seus ícones**, sem os números herdados do antigo script BAT.
+- A ordem permanece **Início → Programas → Manutenção → Central**.
+- As rotas internas e as ações em Python foram preservadas. Nenhuma opção foi removida ou renumerada.
+- Teste automatizado impede que números voltem aos rótulos do menu.
+
 ## v8.9.10 — Verificação da identificação do Setup
 
 - O atualizador instalado verifica **o nome `Callas Optimizer.exe` e os metadados do instalador** após validar o SHA-256 e antes de abrir o UAC.
