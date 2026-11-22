@@ -53,11 +53,10 @@ class VirtualBoxTemplatesTest(unittest.TestCase):
             self.assertNotIn("delete", call)
 
     def test_requires_plenty_of_free_disk_before_creating(self):
-        with TemporaryDirectory() as folder, (
-            patch.object(v, "get_vboxmanage", return_value=Path("VBoxManage.exe")),
-            patch.object(v.shutil, "disk_usage") as usage,
-            patch.object(v, "_run") as cmd,
-        ):
+        with TemporaryDirectory() as folder, \
+             patch.object(v, "get_vboxmanage", return_value=Path("VBoxManage.exe")), \
+             patch.object(v.shutil, "disk_usage") as usage, \
+             patch.object(v, "_run") as cmd:
             usage.return_value.free = 5 * 1024**3
             with self.assertRaisesRegex(RuntimeError, "menos de 40 GB"):
                 v.create_test_vms(Path(folder), lambda msg: None)
