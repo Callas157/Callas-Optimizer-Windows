@@ -38,7 +38,7 @@ assert win.stack.currentWidget() is win.pages['clean']
 win.goto('programs')
 assert win.stack.currentWidget() is win.pages['programs']
 assert len(win.all_program_cards) == 12
-assert win.vm_template_button.text() == "PREPARAR 2 VMS PARA TESTES"
+assert win.vm_template_button.text() == "PREPARAR / AJUSTAR 2 VMS"
 assert callable(win.prepare_virtualbox_templates)
 assert all(not card is None for card in win.all_program_cards)
 assert win.chatgpt_card in win.all_program_cards

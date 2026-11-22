@@ -31,7 +31,7 @@ from extra_installers import (
 )
 from virtualbox_templates import create_test_vms, VM_NAMES, get_vboxmanage
 
-APP_VERSION = "8.9.23"
+APP_VERSION = "8.9.24"
 REPO = "Callas157/Callas-Optimizer-Windows"
 PROJECT_URL = f"https://github.com/{REPO}"
 DATA_DIR = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "CallasTeck"
@@ -1037,12 +1037,14 @@ class MainWindow(QMainWindow):
         lab.addWidget(label(
             "Prepare duas máquinas independentes para testar o Callas: "
             "Windows 11 Pro e Windows 11 IoT Enterprise LTSC. "
-            "Cada VM terá 6 GB de RAM, 2 CPUs, disco dinâmico de 80 GB, "
+            "Cada VM terá 6 GB de RAM, 5 vCPUs, disco dinâmico de 80 GB, "
             "UEFI, Secure Boot, TPM 2.0 e rede NAT. "
+            "Os links podem ser copiados do PC para a VM após instalar Guest Additions. "
+            "Arrastar arquivos permanece desativado. "
             "Você escolhe a pasta e adiciona as ISOs posteriormente."
         ))
         self.vm_template_button = action_button(
-            "PREPARAR 2 VMS PARA TESTES", self.prepare_virtualbox_templates, True)
+            "PREPARAR / AJUSTAR 2 VMS", self.prepare_virtualbox_templates, True)
         lab.addWidget(self.vm_template_button, alignment=Qt.AlignmentFlag.AlignLeft)
         self.vm_template_progress = QProgressBar()
         self.vm_template_progress.setRange(0, 0)
@@ -1308,10 +1310,13 @@ class MainWindow(QMainWindow):
         info = (
             "Criar as seguintes máquinas no VirtualBox?\n\n"
             + "\n".join("• " + name for name in VM_NAMES)
-            + "\n\nCada máquina: 6 GB RAM, 2 CPUs, VDI dinâmico até 80 GB, "
+            + "\n\nCada máquina: 6 GB RAM, 5 vCPUs, VDI dinâmico até 80 GB, "
             "UEFI / TPM 2.0 / Secure Boot.\n"
+            "Texto/links: copiar do PC para a VM (requer Guest Additions).\n"
+            "Arrastar arquivos e transferir arquivos pelo clipboard: DESATIVADO.\n"
             "O Windows NÃO será instalado e nenhuma ISO será baixada.\n"
-            "VMs existentes não serão apagadas nem sobrescritas.\n\n"
+            "VMs Callas existentes e desligadas terão só CPU e compartilhamento ajustados.\n"
+            "Máquinas em execução não serão alteradas. Discos e dados preservados.\n\n"
             "Destino: " + folder
         )
         if not confirmar(self, "Preparar laboratório Windows 11", info):

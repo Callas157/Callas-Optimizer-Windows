@@ -1,3 +1,11 @@
+## v8.9.24 — 5 vCPUs e compartilhamento seguro de links
+
+- VMs de Windows 11 Pro e IoT Enterprise LTSC recebem 5 vCPUs, com RAM 6 GB e disco de 80 GB preservados.
+- Clipboard só host → guest; transferência de arquivos por clipboard e drag-and-drop desativados.
+- Botão também ajusta VMs Callas existentes desligadas, alterando apenas CPU e clipboard sem apagar discos.
+- VMs em execução ou suspensas são preservadas; Guest Additions necessário para colar links no Windows convidado.
+- Testes de CPU, flags de compartilhamento, migração e proteção de máquinas ligadas.
+
 ## v8.9.23 — Preparação opcional de VMs Windows 11
 
 - Laboratório VirtualBox na aba Programas, com criação confirmada de duas máquinas de teste, Pro e IoT Enterprise LTSC.

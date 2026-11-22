@@ -15,6 +15,16 @@
 **[Baixar a versão estável mais recente](https://github.com/Callas157/Callas-Optimizer-Windows/releases/latest)**
 </div>
 
+## v8.9.24 — VMs com 5 vCPUs e clipboard protegido
+
+- As duas VMs de Windows 11 agora usam **5 vCPUs**, mantendo 6 GB de RAM e disco VDI dinâmico de 80 GB.
+- Links e texto podem ser **copiados do PC principal para a VM** (`hosttoguest`). Arrastar e soltar fica desativado, assim como transferência de arquivos pela área de transferência. Nenhuma pasta compartilhada é criada pelo Callas.
+- Para funcionar após instalar o Windows na VM, instale **Oracle VirtualBox Guest Additions** dentro do sistema convidado (menu Dispositivos → Inserir imagem de CD dos Adicionais para Convidado). Não transfere sessão, cookies ou login do GitHub; somente links públicos abrem sem autenticação.
+- O botão **Preparar / ajustar 2 VMs** também muda apenas CPU e acesso ao clipboard das VMs Callas já cadastradas **quando totalmente desligadas**, sem recriar VMs nem modificar discos, RAM, NAT ou ISOs. VMs ligadas/suspensas são ignoradas.
+- Arquivos compartilhados configurados manualmente em VMs antigas não são removidos; verifique-os antes de testar programas suspeitos.
+- Clipboard unidirecional reduz exposição, mas não é isolamento absoluto. Evite copiar senhas do PC principal quando a VM estiver executando código potencialmente malicioso.
+- Interface Fênix, instalador e demais aplicativos permanecem sem alteração.
+
 ## v8.9.23 — Duas VMs de testes no VirtualBox
 
 - Na Central de Aplicativos, o botão **Preparar 2 VMs para testes** é opcional e só funciona depois de instalar o VirtualBox.
