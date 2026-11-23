@@ -14,7 +14,7 @@ param(
 $ErrorActionPreference='Stop'
 $ProgressPreference='SilentlyContinue'
 $Repository='Callas157/Callas-Optimizer-Windows'
-$AssetName = if ($Installed) { 'Callas_Optimizer_Setup_x64.exe' } else { 'Callas_Optimizer_Windows_x64.exe' }
+$AssetName = if ($Check -or $Installed) { 'Callas_Optimizer_Setup_x64.exe' } else { 'Callas_Optimizer_Windows_x64.exe' }
 $ApiUrl='https://api.github.com/repos/'+$Repository+'/releases/latest'
 $HomeFolder=Join-Path $env:LOCALAPPDATA 'CallasTeck'
 $LogPath=Join-Path $HomeFolder 'atualizacoes.log'
@@ -153,7 +153,7 @@ try {
             Status 'READY'
             Log ('Setup validado; aguardando fechamento do PID '+$WaitPid)
             $process=Get-Process -Id $WaitPid -ErrorAction SilentlyContinue
-            if ($process) { Wait-Process -Id $WaitPid -Timeout 60 -ErrorAction Stop }
+            if ($process) { Wait-Process -InputObject $process -Timeout 60 -ErrorAction Stop }
             Log ('Abrindo UAC do instalador: '+(Split-Path -Path $staged -Leaf))
             $guard = [IO.File]::Open($staged, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
             try {
@@ -190,7 +190,7 @@ try {
         $ready=$true
         Log ('Arquivo pronto; aguardando fechamento do PID '+$WaitPid)
         $process=Get-Process -Id $WaitPid -ErrorAction SilentlyContinue
-        if ($process) { Wait-Process -Id $WaitPid -Timeout 45 -ErrorAction Stop }
+        if ($process) { Wait-Process -InputObject $process -Timeout 45 -ErrorAction Stop }
         Start-Sleep -Milliseconds 250
         Move-Retry $fullTarget $backup
         $originalMoved=$true

@@ -1,12 +1,17 @@
 """Contratos estruturais de atualizacao; nao substituem teste Windows real."""
 from pathlib import Path
 import ast
+import os
 import re
+import shutil
+import subprocess
+import tempfile
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 APP = (ROOT / 'src/app.py').read_text(encoding='utf-8')
 UPDATER = (ROOT / 'src/updater.ps1').read_text(encoding='utf-8')
+POWERSHELL = shutil.which('powershell') or shutil.which('pwsh')
 
 class UpdateContract(unittest.TestCase):
     def test_python_gui_parses(self):
@@ -67,9 +72,45 @@ class UpdateContract(unittest.TestCase):
         self.assertIn('0x8664', UPDATER)
         self.assertIn("$Repository='Callas157/Callas-Optimizer-Windows'", UPDATER)
         self.assertNotIn('Callas157/arch-install', UPDATER)
+
+    @unittest.skipUnless(POWERSHELL, 'PowerShell indisponível')
+    def test_check_without_install_marker_recognizes_setup_only_release(self):
+        with tempfile.TemporaryDirectory() as folder:
+            status = Path(folder) / 'updater.status'
+            env = {**os.environ, 'LOCALAPPDATA': folder,
+                   'CALLAS_TEST_STATUS': str(status),
+                   'CALLAS_TEST_UPDATER': str(ROOT / 'src/updater.ps1')}
+            script = """
+function Invoke-RestMethod($Uri, $Headers, $TimeoutSec) {
+    return @{
+        tag_name = 'v8.9.25'
+        draft = $false
+        prerelease = $false
+        assets = @(@{
+            name = 'Callas_Optimizer_Setup_x64.exe'
+            state = 'uploaded'
+            browser_download_url = 'https://github.com/Callas157/Callas-Optimizer-Windows/releases/download/v8.9.25/Callas_Optimizer_Setup_x64.exe'
+            digest = 'sha256:' + ('a' * 64)
+            size = 29489517
+        })
+    }
+}
+& $env:CALLAS_TEST_UPDATER -Check -CurrentVersion 8.9.24 -StatusFile $env:CALLAS_TEST_STATUS
+exit $LASTEXITCODE
+"""
+            result = subprocess.run(
+                [POWERSHELL, '-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
+                 '-Command', script],
+                env=env, capture_output=True, text=True, timeout=30,
+            )
+            self.assertEqual(status.read_text(encoding='ascii'), 'AVAILABLE|v8.9.25')
+            self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_update_prepares_before_exit(self):
+        wait_for_captured_process = 'Wait-Process -InputObject $process'
+        self.assertEqual(UPDATER.count(wait_for_captured_process), 2)
         self.assertLess(UPDATER.index('Download-Verified $latest $staged'), UPDATER.index("Status 'READY'"))
-        self.assertLess(UPDATER.index("Status 'READY'"), UPDATER.index('Wait-Process -Id $WaitPid'))
+        self.assertLess(UPDATER.index("Status 'READY'"), UPDATER.index(wait_for_captured_process))
         self.assertIn('QApplication.quit()', APP)
     def test_maintains_13_menu_routes(self):
         for num in (1,2,3,4,5,6,8,9,10,12,13):

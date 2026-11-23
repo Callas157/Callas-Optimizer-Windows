@@ -1,0 +1,80 @@
+name: Validar correções no Windows
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          architecture: x64
+          cache: pip
+          cache-dependency-path: requirements-build.txt
+      - name: Verificar versão e executar testes
+        shell: pwsh
+        run: |
+          python -m pip install -r requirements-build.txt
+          python scripts/check_version.py ('v' + (Get-Content VERSION -Raw).Trim())
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python -m unittest discover -s tests -v
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python tests/smoke_gui.py
+      - name: Compilar aplicativo e instalador
+        shell: pwsh
+        run: |
+          python scripts/build.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { choco install innosetup --no-progress -y }
+          $env:CALLAS_VERSION = (Get-Content VERSION -Raw).Trim()
+          & $iscc 'installer/CallasOptimizer.iss'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python scripts/verify_build.py
+      - name: Examinar o disco do runner pelo executor administrativo
+        shell: pwsh
+        run: |
+          @'
+          import json
+          from pathlib import Path
+          import sys
+          import time
+          from uuid import uuid4
+
+          sys.path.insert(0, str(Path("src").resolve()))
+          from windows_actions import ElevatedAction, HOME, admin
+
+          assert admin(), "O runner precisa ter o token administrativo para executar o teste."
+          app = Path("dist/Callas_Optimizer_Windows_x64/Callas_Optimizer_Windows_x64.exe").resolve()
+          report = HOME / f"acao-{uuid4().hex}.json"
+          args = ["--callas-task", "repair_disk", "--callas-report", report.name, "--callas-profile", str(HOME)]
+          process = ElevatedAction(app, args)
+          while (code := process.poll()) is None:
+              time.sleep(1)
+          assert report.is_file(), f"Sem relatório do CHKDSK. Código do processo: {code}"
+          result = json.loads(report.read_text(encoding="utf-8"))
+          report.unlink()
+          print(result["message"])
+          assert code == 0 and result["ok"], "O aplicativo não concluiu o exame do disco."
+          '@ | python -
+      - name: Testar atualização real do Setup 8.9.3
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: ./scripts/test_direct_upgrade.ps1 -CurrentSetup (Resolve-Path 'dist/Callas_Optimizer_Setup_x64.exe').Path
+      - name: Disponibilizar Setup de teste
+        uses: actions/upload-artifact@v4
+        with:
+          name: Callas-Optimizer-Setup-Windows-x64
+          path: |
+            dist/Callas_Optimizer_Setup_x64.exe
+            dist/SHA256SUMS.txt
+          if-no-files-found: error

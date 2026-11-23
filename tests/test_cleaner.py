@@ -9,10 +9,91 @@ from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'src'))
-from cleaner import clean_folders, clear_icon_cache, empty_recycle_bin, format_size, nvidia_dxcache_folders
+from cleaner import (
+    clean_folders, clear_icon_cache, empty_recycle_bin, format_size, known_temp_folders,
+    nvidia_dxcache_folders,
+)
 
 
 class CleanerTests(unittest.TestCase):
+    def test_cleans_tmp_folder_explicitly_configured_for_the_process(self):
+        with tempfile.TemporaryDirectory() as parent:
+            root = Path(parent).resolve() / "Tmp"
+            root.mkdir()
+            target = root / "disposable.tmp"
+            target.write_bytes(b"data")
+            with patch.dict("cleaner.os.environ", {"TEMP": str(root), "LOCALAPPDATA": ""}):
+                with patch("cleaner.tempfile.gettempdir", return_value=str(root)):
+                    selection = known_temp_folders()
+                    stats = clean_folders(selection, threading.Event())
+            self.assertEqual(selection, [root])
+            self.assertEqual(stats.files, 1)
+            self.assertFalse(target.exists())
+
+    def test_process_temp_does_not_advertise_an_arbitrary_folder_for_cleanup(self):
+        with tempfile.TemporaryDirectory() as parent:
+            root = Path(parent).resolve() / "Documents"
+            root.mkdir()
+            with patch.dict("cleaner.os.environ", {"TEMP": str(root), "LOCALAPPDATA": ""}):
+                with patch("cleaner.tempfile.gettempdir", return_value=str(root)):
+                    self.assertEqual(known_temp_folders(), [])
+
+    def test_does_not_discover_current_directory_when_tempfile_falls_back_to_it(self):
+        with patch.dict("cleaner.os.environ", {"LOCALAPPDATA": "", "TEMP": "", "TMP": "", "TMPDIR": ""}):
+            with patch("cleaner.tempfile.gettempdir", return_value=str(Path.cwd())):
+                self.assertEqual(known_temp_folders(), [])
+
+    def test_windows_temp_requires_explicit_selection_even_if_it_is_the_process_temp(self):
+        with tempfile.TemporaryDirectory() as parent:
+            fixture = Path(parent).resolve()
+            system_root = fixture / "Windows"
+            system_temp = system_root / "Temp"
+            local = fixture / "Local"
+            user_temp = local / "Temp"
+            system_temp.mkdir(parents=True)
+            user_temp.mkdir(parents=True)
+            with patch("cleaner.os") as windows:
+                windows.name = "nt"
+                windows.environ = {"SystemRoot": str(system_root), "LOCALAPPDATA": str(local)}
+                with patch("cleaner.tempfile.gettempdir", return_value=str(system_temp)):
+                    self.assertEqual(known_temp_folders(), [user_temp])
+                    self.assertCountEqual(known_temp_folders(include_windows=True), [user_temp, system_temp])
+
+    def test_does_not_discover_temp_through_a_linked_ancestor(self):
+        with tempfile.TemporaryDirectory() as parent:
+            fixture = Path(parent).resolve()
+            actual = fixture / "outside"
+            (actual / "Temp").mkdir(parents=True)
+            alias = fixture / "linked"
+            try:
+                alias.symlink_to(actual, target_is_directory=True)
+            except OSError as exc:
+                if getattr(exc, "winerror", None) == 1314:
+                    self.skipTest("Criação de links simbólicos exige privilégio neste Windows")
+                raise
+            with patch.dict("cleaner.os.environ", {"LOCALAPPDATA": ""}):
+                with patch("cleaner.tempfile.gettempdir", return_value=str(alias / "Temp")):
+                    self.assertEqual(known_temp_folders(), [])
+
+    def test_cleaning_does_not_follow_a_linked_ancestor(self):
+        with tempfile.TemporaryDirectory() as parent:
+            fixture = Path(parent).resolve()
+            actual = fixture / "outside"
+            temp = actual / "Temp"
+            temp.mkdir(parents=True)
+            target = temp / "keep.txt"
+            target.write_text("keep")
+            alias = fixture / "linked"
+            try:
+                alias.symlink_to(actual, target_is_directory=True)
+            except OSError as exc:
+                if getattr(exc, "winerror", None) == 1314:
+                    self.skipTest("Criação de links simbólicos exige privilégio neste Windows")
+                raise
+            stats = clean_folders([alias / "Temp"], threading.Event())
+            self.assertEqual(stats.files, 0)
+            self.assertTrue(target.exists())
+
     def test_icon_cache_removes_only_icon_databases(self):
         with tempfile.TemporaryDirectory() as profile:
             local = Path(profile) / "Local"
@@ -90,6 +171,25 @@ class CleanerTests(unittest.TestCase):
             stats = clean_folders([root], cancellation)
             self.assertTrue(stats.cancelled)
             self.assertTrue((root / 'foo').exists())
+
+    def test_cancel_on_last_file_preserves_its_directory(self):
+        with tempfile.TemporaryDirectory() as parent:
+            root = Path(parent).resolve() / "Temp"
+            nested = root / "nested"
+            nested.mkdir(parents=True)
+            for index in range(35):
+                (nested / f"{index}.tmp").write_bytes(b"data")
+            cancellation = threading.Event()
+
+            def cancel_after_progress(message: str):
+                if message.startswith("35 arquivos removidos"):
+                    cancellation.set()
+
+            stats = clean_folders([root], cancellation, cancel_after_progress)
+            self.assertTrue(stats.cancelled)
+            self.assertEqual(stats.files, 35)
+            self.assertTrue(nested.is_dir())
+
     def test_size_format(self):
         self.assertEqual(format_size(1024), '1.0 KB')
 

@@ -12,6 +12,7 @@ import re
 import shutil
 import subprocess
 from collections.abc import Callable
+from uuid import uuid4
 
 from extra_installers import installed_program
 
@@ -86,10 +87,17 @@ def _verify_guest_profile(vboxmanage: Path) -> None:
         raise RuntimeError("Esta versão do VirtualBox não reconhece Windows 11 x64; atualize-o.")
 
 
-def _rollback_new_vm(vboxmanage: Path, name: str) -> str:
+def _rollback_new_vm(vboxmanage: Path, vm_id: str, disk: Path, disk_output: str) -> str:
     # Só chamado para máquina que acabamos de criar nesta execução.
     try:
-        _run(vboxmanage, "unregistervm", name, "--delete")
+        _run(vboxmanage, "unregistervm", vm_id, "--delete")
+        # O unregistervm remove apenas discos anexados à VM.
+        if disk.exists():
+            match = re.search(r"[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}", disk_output)
+            if not match:
+                raise RuntimeError(f"O UUID do disco não foi confirmado: {disk}")
+            _run(vboxmanage, "closemedium", "disk", match.group(), "--delete")
+            disk.parent.rmdir()
         return "A VM incompleta criada nesta operação foi revertida."
     except Exception as exc:
         return "Não foi possível reverter a VM incompleta: " + str(exc)
@@ -129,32 +137,36 @@ def create_test_vms(base_folder: Path, notify: Callable[[str], None]) -> str:
                 f"Já existe a pasta '{vm_dir}'. O Callas não sobrescreve arquivos de VMs."
             )
         notify(f"Criando {name} (6 GB RAM, 5 vCPUs, VDI dinâmico de 80 GB)…")
+        vm_id = str(uuid4())
+        disk = vm_dir / f"{name}.vdi"
+        disk_output = ""
         registered = False
         try:
-            _run(vbox, "createvm", "--name", name,
-                 "--platform-architecture=x86", "--ostype", "Windows11_64",
+            _run(vbox, "createvm", "--name", name, "--uuid", vm_id,
+                 "--ostype", "Windows11_64",
                  "--basefolder", str(base), "--register")
             registered = True
-            _run(vbox, "modifyvm", name,
+            _run(vbox, "modifyvm", vm_id,
                  "--memory", str(RAM_MB), "--cpus", str(CPUS),
                  "--vram", str(VRAM_MB), "--firmware", "efi",
                  "--tpm-type", "2.0", "--graphicscontroller", "vboxsvga",
                  "--ioapic", "on", "--nic1", "nat",
                  "--boot1", "dvd", "--boot2", "disk", *VM_ACCESS_FLAGS)
             # UEFI Secure Boot configurado apenas na nova VM; nunca reinicializa NVRAM existente.
-            _run(vbox, "modifynvram", name, "inituefivarstore")
-            _run(vbox, "modifynvram", name, "enrollmssignatures")
-            _run(vbox, "modifynvram", name, "enrollorclpk")
-            _run(vbox, "modifynvram", name, "secureboot", "--enable")
+            _run(vbox, "modifynvram", vm_id, "inituefivarstore")
+            _run(vbox, "modifynvram", vm_id, "enrollmssignatures")
+            _run(vbox, "modifynvram", vm_id, "enrollorclpk")
+            _run(vbox, "modifynvram", vm_id, "secureboot", "--enable")
             controller = "SATA Controller"
-            _run(vbox, "storagectl", name, "--name", controller,
+            _run(vbox, "storagectl", vm_id, "--name", controller,
                  "--add", "sata", "--controller", "IntelAhci", "--portcount", "2")
-            disk = vm_dir / f"{name}.vdi"
-            _run(vbox, "createmedium", "disk", "--filename", str(disk),
-                 "--size", str(DISK_MB), "--format", "VDI", "--variant", "Standard", timeout=300)
-            _run(vbox, "storageattach", name, "--storagectl", controller,
+            disk_output = _run(
+                vbox, "createmedium", "disk", "--filename", str(disk),
+                "--size", str(DISK_MB), "--format", "VDI", "--variant", "Standard", timeout=300,
+            )
+            _run(vbox, "storageattach", vm_id, "--storagectl", controller,
                  "--port", "0", "--device", "0", "--type", "hdd", "--medium", str(disk))
-            _run(vbox, "storageattach", name, "--storagectl", controller,
+            _run(vbox, "storageattach", vm_id, "--storagectl", controller,
                  "--port", "1", "--device", "0", "--type", "dvddrive", "--medium", "emptydrive")
             # Confere se a VM ficou registrada (não basta um comando ter retornado 0).
             if name not in _registered_names(vbox):
@@ -162,7 +174,7 @@ def create_test_vms(base_folder: Path, notify: Callable[[str], None]) -> str:
             created.append(name)
             notify(f"Preparada: {name}. Falta anexar a ISO do Windows.")
         except Exception as exc:
-            suffix = _rollback_new_vm(vbox, name) if registered else (
+            suffix = _rollback_new_vm(vbox, vm_id, disk, disk_output) if registered else (
                 "Nenhuma VM existente foi alterada."
             )
             raise RuntimeError(f"Falha ao preparar {name}: {exc}\n{suffix}") from exc

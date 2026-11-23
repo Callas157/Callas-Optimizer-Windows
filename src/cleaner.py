@@ -35,59 +35,76 @@ def format_size(n: int) -> str:
     return "0 B"
 
 
-def known_temp_folders(include_windows: bool = False) -> list[Path]:
-    """Usa exclusivamente diretorios de temp fornecidos pelo Windows.
-
-    Ignora caminhos relativos, UNC, simbolicos e raizes de unidade.
-    """
-    roots = [Path(tempfile.gettempdir()), Path(os.environ.get("LOCALAPPDATA", "")) / "Temp"]
-    if include_windows and os.name == "nt":
-        roots.append(Path(os.environ.get("SystemRoot", r"C:\Windows")) / "Temp")
-    result: list[Path] = []
-    for p in roots:
-        if not p.is_absolute() or p.anchor.startswith("\\\\"):
-            continue
-        if p.name.lower() != "temp" and p != Path(tempfile.gettempdir()):
-            continue
-        if p.parent == p or len(p.parts) < 2:
-            continue
-        try:
-            if not is_plain_directory(p):
-                continue
-            resolved = p.resolve(strict=True)
-        except OSError:
-            continue
-        if resolved not in result:
-            result.append(resolved)
-    return result
-
-
 def is_plain_directory(path: Path) -> bool:
     info = path.stat(follow_symlinks=False)
-    return stat.S_ISDIR(info.st_mode) and not getattr(info, "st_file_attributes", 0) & 0x400
+    attributes = getattr(info, "st_file_attributes", 0)
+    return stat.S_ISDIR(info.st_mode) and not attributes & stat.FILE_ATTRIBUTE_REPARSE_POINT
+
+
+def _plain_local_directory(path: Path) -> bool:
+    if not path.is_absolute() or path.anchor.startswith("\\\\") or path.parent == path:
+        return False
+    try:
+        return all(is_plain_directory(folder) for folder in (*reversed(path.parents), path))
+    except OSError:
+        return False
+
+
+def windows_temp_folder() -> Path | None:
+    if os.name != "nt":
+        return None
+    path = Path(os.environ.get("SystemRoot", r"C:\Windows")) / "Temp"
+    return path if _plain_local_directory(path) else None
+
+
+def _process_temp_folder() -> Path | None:
+    try:
+        path = Path(tempfile.gettempdir())
+        if path == Path.cwd():
+            return None
+    except OSError:
+        return None
+    if path.name.lower() == "temp":
+        return path
+    # Fora do Windows, nao oferece o /tmp compartilhado como padrao.
+    if path.name.lower() == "tmp" and (
+        os.name == "nt" or any(path == Path(os.environ.get(key, "")) for key in ("TMPDIR", "TEMP", "TMP"))
+    ):
+        return path
+    return None
+
+
+def known_temp_folders(include_windows: bool = False) -> list[Path]:
+    """Localiza pastas Temp/Tmp locais sem atravessar links ou junctions."""
+    system = windows_temp_folder()
+    local = Path(os.environ.get("LOCALAPPDATA", "")) / "Temp"
+    result: list[Path] = []
+    for path in (_process_temp_folder(), local):
+        if path is None or not _plain_local_directory(path):
+            continue
+        try:
+            if system is not None and path.samefile(system):
+                continue
+            if not any(path.samefile(folder) for folder in result):
+                result.append(path)
+        except OSError:
+            continue
+    if include_windows and system is not None:
+        result.append(system)
+    return result
 
 
 def nvidia_dxcache_folders() -> list[Path]:
     local = Path(os.environ.get("LOCALAPPDATA", ""))
     if not local.is_absolute() or local.anchor.startswith("\\\\"):
         return []
+    low = local.parent / "LocalLow" / "NVIDIA"
     paths = (
-        (local.parent, (local.name, "NVIDIA", "DXCache")),
-        (local.parent, ("LocalLow", "NVIDIA", "DXCache")),
-        (local.parent, ("LocalLow", "NVIDIA", "PerDriverVersion", "DXCache")),
+        local / "NVIDIA" / "DXCache",
+        low / "DXCache",
+        low / "PerDriverVersion" / "DXCache",
     )
-    result = []
-    for folder, parts in paths:
-        try:
-            for part in parts:
-                folder /= part
-                if not is_plain_directory(folder):
-                    break
-            else:
-                result.append(folder)
-        except OSError:
-            continue
-    return result
+    return [path for path in paths if _plain_local_directory(path)]
 
 
 def clean_folders(
@@ -106,7 +123,6 @@ def clean_folders(
 
     def visit(folder: Path) -> None:
         if cancelled.is_set():
-            stats.cancelled = True
             return
         try:
             if not is_plain_directory(folder):
@@ -119,16 +135,17 @@ def clean_folders(
             return
         for entry in children:
             if cancelled.is_set():
-                stats.cancelled = True
                 return
             try:
                 # Links e reparse points jamais sao percorridos nem apagados.
                 attrs = entry.stat(follow_symlinks=False)
-                if entry.is_symlink() or (getattr(attrs, "st_file_attributes", 0) & 0x400):
+                if entry.is_symlink() or getattr(attrs, "st_file_attributes", 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT:
                     stats.skipped += 1
                     continue
                 if entry.is_dir(follow_symlinks=False):
                     visit(Path(entry.path))
+                    if cancelled.is_set():
+                        return
                     try:
                         os.rmdir(entry.path)
                         stats.folders += 1
@@ -146,21 +163,27 @@ def clean_folders(
             except OSError:
                 stats.skipped += 1
 
-    dxcache = set(nvidia_dxcache_folders()) if any(p.name.lower() == "dxcache" for p in roots) else set()
+    approved = set()
+    if any(path.name.lower() == "tmp" for path in roots):
+        approved.update(known_temp_folders())
+    if any(path.name.lower() == "dxcache" for path in roots):
+        approved.update(nvidia_dxcache_folders())
     for root in roots:
         if cancelled.is_set():
-            stats.cancelled = True
             break
-        # Evita exclusao por raiz trocada/symlink.
-        if (not root.is_absolute() or root.anchor.startswith("\\\\") or
-                (root.name.lower() != "temp" and root not in dxcache)):
+        if root.name.lower() != "temp" and root not in approved:
             stats.skipped += 1
             continue
         before = stats.files, stats.folders, stats.skipped
         emit(f"Limpando: {root}")
-        visit(root)
+        # Revalida a raiz e seus ancestrais antes de percorrer o conteudo.
+        if _plain_local_directory(root):
+            visit(root)
+        else:
+            stats.skipped += 1
         emit(f"{root}: {stats.files - before[0]} arquivo(s) e {stats.folders - before[1]} "
              f"pasta(s) vazia(s) removidos, {stats.skipped - before[2]} item(ns) ignorado(s).")
+    stats.cancelled = cancelled.is_set()
     return stats
 
 
@@ -212,7 +235,7 @@ def refresh_shell_icons() -> None:
 def clear_icon_cache() -> tuple[int, int]:
     """Remove somente bancos de ícones do perfil atual e notifica o Explorer."""
     local = Path(os.environ.get("LOCALAPPDATA", ""))
-    if not local.is_absolute() or local.anchor.startswith("\\\\") or not is_plain_directory(local):
+    if not _plain_local_directory(local):
         raise OSError("A pasta de cache do usuário não está disponível.")
     candidates = [local / "IconCache.db"]
     explorer = local
@@ -230,7 +253,7 @@ def clear_icon_cache() -> tuple[int, int]:
     for candidate in candidates:
         try:
             info = candidate.stat(follow_symlinks=False)
-            if not stat.S_ISREG(info.st_mode) or getattr(info, "st_file_attributes", 0) & 0x400:
+            if not stat.S_ISREG(info.st_mode) or getattr(info, "st_file_attributes", 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT:
                 skipped += 1
                 continue
             candidate.unlink()

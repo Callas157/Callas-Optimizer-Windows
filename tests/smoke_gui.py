@@ -4,10 +4,12 @@ import sys
 import tempfile
 import time
 from pathlib import Path
-from unittest.mock import patch
+from types import SimpleNamespace
+from unittest.mock import Mock, patch
 root = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(root / 'src'))
 os.environ['QT_QPA_PLATFORM'] = 'offscreen'
+os.environ['CALLAS_SMOKE'] = '1'
 from PySide6.QtWidgets import QApplication, QPushButton
 from app import MainWindow, STYLE
 
@@ -123,3 +125,54 @@ app.processEvents()
 assert win.isMaximized(), 'Nao maximizou'
 win.close()
 print('Navegacao, redimensionamento, maximizar e icones Qt: OK')
+
+# As falhas dos trabalhadores e os conflitos com o atualizador devem aparecer
+# na interface sem executar ações do Windows no computador do teste.
+worker = MainWindow()
+with tempfile.TemporaryDirectory() as directory:
+    local = Path(directory).resolve()
+    with patch('app.ACTION_HOME', local), patch('app.os', SimpleNamespace(name='nt')), \
+            patch('app.confirmar', return_value=True), patch('app.ElevatedAction') as elevate, \
+            patch('app.QMessageBox.warning') as warning:
+        elevate.return_value.poll.side_effect = [None, 7]
+        worker.native_action('repair_disk')
+        worker.poll_native_action()
+        warning.assert_not_called()
+        worker.poll_native_action()
+        assert worker.native_timer is None
+        assert '7' in warning.call_args.args[-1]
+
+    worker.update_mode = 'install'
+    worker.update_timer = Mock()
+    worker.update_status = local / 'check.status'
+    worker.update_status.write_text('CURRENT', encoding='ascii')
+    worker.updater_process = Mock()
+    worker.updater_process.poll.return_value = 0
+    with patch('app.QMessageBox.warning') as warning:
+        worker.poll_update()
+        warning.assert_not_called()
+    assert worker.update_mode == ''
+    assert worker.update_note.text() == 'Você está na versão mais recente.'
+
+worker.vm_template_thread = Mock()
+worker.vm_template_thread.isRunning.return_value = True
+with patch('app.QMessageBox.information') as info:
+    worker.install_update()
+    info.assert_not_called()
+assert 'tarefa em andamento' in worker.update_note.text()
+worker.vm_template_thread = None
+worker.update_mode = 'install'
+with patch('app.get_vboxmanage') as get_vbox:
+    worker.prepare_virtualbox_templates()
+    get_vbox.assert_not_called()
+worker.update_mode = ''
+def confirm_while_update_starts(*args):
+    worker.update_mode = 'install'
+    return True
+
+with patch('app.confirmar', side_effect=confirm_while_update_starts), patch('app.CleanerThread') as start:
+    worker.start_clean()
+    start.assert_not_called()
+worker.update_mode = ''
+worker.close()
+print('Execução e relato de tarefas, convivência com a atualização: OK')
