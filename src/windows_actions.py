@@ -6,19 +6,24 @@ netsh, PowerShell, Registro) são executados sem shell=True.
 from __future__ import annotations
 import base64
 import ctypes
+from ctypes import wintypes
 import hashlib
 import json
 import os
 from pathlib import Path
 import re
 import subprocess
+import sys
 import time
 import urllib.request
 import webbrowser
-import winreg
+
+if sys.platform == "win32":
+    import msvcrt
+    import winreg
 
 from extra_installers import (
-    _system_program, official_https_opener, powershell_env, powershell_path,
+    _ShellExecuteInfo, _system_program, official_https_opener, powershell_env, powershell_path,
     verify_authenticode, winget_path,
 )
 
@@ -35,13 +40,6 @@ DATA_COLLECTION = r"SOFTWARE\Policies\Microsoft\Windows\DataCollection"
 CLASSIC_MENU = r"Software\Classes\CLSID\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}\InprocServer32"
 GAME_SERVICES = ("SysMain", "WSearch")
 UPDATE_SERVICES = ("wuauserv", "BITS", "DoSvc", "UsoSvc")
-REGISTRY_SETTINGS = {
-    ("CU", GAME_BAR, "AutoGameModeEnabled"): winreg.REG_DWORD,
-    ("LM", WINDOWS_UPDATE, "NoAutoUpdate"): winreg.REG_DWORD,
-    ("LM", WINDOWS_UPDATE, "AUOptions"): winreg.REG_DWORD,
-    ("LM", DATA_COLLECTION, "AllowTelemetry"): winreg.REG_DWORD,
-    ("CU", CLASSIC_MENU, ""): winreg.REG_SZ,
-}
 
 # (id, rota, título, descrição, administrador, alerta)
 ROWS = [
@@ -59,7 +57,7 @@ ROWS = [
  ("wu_pause","windows_update","Desativar atualização automática","Altera política, sem alterar serviços.",True,"Reduz a proteção de segurança."),
  ("wu_services_off","windows_update","Suspender serviços de atualização","Salva o modo de inicialização.",True,"Pode impedir Store e atualizações."),
  ("wu_restore","windows_update","Restaurar Windows Update","Recupera políticas e serviços.",True,""),
- ("flush_dns","network","Limpar cache DNS","Executa ipconfig /flushdns.",False,""),
+ ("flush_dns","network","Limpar cache DNS","Executa ipconfig /flushdns.",True,""),
  ("reset_winsock","network","Redefinir Winsock","Redefine rede, pode exigir reinício.",True,"A rede pode cair."),
  ("dns_cloudflare","network","DNS Cloudflare","Aplica 1.1.1.1 e 1.0.0.1 nas interfaces ativas.",True,""),
  ("dns_auto","network","Restaurar DNS automático","Restabelece DNS fornecido pela rede.",True,""),
@@ -79,7 +77,7 @@ ROWS = [
  ("restore_point","restore_point","Criar ponto de restauração","Usa ferramenta oficial Windows.",True,""),
  ("restore_reg","restore","Restaurar ajustes do Registro","Usa apenas backups feitos pela central.",True,""),
  ("restore_services","restore","Restaurar serviços","Recupera modos de inicialização guardados.",True,""),
- ("restore_all","restore","Restaurar ajustes salvos","Registro, serviços e energia (quando salvos).",True,"")
+ ("restore_all","restore","Restaurar ajustes salvos","Registro, serviços, energia e hibernação (quando salvos).",True,"")
 ]
 ACTIONS = {r[0]: {"id":r[0],"route":r[1],"name":r[2],"description":r[3],"admin":r[4],"warning":r[5]} for r in ROWS}
 BY_ROUTE = {route:[ACTIONS[r[0]] for r in ROWS if r[1]==route] for route in {r[1] for r in ROWS}}
@@ -89,27 +87,102 @@ def admin():
     return os.name=="nt" and bool(ctypes.windll.shell32.IsUserAnAdmin())
 
 
-def cmd(*argv, optional=False, env=None):
+class ElevatedAction:
+    """Inicia o trabalhador com UAC e permite consultar sua saída sem bloquear a interface."""
+
+    def __init__(self, executable, args):
+        info = _ShellExecuteInfo()
+        info.cbSize = ctypes.sizeof(info)
+        info.fMask = 0x40 | 0x100 | 0x400  # NOCLOSEPROCESS | NOASYNC | FLAG_NO_UI
+        info.lpVerb = "runas"
+        info.lpFile = str(executable)
+        info.lpParameters = subprocess.list2cmdline(args)
+        info.lpDirectory = str(Path(executable).parent)
+        info.nShow = 1
+        shell = ctypes.WinDLL("shell32", use_last_error=True)
+        kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+        ole = ctypes.WinDLL("ole32")
+        shell.ShellExecuteExW.argtypes = [ctypes.POINTER(_ShellExecuteInfo)]
+        self.wait = kernel.WaitForSingleObject
+        self.wait.argtypes = [wintypes.HANDLE, wintypes.DWORD]
+        self.wait.restype = wintypes.DWORD
+        self.exit_code = kernel.GetExitCodeProcess
+        self.exit_code.argtypes = [wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD)]
+        self.close_handle = kernel.CloseHandle
+        self.close_handle.argtypes = [wintypes.HANDLE]
+        initialized = ole.CoInitializeEx(None, 0x2) in (0, 1)
+        try:
+            if not shell.ShellExecuteExW(ctypes.byref(info)):
+                raise ctypes.WinError(ctypes.get_last_error())
+            if not info.hProcess:
+                raise RuntimeError("O Windows não retornou o processo da ferramenta.")
+            self.handle = info.hProcess
+        finally:
+            if initialized:
+                ole.CoUninitialize()
+
+    def poll(self):
+        state = self.wait(self.handle, 0)
+        if state == 258:  # WAIT_TIMEOUT: o processo continua em execução.
+            return None
+        try:
+            if state != 0:
+                raise ctypes.WinError(ctypes.get_last_error())
+            code = wintypes.DWORD()
+            if not self.exit_code(self.handle, ctypes.byref(code)):
+                raise ctypes.WinError(ctypes.get_last_error())
+            return code.value
+        finally:
+            self.close_handle(self.handle)
+
+
+def _decode_output(data, encoding):
+    if data.startswith((b"\xff\xfe", b"\xfe\xff")):
+        encoding = "utf-16"
+    elif data and len(data) % 2 == 0 and b"\0" in data[1::2]:
+        # O SFC pode escrever UTF-16LE sem marca de ordem dos bytes.
+        encoding = "utf-16le"
+    return data.decode(encoding, errors="replace").replace("\r\n", "\n")
+
+
+def cmd(*argv, optional=False, env=None, timeout=1800, success_codes=(0,), encoding=None):
     if os.name!="nt": raise OSError("Ação exclusiva do Windows.")
     if not Path(argv[0]).is_absolute():
         argv = (str(_system_program(argv[0])), *argv[1:])
-    proc=subprocess.run(argv,shell=False,capture_output=True,text=True,errors="replace",env=env,
-                        timeout=1800,creationflags=getattr(subprocess,"CREATE_NO_WINDOW",0))
-    output=(proc.stdout+"\n"+proc.stderr).strip()
-    if proc.returncode and not optional:
+    proc = subprocess.run(argv, shell=False, capture_output=True, stdin=subprocess.DEVNULL, env=env,
+                          timeout=timeout, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    encoding = encoding or ("oem" if sys.platform == "win32" else "utf-8")
+    output = "\n".join(_decode_output(part, encoding) for part in (proc.stdout, proc.stderr)).strip()
+    if proc.returncode not in success_codes and not optional:
         raise RuntimeError(f"{argv[0]} retornou {proc.returncode}.\n{output[-900:]}")
     return output or f"Concluído (código {proc.returncode})."
 
 
 def ps(source):
-    encoded=base64.b64encode(source.encode("utf-16le")).decode("ascii")
+    script = (
+        "[Console]::OutputEncoding = [Text.UTF8Encoding]::new($false); "
+        "$ErrorActionPreference = 'Stop'; $ProgressPreference = 'SilentlyContinue'; "
+        "try { & { " + source + " } } catch { [Console]::Error.WriteLine($_.Exception.Message); exit 1 }"
+    )
+    encoded=base64.b64encode(script.encode("utf-16le")).decode("ascii")
     return cmd(str(powershell_path()),"-NoLogo","-NoProfile","-NonInteractive","-EncodedCommand",encoded,
-               env=powershell_env())
+               env=powershell_env(), encoding="utf-8")
 
 
 def load():
-    try: return json.loads(BACKUP.read_text(encoding="utf-8"))
-    except (OSError,ValueError): return {"reg":{},"svc":{},"power":None,"hiber":False}
+    defaults = {"reg": {}, "svc": {}, "power": None, "hiber": False}
+    try:
+        data = json.loads(BACKUP.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return defaults
+    except (OSError, ValueError) as exc:
+        raise RuntimeError(f"Não foi possível ler o backup de manutenção: {BACKUP}") from exc
+    if not isinstance(data, dict):
+        raise RuntimeError(f"Formato inválido no backup de manutenção: {BACKUP}")
+    data = {**defaults, **data}
+    if not isinstance(data["reg"], dict) or not isinstance(data["svc"], dict):
+        raise RuntimeError(f"Formato inválido no backup de manutenção: {BACKUP}")
+    return data
 
 
 def save(data):
@@ -119,7 +192,9 @@ def save(data):
     os.replace(tmp,BACKUP)
 
 
-def setreg(hive,path,name,value,kind=winreg.REG_DWORD):
+def setreg(hive,path,name,value,kind=None):
+    if kind is None:
+        kind = winreg.REG_DWORD
     root=winreg.HKEY_CURRENT_USER if hive=="CU" else winreg.HKEY_LOCAL_MACHINE
     st=load()
     keyid="|".join((hive,path,name))
@@ -138,6 +213,13 @@ def setreg(hive,path,name,value,kind=winreg.REG_DWORD):
 
 
 def restore_reg(prefix=""):
+    registry_settings = {
+        ("CU", GAME_BAR, "AutoGameModeEnabled"): winreg.REG_DWORD,
+        ("LM", WINDOWS_UPDATE, "NoAutoUpdate"): winreg.REG_DWORD,
+        ("LM", WINDOWS_UPDATE, "AUOptions"): winreg.REG_DWORD,
+        ("LM", DATA_COLLECTION, "AllowTelemetry"): winreg.REG_DWORD,
+        ("CU", CLASSIC_MENU, ""): winreg.REG_SZ,
+    }
     st=load();n=0
     for keyid,old in list(st["reg"].items()):
         if prefix and not keyid.startswith(prefix): continue
@@ -146,7 +228,7 @@ def restore_reg(prefix=""):
         location = old.get("hive"), old.get("path"), old.get("name")
         if any(not isinstance(part, str) for part in location):
             continue
-        kind = REGISTRY_SETTINGS.get(location)
+        kind = registry_settings.get(location)
         found = old.get("found")
         if kind is None or keyid != "|".join(location) or type(found) is not bool:
             continue
@@ -167,7 +249,8 @@ def restore_reg(prefix=""):
                 except FileNotFoundError:pass
             del st["reg"][keyid];save(st);n+=1
         except OSError:pass
-    return f"Registro: {n} restaurados; {len(st['reg'])} pendentes."
+    pending = sum(not prefix or keyid.startswith(prefix) for keyid in st["reg"])
+    return f"Registro: {n} restaurados. Pendentes: {pending}."
 
 
 def services(names,disable):
@@ -175,21 +258,33 @@ def services(names,disable):
     for name in names:
         if name not in (*GAME_SERVICES, *UPDATE_SERVICES):
             continue
-        try:
-            with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE,
-                    r"SYSTEM\CurrentControlSet\Services"+"\\"+name) as key:
-                startup,_=winreg.QueryValueEx(key,"Start")
-        except FileNotFoundError:continue
         if disable:
             if name not in st["svc"]:
-                st["svc"][name]=startup;save(st)
+                try:
+                    with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE,
+                                        rf"SYSTEM\CurrentControlSet\Services\{name}") as key:
+                        startup, _ = winreg.QueryValueEx(key, "Start")
+                        delayed = False
+                        if startup == 2:
+                            try:
+                                delayed = winreg.QueryValueEx(key, "DelayedAutoStart")[0] == 1
+                            except FileNotFoundError:
+                                pass
+                except FileNotFoundError:
+                    continue
+                st["svc"][name] = {"start": startup, "delayed": delayed}
+                save(st)
             cmd("sc.exe","stop",name,optional=True)
             cmd("sc.exe","config",name,"start=","disabled")
             changed.append(name)
         elif name in st["svc"]:
-            startup = st["svc"][name]
+            snapshot = st["svc"][name]
+            startup = snapshot.get("start") if isinstance(snapshot, dict) else snapshot
+            delayed = isinstance(snapshot, dict) and snapshot.get("delayed") is True
             mode = {2:"auto",3:"demand",4:"disabled"}.get(startup) if type(startup) is int else None
             if not mode:continue
+            if mode == "auto" and delayed:
+                mode = "delayed-auto"
             cmd("sc.exe","config",name,"start=",mode)
             del st["svc"][name];save(st);changed.append(name)
     return "Serviços modificados: "+(", ".join(changed) or "nenhum")
@@ -211,10 +306,23 @@ def energy(enable):
 
 
 def hibernate(enable):
-    st=load()
-    if enable and not st["hiber"]:return "A central não havia desativado hibernação."
-    r=cmd("powercfg.exe","/hibernate","on" if enable else "off")
-    st["hiber"]=not enable;save(st);return r
+    st = load()
+    if type(st["hiber"]) is not bool:
+        raise ValueError("O estado de hibernação salvo é inválido.")
+    if enable and not st["hiber"]:
+        return "A central não havia desativado a hibernação."
+    if not enable and not st["hiber"]:
+        with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"SYSTEM\CurrentControlSet\Control\Power") as key:
+            enabled, _ = winreg.QueryValueEx(key, "HibernateEnabled")
+        if not enabled:
+            return "A hibernação já estava desativada."
+        st["hiber"] = True
+        save(st)
+    result = cmd("powercfg.exe", "/hibernate", "on" if enable else "off")
+    if enable:
+        st["hiber"] = False
+        save(st)
+    return result
 
 
 def edge(uninstall):
@@ -270,6 +378,41 @@ def shutdown(minutes):
     return cmd("shutdown.exe","/s","/t",str(minutes*60))
 
 
+def repair_disk():
+    volume = os.environ.get("SystemDrive", "").strip().rstrip("\\/")
+    if not re.fullmatch(r"[A-Za-z]:", volume):
+        raise RuntimeError("Não foi possível identificar o volume em que o Windows está instalado.")
+    return cmd("chkdsk.exe", volume, "/scan", timeout=None, success_codes=(0, 1, 2))
+
+
+def repair_image():
+    return cmd("dism.exe", "/Online", "/Cleanup-Image", "/RestoreHealth", "/NoRestart",
+               timeout=None, success_codes=(0, 3010))
+
+
+def restore_all():
+    results = []
+    failures = []
+    for operation in (restore_reg, lambda: services(tuple(load()["svc"]), False),
+                      lambda: energy(False), lambda: hibernate(True)):
+        try:
+            results.append(operation())
+        except (OSError, ValueError, RuntimeError) as exc:
+            failures.append(str(exc))
+    if failures:
+        raise RuntimeError("\n".join(results + failures))
+    return "\n".join(results)
+
+
+def log_action(action_id, result):
+    try:
+        HOME.mkdir(exist_ok=True, parents=True)
+        with LOG.open("a", encoding="utf-8") as f:
+            f.write(time.strftime("[%Y-%m-%d %H:%M:%S] ") + action_id + " " + result[-2000:] + "\n")
+    except OSError:
+        pass
+
+
 def execute(action_id):
     if action_id not in ACTIONS:raise ValueError("Ação inexistente.")
     if os.name!="nt":raise OSError("Requer Windows.")
@@ -295,31 +438,44 @@ def execute(action_id):
         "dns_auto":lambda:ps("$a=Get-NetAdapter | Where-Object {$_.Status -eq 'Up'}; if(!$a){throw 'Sem adaptador ativo'}; $a | ForEach-Object {Set-DnsClientServerAddress -InterfaceIndex $_.ifIndex -ResetServerAddresses -ErrorAction Stop}"),
         "telemetry_reduce":lambda:setreg("LM",dc,"AllowTelemetry",0),
         "telemetry_restore":lambda:restore_reg("LM|"+dc),
-        "repair_dism":lambda:cmd("dism.exe","/Online","/Cleanup-Image","/RestoreHealth"),
-        "repair_sfc":lambda:cmd("sfc.exe","/scannow"),
-        "repair_disk":lambda:cmd("chkdsk.exe",os.environ.get("SystemDrive","C:")+"\\","/scan"),
+        "repair_dism":repair_image,
+        "repair_sfc":lambda:cmd("sfc.exe","/scannow",timeout=None),
+        "repair_disk":repair_disk,
         "classic_on":lambda:setreg("CU",cl,"","",winreg.REG_SZ),
         "classic_off":lambda:restore_reg("CU|"+cl),
         "shutdown_15":lambda:shutdown(15),"shutdown_30":lambda:shutdown(30),
         "shutdown_60":lambda:shutdown(60),"shutdown_cancel":lambda:shutdown(None),
         "winutil_open":open_winutil,
-        "restore_point":lambda:ps("Checkpoint-Computer -Description 'Callas Optimizer' -RestorePointType MODIFY_SETTINGS -ErrorAction Stop"),
+        "restore_point":lambda:ps("Checkpoint-Computer -Description 'Callas Optimizer' "
+                                  "-RestorePointType MODIFY_SETTINGS -WarningAction Stop"),
         "restore_reg":lambda:restore_reg(),
         "restore_services":lambda:services(tuple(load()["svc"]),False),
-        "restore_all":lambda:restore_reg()+"\n"+services(tuple(load()["svc"]),False)+"\n"+energy(False),
+        "restore_all":restore_all,
     }
-    result=tasks[action_id]()
-    HOME.mkdir(exist_ok=True,parents=True)
-    with LOG.open("a",encoding="utf-8") as f:
-        f.write(time.strftime("[%Y-%m-%d %H:%M:%S] ")+action_id+" "+result[:2000]+"\n")
+    try:
+        result = tasks[action_id]()
+    except Exception as exc:
+        log_action(action_id, f"Falha: {exc}")
+        raise
+    log_action(action_id, result)
     return result
 
 
 def worker(action_id,filename):
-    HOME.mkdir(exist_ok=True,parents=True)
     if not re.fullmatch(r"acao-[a-f0-9]{32}\.json",filename):return 2
-    try: result={"ok":True,"message":execute(action_id)[-5000:]}
-    except Exception as e:result={"ok":False,"message":str(e)}
+    HOME.mkdir(exist_ok=True,parents=True)
+    try:
+        if sys.platform != "win32":
+            raise OSError("Requer Windows.")
+        # Trava por perfil, inclusive entre duas janelas do aplicativo.
+        with (HOME / "acoes.lock").open("a+b") as lock:
+            try:
+                msvcrt.locking(lock.fileno(), msvcrt.LK_NBLCK, 1)
+            except OSError as exc:
+                raise RuntimeError("Outra ferramenta de manutenção está em execução neste perfil.") from exc
+            result = {"ok": True, "message": execute(action_id)[-5000:]}
+    except Exception as e:
+        result = {"ok": False, "message": str(e)[-5000:]}
     dest=HOME/filename;tmp=dest.with_suffix(".tmp")
     tmp.write_text(json.dumps(result,ensure_ascii=False),encoding="utf-8")
     os.replace(tmp,dest)

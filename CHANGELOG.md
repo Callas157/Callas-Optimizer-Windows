@@ -1,3 +1,11 @@
+## v8.9.26 — Correções nas ferramentas do Windows
+
+- O CHKDSK examina o volume do Windows com o identificador correto. SFC e DISM podem terminar reparos longos, e a interface mostra os resultados e registra falhas.
+- A manutenção preserva a inicialização atrasada de serviços, a configuração anterior de hibernação e backups que não puder ler. Avisos do Windows impedem confirmar um ponto de restauração que não foi criado.
+- A Limpeza Total separa os temporários do usuário dos temporários do Windows, ignora caminhos com links e respeita o cancelamento na etapa final.
+- A preparação de VMs é compatível com o comando de criação do VirtualBox 7.0. Falhas removem a VM incompleta e o disco recém-criado quando seus identificadores estão confirmados.
+- A atualização consulta o Setup publicado e aguarda corretamente o fechamento do Callas. O atalho de drivers abre Atualizações opcionais nas Configurações do Windows.
+
 ## v8.9.25 — Limpeza Total e atalhos do Windows
 
 - A Lixeira distingue estado vazio, sucesso, cancelamento e erro. Os temporários mostram o resultado por pasta.

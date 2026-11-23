@@ -4,6 +4,7 @@ from __future__ import annotations
 import ctypes
 from ctypes import wintypes
 from datetime import datetime
+import json
 import os
 from pathlib import Path
 import platform
@@ -25,16 +26,18 @@ from PySide6.QtWidgets import (
 
 from cleaner import (
     clean_folders, clear_icon_cache, empty_recycle_bin, format_size, known_temp_folders,
-    nvidia_dxcache_folders,
+    nvidia_dxcache_folders, windows_temp_folder,
 )
-from windows_actions import ACTIONS, BY_ROUTE, HOME as ACTION_HOME, worker as run_windows_action
+from windows_actions import (
+    ACTIONS, BY_ROUTE, HOME as ACTION_HOME, ElevatedAction, worker as run_windows_action,
+)
 from extra_installers import (
     CATALOG as EXTRA_APPS, available_upgrades, download_and_open, installed_program,
     official_website, open_program, powershell_env, powershell_path, program_key, upgrade_program,
 )
 from virtualbox_templates import create_test_vms, VM_NAMES, get_vboxmanage
 
-APP_VERSION = "8.9.25"
+APP_VERSION = "8.9.26"
 REPO = "Callas157/Callas-Optimizer-Windows"
 PROJECT_URL = f"https://github.com/{REPO}"
 DATA_DIR = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "CallasTeck"
@@ -481,6 +484,7 @@ class MainWindow(QMainWindow):
         self.resize(1450, 850)
         self.settings = QSettings("Callas", "OptimizerWindows")
         self.cleaner: CleanerThread | None = None
+        self.native_timer: QTimer | None = None
         self.extra_installer: ExtraInstallerThread | None = None
         self.vm_template_thread: VirtualBoxTemplateThread | None = None
         self.checking_program_updates = False
@@ -494,6 +498,7 @@ class MainWindow(QMainWindow):
         self.program_icon_provider = QFileIconProvider()
         self.upgradeable_programs: set[str] = set()
         self.updater_process: subprocess.Popen | None = None
+        self.update_timer: QTimer | None = None
         self.update_mode = ""
         self.update_status = DATA_DIR / ("updater-" + uuid.uuid4().hex + ".status")
         self.update_elapsed = 0
@@ -521,7 +526,7 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Recursos indisponíveis", str(e))
             self.status_message("Alguns recursos não puderam ser preparados.")
 
-        if self.settings.value("auto_update", True, type=bool):
+        if os.environ.get("CALLAS_SMOKE") != "1" and self.settings.value("auto_update", True, type=bool):
             QTimer.singleShot(1800, lambda: self.check_update(False))
 
     def _sidebar(self):
@@ -863,7 +868,7 @@ class MainWindow(QMainWindow):
 
     def open_windows_settings(self, page: str):
         """Abre somente páginas aprovadas do Windows; não altera configurações."""
-        if page not in ("startupapps", "gaming-gamemode"):
+        if page not in ("startupapps", "gaming-gamemode", "windowsupdate-optionalupdates"):
             return
         if os.name != "nt":
             QMessageBox.information(self, "Windows", "Disponível apenas no Windows 11.")
@@ -889,7 +894,8 @@ class MainWindow(QMainWindow):
         layout.addWidget(label("DRIVERS PELO WINDOWS", "Section"))
         layout.addWidget(label("Use as opções oficiais de Windows Update para drivers opcionais. "
                                "Evite instaladores de terceiros que prometem atualizar tudo."))
-        layout.addWidget(action_button("ABRIR WINDOWS UPDATE", lambda: self.goto("windows_update")))
+        layout.addWidget(action_button("ABRIR ATUALIZAÇÕES OPCIONAIS",
+                                       lambda: self.open_windows_settings("windowsupdate-optionalupdates")))
         col.addWidget(other)
         col.addStretch()
 
@@ -1131,7 +1137,7 @@ class MainWindow(QMainWindow):
         auto.setChecked(self.settings.value("auto_update", True, type=bool))
         auto.toggled.connect(lambda flag: self.settings.setValue("auto_update", flag))
         controls.addWidget(auto)
-        controls.addWidget(label("Só instala após confirmar e verificar SHA-256. Program Files usa Setup oficial com UAC; edição portátil mantém backup."))
+        controls.addWidget(label("A instalação automática usa o Setup oficial após confirmação e verificação SHA-256."))
         col.addWidget(options)
         col.addStretch()
 
@@ -1187,9 +1193,13 @@ class MainWindow(QMainWindow):
 
     def native_action(self, code: str):
         if self.update_mode == "install":
+            self.status_message("Aguarde a atualização do Callas Optima.")
             return
         task = ACTIONS.get(code)
-        if task is None or getattr(self, "native_timer", None) is not None:
+        if task is None:
+            return
+        if self.native_timer is not None:
+            self.status_message("Em execução: " + self.native_task_name)
             return
         message = task["name"] + "\n\n" + task["description"]
         if task["warning"]:
@@ -1198,29 +1208,28 @@ class MainWindow(QMainWindow):
             message += "\n\nO Windows solicitará permissão de administrador."
         if not confirmar(self, "Confirmação da operação", message):
             return
+        if self.update_mode == "install" or self.native_timer is not None:
+            return
         if os.name != "nt":
             QMessageBox.warning(self, "Indisponível", "Esta opção exige Windows.")
             return
-        ACTION_HOME.mkdir(parents=True, exist_ok=True)
         self.native_report = ACTION_HOME / ("acao-" + uuid.uuid4().hex + ".json")
-        self.native_report.unlink(missing_ok=True)
         self.native_task_name = task["name"]
-        self.native_ticks = 0
         script_args = [] if getattr(sys, "frozen", False) else [str(Path(__file__).resolve())]
         args = [*script_args, "--callas-task", code, "--callas-report", self.native_report.name]
         try:
+            ACTION_HOME.mkdir(parents=True, exist_ok=True)
             if task["admin"]:
-                rc = ctypes.windll.shell32.ShellExecuteW(
-                    None, "runas", sys.executable, subprocess.list2cmdline(args), None, 1)
-                if int(rc) <= 32:
-                    raise RuntimeError("Permissão UAC não concedida.")
+                self.native_process = ElevatedAction(sys.executable, args)
             else:
-                subprocess.Popen(
+                self.native_process = subprocess.Popen(
                     [sys.executable, *args],
                     cwd=str(ACTION_HOME),
                     creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
         except Exception as exc:
-            QMessageBox.critical(self, "Falha", str(exc))
+            detail = "Permissão UAC cancelada." if getattr(exc, "winerror", None) == 1223 else str(exc)
+            self.status_message("Operação não iniciada: " + self.native_task_name)
+            QMessageBox.critical(self, "Falha", detail)
             return
         self.status_message("Executando: " + self.native_task_name)
         self.native_timer = QTimer(self)
@@ -1228,28 +1237,38 @@ class MainWindow(QMainWindow):
         self.native_timer.start(800)
 
     def poll_native_action(self):
-        self.native_ticks += 1
-        if self.native_report.is_file():
-            try:
-                import json
-                outcome = json.loads(self.native_report.read_text(encoding="utf-8"))
-                self.native_report.unlink(missing_ok=True)
-            except (OSError, ValueError):
-                return
-            self.native_timer.stop()
-            self.native_timer.deleteLater()
-            self.native_timer = None
-            self.status_message(("Concluído: " if outcome["ok"] else "Falhou: ") + self.native_task_name)
-            if outcome["ok"]:
-                QMessageBox.information(self, "Operação concluída", outcome["message"] or "Concluído.")
-            else:
-                QMessageBox.warning(self, "Operação não concluída", outcome["message"])
+        if self.native_timer is None:
             return
-        if self.native_ticks > 2250:
-            self.native_timer.stop()
-            self.native_timer.deleteLater()
-            self.native_timer = None
-            QMessageBox.warning(self, "Tempo limite", "A tarefa excedeu o tempo previsto. Consulte os registros.")
+        try:
+            code = self.native_process.poll()
+            if code is None:
+                return
+            try:
+                outcome = json.loads(self.native_report.read_text(encoding="utf-8"))
+                if (not isinstance(outcome, dict) or type(outcome.get("ok")) is not bool
+                        or not isinstance(outcome.get("message"), str)):
+                    raise ValueError("Relatório incompleto.")
+                ok = code == 0 and outcome["ok"]
+                message = outcome["message"] or f"Resultado da ferramenta (código {code})."
+            except FileNotFoundError:
+                ok = False
+                message = f"A ferramenta encerrou sem deixar relatório para este usuário (código {code})."
+        except (OSError, ValueError) as exc:
+            ok = False
+            message = f"Não foi possível obter o resultado: {exc}"
+        try:
+            self.native_report.unlink(missing_ok=True)
+        except OSError:
+            pass
+        self.native_timer.stop()
+        self.native_timer.deleteLater()
+        self.native_timer = None
+        self.native_process = None
+        self.status_message(("Concluído: " if ok else "Falhou: ") + self.native_task_name)
+        if ok:
+            QMessageBox.information(self, "Operação concluída", message)
+        else:
+            QMessageBox.warning(self, "Operação não concluída", message)
 
     def configure_brave_extensions(self, undo: bool):
         if self.update_mode == "install" or (self.extensions_job and self.extensions_job.isRunning()):
@@ -1318,7 +1337,7 @@ class MainWindow(QMainWindow):
             self.program_updates_status.show()
 
     def prepare_virtualbox_templates(self):
-        if (self.vm_template_thread and self.vm_template_thread.isRunning()):
+        if self.update_mode == "install" or (self.vm_template_thread and self.vm_template_thread.isRunning()):
             return
         try:
             get_vboxmanage()
@@ -1343,6 +1362,8 @@ class MainWindow(QMainWindow):
             "Destino: " + folder
         )
         if not confirmar(self, "Preparar laboratório Windows 11", info):
+            return
+        if self.update_mode == "install":
             return
         self.vm_template_button.setEnabled(False)
         self.vm_template_progress.show()
@@ -1457,11 +1478,11 @@ class MainWindow(QMainWindow):
             if not user_temp:
                 unavailable.append("Pasta temporária do usuário indisponível.")
         if self.clean_windows.isChecked() and os.name == "nt":
-            windows_temp = Path(os.environ.get("SystemRoot", r"C:\Windows")) / "Temp"
-            system_temp = [p for p in known_temp_folders(True) if p == windows_temp]
-            selection.extend(system_temp)
-            if not system_temp:
+            system_temp = windows_temp_folder()
+            if system_temp is None:
                 unavailable.append("Pasta temporária do Windows indisponível.")
+            else:
+                selection.append(system_temp)
         if self.clean_nvidia.isChecked():
             dxcache = nvidia_dxcache_folders()
             selection.extend(dxcache)
@@ -1516,7 +1537,7 @@ class MainWindow(QMainWindow):
         self.clean_start.setEnabled(True)
 
     def check_update(self, manual: bool):
-        if self.updater_process is not None and self.updater_process.poll() is None:
+        if self.update_mode:
             if manual:
                 self.goto("updates")
             return
@@ -1557,21 +1578,22 @@ class MainWindow(QMainWindow):
         )
 
     def poll_update(self):
+        if not self.update_mode:
+            return
         self.update_elapsed += 1
         if self.update_status.is_file():
             try:
                 status = self.update_status.read_text(encoding="ascii").strip()
-            except OSError:
-                return
+            except (OSError, UnicodeError):
+                status = ""
             if self.update_mode == "install" and status == "READY":
-                self.update_timer.stop()
                 self.status_message("Atualização verificada. Fechando para instalar...")
                 QApplication.quit()
                 return
             if status == "ERROR":
                 self.update_failed("A atualização falhou. Consulte atualizacoes.log.")
                 return
-            if self.update_mode == "check" and status == "CURRENT":
+            if status == "CURRENT":
                 self.stop_update_timer()
                 self.update_note.setText("Você está na versão mais recente.")
                 self.status_message("Callas Optimizer atualizado.")
@@ -1585,8 +1607,10 @@ class MainWindow(QMainWindow):
                     self.showNormal()
                 self.raise_()
                 self.activateWindow()
+                question = ("Deseja baixar e atualizar agora?" if installed_mode()
+                            else "Deseja abrir a página do instalador oficial?")
                 if confirmar(self, "Atualização disponível",
-                         f"Nova versão encontrada: {release}\nVersão instalada: {APP_VERSION}\n\nDeseja baixar e atualizar agora?", True):
+                             f"Nova versão encontrada: {release}\nVersão em uso: {APP_VERSION}\n\n{question}", True):
                     self.install_update()
                 return
         if self.updater_process and self.updater_process.poll() is not None:
@@ -1596,8 +1620,14 @@ class MainWindow(QMainWindow):
             self.update_failed("Tempo limite da atualização. Confira a conexão e os logs.")
 
     def stop_update_timer(self, success: bool = True):
-        if hasattr(self, "update_timer"):
+        if self.update_timer is not None:
             self.update_timer.stop()
+            self.update_timer.deleteLater()
+            self.update_timer = None
+        try:
+            self.update_status.unlink(missing_ok=True)
+        except OSError:
+            pass
         self.updater_process = None
         self.update_mode = ""
         self.top_check.setEnabled(True)
@@ -1613,13 +1643,14 @@ class MainWindow(QMainWindow):
     def install_update(self):
         if (self.installing_program or (self.cleaner and self.cleaner.isRunning()) or
                 (self.extensions_job and self.extensions_job.isRunning()) or
-                getattr(self, "native_timer", None) is not None):
+                (self.vm_template_thread and self.vm_template_thread.isRunning()) or
+                self.native_timer is not None):
             self.update_note.setText("Conclua a tarefa em andamento antes de instalar a atualização.")
             return
-        if self.updater_process and self.updater_process.poll() is None:
+        if self.update_mode:
             return
-        if not getattr(sys, "frozen", False):
-            QMessageBox.information(self, "Atualização", "A substituição automática exige a edição .exe. No modo código-fonte, use o GitHub Releases.")
+        if not installed_mode():
+            webbrowser.open(PROJECT_URL + "/releases/latest")
             return
         self.update_mode = "install"
         self.update_elapsed = 0
@@ -1678,6 +1709,11 @@ class MainWindow(QMainWindow):
             self.program_grid.addWidget(card, index // columns, index % columns)
 
     def closeEvent(self, event):
+        if self.native_timer is not None:
+            QMessageBox.information(self, "Ferramenta em execução",
+                                    "Aguarde o resultado de " + self.native_task_name + " antes de fechar.")
+            event.ignore()
+            return
         if self.vm_template_thread and self.vm_template_thread.isRunning():
             QMessageBox.information(self, "VMs em preparação",
                                     "Conclua a preparação das máquinas antes de fechar.")

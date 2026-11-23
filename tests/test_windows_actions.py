@@ -2,6 +2,8 @@
 import ast
 from pathlib import Path
 import sys
+from tempfile import TemporaryDirectory
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
@@ -57,3 +59,99 @@ class NativeActionContracts(unittest.TestCase):
         self.assertNotIn('GUI_Engine.bat',s)
         self.assertIn('self.native_action(code)',s)
         self.assertIn('--callas-task',s)
+
+
+class MaintenanceRegressions(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        sys.path.insert(0, str(ROOT / "src"))
+        import windows_actions
+        cls.actions = windows_actions
+
+    def execute(self, action_id):
+        with patch.object(self.actions, "os", SimpleNamespace(name="nt", environ={"SystemDrive": "D:"})), \
+                patch.object(self.actions, "admin", return_value=True), \
+                patch.object(self.actions, "LOG"), patch.object(self.actions, "HOME"):
+            return self.actions.execute(action_id)
+
+    def test_disk_scan_passes_system_volume_without_a_path(self):
+        with patch.object(self.actions, "cmd", return_value="Disco examinado") as command:
+            self.assertEqual(self.execute("repair_disk"), "Disco examinado")
+        self.assertEqual(command.call_args.args, ("chkdsk.exe", "D:", "/scan"))
+
+    def test_sfc_preserves_portuguese_utf16_output(self):
+        text = "A Proteção de Recursos do Windows não encontrou violações."
+        result = SimpleNamespace(returncode=0, stdout=text.encode("utf-16le"), stderr=b"")
+        with patch.object(self.actions, "os", SimpleNamespace(name="nt")), \
+                patch.object(self.actions, "_system_program", return_value=Path("sfc.exe")), \
+                patch.object(self.actions.subprocess, "run", return_value=result):
+            self.assertEqual(self.actions.cmd("sfc.exe", "/scannow"), text)
+
+    def test_disk_scan_accepts_repaired_errors_but_reports_scan_failure(self):
+        for code in (1, 3):
+            result = SimpleNamespace(returncode=code, stdout=b"Resultado do exame", stderr=b"")
+            with self.subTest(code=code), \
+                    patch.object(self.actions.subprocess, "run", return_value=result), \
+                    patch.object(self.actions, "_system_program", return_value=Path("chkdsk.exe")):
+                if code == 1:
+                    self.assertIn("Resultado do exame", self.execute("repair_disk"))
+                else:
+                    with self.assertRaisesRegex(RuntimeError, "retornou 3"):
+                        self.execute("repair_disk")
+
+    def test_restore_point_turns_creation_warning_into_a_failure(self):
+        with patch.object(self.actions, "ps", return_value="Ponto criado") as powershell:
+            self.execute("restore_point")
+        self.assertIn("-WarningAction Stop", powershell.call_args.args[0])
+
+    def test_backup_parse_error_keeps_existing_file(self):
+        with TemporaryDirectory() as directory:
+            backup = Path(directory) / "actions_backup.json"
+            backup.write_text("{corrompido", encoding="utf-8")
+            with patch.object(self.actions, "BACKUP", backup):
+                with self.assertRaisesRegex(RuntimeError, "backup"):
+                    self.actions.load()
+            self.assertEqual(backup.read_text(encoding="utf-8"), "{corrompido")
+
+    def test_failed_action_gets_recorded(self):
+        with TemporaryDirectory() as directory:
+            home = Path(directory)
+            log = home / "acoes.log"
+            with patch.object(self.actions, "HOME", home), patch.object(self.actions, "LOG", log), \
+                    patch.object(self.actions, "os", SimpleNamespace(name="nt")), \
+                    patch.object(self.actions, "admin", return_value=True), \
+                    patch.object(self.actions, "cmd", side_effect=RuntimeError("DISM indisponível")):
+                with self.assertRaisesRegex(RuntimeError, "DISM indisponível"):
+                    self.actions.execute("repair_dism")
+            self.assertIn("DISM indisponível", log.read_text(encoding="utf-8"))
+
+    def test_hibernation_already_off_does_not_save_an_enabled_state(self):
+        backup = {"hiber": False}
+        with patch.object(self.actions, "winreg", create=True) as registry, \
+                patch.object(self.actions, "load", return_value=backup), \
+                patch.object(self.actions, "save") as save, patch.object(self.actions, "cmd") as cmd:
+            registry.QueryValueEx.return_value = (0, 4)
+            self.assertIn("já estava desativada", self.actions.hibernate(False))
+        save.assert_not_called()
+        cmd.assert_not_called()
+
+    def test_restore_all_also_restores_hibernation(self):
+        with patch.object(self.actions, "load", return_value={"svc": {}, "hiber": True}), \
+                patch.object(self.actions, "restore_reg", return_value="Registro"), \
+                patch.object(self.actions, "services", return_value="Serviços"), \
+                patch.object(self.actions, "energy", return_value="Energia"), \
+                patch.object(self.actions, "hibernate", return_value="Hibernação") as hibernate:
+            self.assertIn("Hibernação", self.execute("restore_all"))
+        hibernate.assert_called_once_with(True)
+
+    def test_service_snapshot_restores_delayed_auto_start_and_old_backups(self):
+        backup = {"svc": {"SysMain": 3}}
+        with patch.object(self.actions, "winreg", create=True) as registry, \
+                patch.object(self.actions, "load", return_value=backup), \
+                patch.object(self.actions, "save"), patch.object(self.actions, "cmd") as cmd:
+            registry.QueryValueEx.side_effect = lambda key, name: (2 if name == "Start" else 1, 4)
+            self.actions.services(("WSearch",), True)
+            self.actions.services(("SysMain", "WSearch"), False)
+        self.assertIn(("sc.exe", "config", "SysMain", "start=", "demand"),
+                      [call.args for call in cmd.call_args_list])
+        self.assertEqual(cmd.call_args.args, ("sc.exe", "config", "WSearch", "start=", "delayed-auto"))
