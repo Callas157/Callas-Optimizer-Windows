@@ -29,7 +29,7 @@ from cleaner import (
     nvidia_dxcache_folders, windows_temp_folder,
 )
 from windows_actions import (
-    ACTIONS, BY_ROUTE, HOME as ACTION_HOME, ElevatedAction, worker as run_windows_action,
+    ACTIONS, BY_ROUTE, HOME as ACTION_HOME, PROFILE_MISMATCH, ElevatedAction, worker as run_windows_action,
 )
 from extra_installers import (
     CATALOG as EXTRA_APPS, available_upgrades, download_and_open, installed_program,
@@ -1216,7 +1216,8 @@ class MainWindow(QMainWindow):
         self.native_report = ACTION_HOME / ("acao-" + uuid.uuid4().hex + ".json")
         self.native_task_name = task["name"]
         script_args = [] if getattr(sys, "frozen", False) else [str(Path(__file__).resolve())]
-        args = [*script_args, "--callas-task", code, "--callas-report", self.native_report.name]
+        args = [*script_args, "--callas-task", code, "--callas-report", self.native_report.name,
+                "--callas-profile", str(ACTION_HOME)]
         try:
             ACTION_HOME.mkdir(parents=True, exist_ok=True)
             if task["admin"]:
@@ -1252,7 +1253,11 @@ class MainWindow(QMainWindow):
                 message = outcome["message"] or f"Resultado da ferramenta (código {code})."
             except FileNotFoundError:
                 ok = False
-                message = f"A ferramenta encerrou sem deixar relatório para este usuário (código {code})."
+                if code == PROFILE_MISMATCH:
+                    message = ("A elevação abriu outro perfil do Windows. Entre na conta de administrador, "
+                               "abra o Callas e execute a ferramenta nessa conta.")
+                else:
+                    message = f"A ferramenta encerrou sem deixar relatório para este usuário (código {code})."
         except (OSError, ValueError) as exc:
             ok = False
             message = f"Não foi possível obter o resultado: {exc}"
@@ -1280,6 +1285,8 @@ class MainWindow(QMainWindow):
                    else "Adicionar SteamDB e Bonjourr por política local? O Brave poderá exibir "
                         "'Gerenciado pela organização'.")
         if not confirmar(self, "Extensões do Brave", message):
+            return
+        if self.update_mode == "install":
             return
         self.extensions_status.setText("Aplicando alteração…")
         self.extensions_job = BraveExtensionsThread(undo)
@@ -1405,6 +1412,8 @@ class MainWindow(QMainWindow):
                    f"Instalar {name}? A assinatura digital será conferida antes da execução.")
         if not confirmar(self, "Instalador oficial", message):
             return
+        if self.update_mode == "install":
+            return
         self.installing_program = app_id
         self.refresh_program_cards()
         self.show_program_progress("Preparando…", -1)
@@ -1490,6 +1499,8 @@ class MainWindow(QMainWindow):
                 unavailable.append("Cache NVIDIA DXCache não localizado neste perfil.")
         selection = list(dict.fromkeys(selection))
         if not confirmar(self, "Confirmar limpeza", "Executar as opções selecionadas?\nArquivos protegidos ou em uso serão preservados."):
+            return
+        if self.update_mode == "install":
             return
         self.clean_output.clear()
         self.clean_output.appendPlainText("Iniciando limpeza...")
@@ -1587,8 +1598,12 @@ class MainWindow(QMainWindow):
             except (OSError, UnicodeError):
                 status = ""
             if self.update_mode == "install" and status == "READY":
+                self.update_timer.stop()
                 self.status_message("Atualização verificada. Fechando para instalar...")
-                QApplication.quit()
+                if self.close():
+                    QApplication.quit()
+                else:
+                    self.update_timer.start()
                 return
             if status == "ERROR":
                 self.update_failed("A atualização falhou. Consulte atualizacoes.log.")
@@ -1709,11 +1724,6 @@ class MainWindow(QMainWindow):
             self.program_grid.addWidget(card, index // columns, index % columns)
 
     def closeEvent(self, event):
-        if self.native_timer is not None:
-            QMessageBox.information(self, "Ferramenta em execução",
-                                    "Aguarde o resultado de " + self.native_task_name + " antes de fechar.")
-            event.ignore()
-            return
         if self.vm_template_thread and self.vm_template_thread.isRunning():
             QMessageBox.information(self, "VMs em preparação",
                                     "Conclua a preparação das máquinas antes de fechar.")
@@ -1732,6 +1742,11 @@ class MainWindow(QMainWindow):
             QMessageBox.information(self, "Limpeza em andamento", "Cancele ou conclua a Limpeza Total antes de fechar o aplicativo.")
             event.ignore()
             return
+        if self.native_timer is not None and not confirmar(
+                self, "Ferramenta em execução",
+                f"{self.native_task_name} continuará em segundo plano. Fechar o Callas agora?"):
+            event.ignore()
+            return
         event.accept()
 
 
@@ -1740,7 +1755,8 @@ def main():
         try:
             index = sys.argv.index("--callas-task")
             report_index = sys.argv.index("--callas-report")
-            return run_windows_action(sys.argv[index+1], sys.argv[report_index+1])
+            profile = sys.argv[sys.argv.index("--callas-profile") + 1] if "--callas-profile" in sys.argv else None
+            return run_windows_action(sys.argv[index+1], sys.argv[report_index+1], profile)
         except (ValueError, IndexError):
             return 2
     if "--self-test" in sys.argv:

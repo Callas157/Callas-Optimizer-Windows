@@ -30,6 +30,7 @@ from extra_installers import (
 HOME = Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "CallasTeck"
 BACKUP = HOME / "actions_backup.json"
 LOG = HOME / "acoes.log"
+PROFILE_MISMATCH = 3
 WINUTIL_VERSION = "26.11.13"
 WINUTIL_URL = f"https://github.com/ChrisTitusTech/winutil/releases/download/{WINUTIL_VERSION}/winutil.ps1"
 WINUTIL_SHA256 = "e9d05a59d564b4fbb61fcfa1a594504a0f81e8d27c787119e72a99b57ddbe66d"
@@ -253,8 +254,10 @@ def restore_reg(prefix=""):
     return f"Registro: {n} restaurados. Pendentes: {pending}."
 
 
-def services(names,disable):
-    st=load();changed=[]
+def services(names, disable):
+    st = load()
+    changed = []
+    failures = []
     for name in names:
         if name not in (*GAME_SERVICES, *UPDATE_SERVICES):
             continue
@@ -274,9 +277,7 @@ def services(names,disable):
                     continue
                 st["svc"][name] = {"start": startup, "delayed": delayed}
                 save(st)
-            cmd("sc.exe","stop",name,optional=True)
-            cmd("sc.exe","config",name,"start=","disabled")
-            changed.append(name)
+            mode = "disabled"
         elif name in st["svc"]:
             snapshot = st["svc"][name]
             startup = snapshot.get("start") if isinstance(snapshot, dict) else snapshot
@@ -285,9 +286,22 @@ def services(names,disable):
             if not mode:continue
             if mode == "auto" and delayed:
                 mode = "delayed-auto"
-            cmd("sc.exe","config",name,"start=",mode)
-            del st["svc"][name];save(st);changed.append(name)
-    return "Serviços modificados: "+(", ".join(changed) or "nenhum")
+        else:
+            continue
+        try:
+            cmd("sc.exe", "config", name, "start=", mode)
+            if disable:
+                cmd("sc.exe", "stop", name, optional=True)
+            else:
+                del st["svc"][name]
+                save(st)
+            changed.append(name)
+        except (OSError, RuntimeError, subprocess.TimeoutExpired) as exc:
+            failures.append(f"{name}: {exc}")
+    summary = "Serviços modificados: " + (", ".join(changed) or "nenhum")
+    if failures:
+        raise RuntimeError("\n".join([summary, *failures]))
+    return summary
 
 
 def energy(enable):
@@ -461,8 +475,12 @@ def execute(action_id):
     return result
 
 
-def worker(action_id,filename):
+def worker(action_id, filename, report_home=None):
     if not re.fullmatch(r"acao-[a-f0-9]{32}\.json",filename):return 2
+    # O valor informado pela interface só serve para comparação. O trabalhador
+    # escreve exclusivamente na pasta do próprio perfil.
+    if report_home is not None and Path(report_home) != HOME:
+        return PROFILE_MISMATCH
     HOME.mkdir(exist_ok=True,parents=True)
     try:
         if sys.platform != "win32":

@@ -39,18 +39,32 @@ jobs:
           & $iscc 'installer/CallasOptimizer.iss'
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python scripts/verify_build.py
-      - name: Examinar o disco do runner pelo aplicativo compilado
+      - name: Examinar o disco do runner pelo executor administrativo
         shell: pwsh
         run: |
-          $env:LOCALAPPDATA = Join-Path $env:RUNNER_TEMP 'CallasDiskSmoke'
-          $name = 'acao-' + [Guid]::NewGuid().ToString('N') + '.json'
-          $app = (Resolve-Path 'dist/Callas_Optimizer_Windows_x64/Callas_Optimizer_Windows_x64.exe').Path
-          $p = Start-Process -FilePath $app -ArgumentList @('--callas-task', 'repair_disk', '--callas-report', $name) -Wait -PassThru
-          $report = Join-Path $env:LOCALAPPDATA "CallasTeck/$name"
-          if (-not (Test-Path -LiteralPath $report)) { throw "Sem relatório do CHKDSK. Código do processo $($p.ExitCode)." }
-          $result = Get-Content -LiteralPath $report -Raw -Encoding UTF8 | ConvertFrom-Json
-          Write-Host $result.message
-          if ($p.ExitCode -ne 0 -or -not $result.ok) { throw 'O aplicativo não concluiu o exame do disco.' }
+          @'
+          import json
+          from pathlib import Path
+          import sys
+          import time
+          from uuid import uuid4
+
+          sys.path.insert(0, str(Path("src").resolve()))
+          from windows_actions import ElevatedAction, HOME, admin
+
+          assert admin(), "O runner precisa ter o token administrativo para executar o teste."
+          app = Path("dist/Callas_Optimizer_Windows_x64/Callas_Optimizer_Windows_x64.exe").resolve()
+          report = HOME / f"acao-{uuid4().hex}.json"
+          args = ["--callas-task", "repair_disk", "--callas-report", report.name, "--callas-profile", str(HOME)]
+          process = ElevatedAction(app, args)
+          while (code := process.poll()) is None:
+              time.sleep(1)
+          assert report.is_file(), f"Sem relatório do CHKDSK. Código do processo: {code}"
+          result = json.loads(report.read_text(encoding="utf-8"))
+          report.unlink()
+          print(result["message"])
+          assert code == 0 and result["ok"], "O aplicativo não concluiu o exame do disco."
+          '@ | python -
       - name: Testar atualização real do Setup 8.9.3
         shell: pwsh
         env:

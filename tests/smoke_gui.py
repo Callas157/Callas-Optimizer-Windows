@@ -166,5 +166,13 @@ with patch('app.get_vboxmanage') as get_vbox:
     worker.prepare_virtualbox_templates()
     get_vbox.assert_not_called()
 worker.update_mode = ''
+def confirm_while_update_starts(*args):
+    worker.update_mode = 'install'
+    return True
+
+with patch('app.confirmar', side_effect=confirm_while_update_starts), patch('app.CleanerThread') as start:
+    worker.start_clean()
+    start.assert_not_called()
+worker.update_mode = ''
 worker.close()
 print('Execução e relato de tarefas, convivência com a atualização: OK')

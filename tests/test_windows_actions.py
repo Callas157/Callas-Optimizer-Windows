@@ -46,12 +46,12 @@ class NativeActionContracts(unittest.TestCase):
 
     def test_catalogue(self):
         s=(ROOT/'src/windows_actions.py').read_text(encoding='utf-8')
-        ast.parse(s)
+        module = ast.parse(s)
         for route in ('gamer','edge','windows_update','network','privacy','repair',
                       'classic','shutdown','winutil','restore_point','restore'):
             self.assertIn(f'"{route}"',s)
         self.assertIn('shell=False',s)
-        self.assertIn('worker(action_id,filename)',s)
+        self.assertTrue(any(isinstance(node, ast.FunctionDef) and node.name == 'worker' for node in module.body))
     def test_gui_no_bat(self):
         s=(ROOT/'src/app.py').read_text(encoding='utf-8')
         ast.parse(s)
@@ -155,3 +155,27 @@ class MaintenanceRegressions(unittest.TestCase):
         self.assertIn(("sc.exe", "config", "SysMain", "start=", "demand"),
                       [call.args for call in cmd.call_args_list])
         self.assertEqual(cmd.call_args.args, ("sc.exe", "config", "WSearch", "start=", "delayed-auto"))
+
+    def test_worker_does_not_mutate_when_uac_changes_profile(self):
+        with TemporaryDirectory() as directory:
+            home = Path(directory) / "admin"
+            with patch.object(self.actions, "HOME", home), patch.object(self.actions, "execute") as execute:
+                code = self.actions.worker("repair_disk", "acao-" + "a" * 32 + ".json", str(home.parent / "user"))
+            execute.assert_not_called()
+            self.assertEqual(code, 3)
+            self.assertFalse(home.exists())
+
+    def test_service_restore_attempts_other_services_and_retains_failed_backup(self):
+        backup = {"svc": {"SysMain": 3, "WSearch": 2}}
+
+        def configure(*args):
+            if args[2] == "SysMain":
+                raise RuntimeError("Acesso negado a SysMain")
+            return "OK"
+
+        with patch.object(self.actions, "winreg", create=True), \
+                patch.object(self.actions, "load", return_value=backup), \
+                patch.object(self.actions, "save"), patch.object(self.actions, "cmd", side_effect=configure):
+            with self.assertRaisesRegex(RuntimeError, "Acesso negado a SysMain"):
+                self.actions.services(("SysMain", "WSearch"), False)
+        self.assertEqual(backup["svc"], {"SysMain": 3})
