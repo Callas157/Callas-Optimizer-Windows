@@ -34,11 +34,12 @@ class InstallerTests(unittest.TestCase):
             'Source: "..\\assets\\icons\\callas.ico"',
             'DestName: "CallasOptimizer.ico"',
             'UninstallDisplayIcon={app}\\CallasOptimizer.ico',
-            'IconFilename: "{app}\\CallasOptimizer.ico"',
+            'IconFilename: "{app}\\{#MyShortcutIconDir}\\CallasOptimizer.ico"',
+            'DestDir: "{app}\\{#MyShortcutIconDir}"',
             'AppUserModelID: "CallasTeck.CallasOptimizer.Windows"',
         ):
             self.assertIn(value, I)
-        self.assertEqual(I.count('IconFilename: "{app}\\CallasOptimizer.ico"'), 2)
+        self.assertEqual(I.count('IconFilename: "{app}\\{#MyShortcutIconDir}\\CallasOptimizer.ico"'), 2)
         self.assertIn('CallasOptimizer.ico', A)
     def test_updater(self):
         for t in ("'Callas_Optimizer_Setup_x64.exe'",'if ($Installed)','-Verb RunAs','Get-FileHash'):

@@ -1,3 +1,9 @@
+## v8.9.25 — Limpeza Total e atalhos do Windows
+
+- A Lixeira distingue estado vazio, sucesso, cancelamento e erro. Os temporários mostram o resultado por pasta.
+- A Limpeza Total tem opções para os bancos de cache de ícones do perfil e para o NVIDIA DXCache em Local e LocalLow. Arquivos em uso são preservados.
+- O Setup atualiza os atalhos do Menu Iniciar e da Área de Trabalho para um caminho de ícone versionado, preservando a seleção de atalhos da instalação anterior.
+
 ## v8.9.24 — 5 vCPUs e compartilhamento seguro de links
 
 - VMs de Windows 11 Pro e IoT Enterprise LTSC recebem 5 vCPUs, com RAM 6 GB e disco de 80 GB preservados.

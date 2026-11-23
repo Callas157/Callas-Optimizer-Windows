@@ -40,12 +40,12 @@ if ((Get-Item -LiteralPath $oldSetup).Length -ne [long]$asset.size) { throw 'Tam
 if ((Get-FileHash -LiteralPath $oldSetup -Algorithm SHA256).Hash -cne $sha) { throw 'SHA-256 do instalador base incorreto' }
 Write-Host 'Instalador 8.9.3 autenticado pelo SHA-256 publicado.'
 
-function Install-Silent([string]$path,[string]$description) {
-    $arguments='/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS /DIR="' + $destination + '"'
+function Install-Silent([string]$path,[string]$description,[string]$extra='') {
+    $arguments='/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS /DIR="' + $destination + '" ' + $extra
     $process=Start-Process -FilePath $path -ArgumentList $arguments -Wait -PassThru
     if ($process.ExitCode -notin @(0, 3010)) { throw "$description falhou com codigo $($process.ExitCode)" }
 }
-Install-Silent $oldSetup 'Instalacao 8.9.3'
+Install-Silent $oldSetup 'Instalacao 8.9.3' '/TASKS=desktopicon'
 $app=Join-Path $destination 'Callas_Optimizer_Windows_x64.exe'
 $marker=Join-Path $destination 'installed.marker'
 if (!(Test-Path -LiteralPath $app -PathType Leaf) -or !(Test-Path -LiteralPath $marker -PathType Leaf)) {
@@ -65,6 +65,23 @@ $env:CALLAS_SMOKE='1'
 $smoke=Start-Process -FilePath $app -ArgumentList '--self-test' -Wait -PassThru
 if ($smoke.ExitCode -ne 0) { throw "O app atualizado nao abriu: $($smoke.ExitCode)" }
 Write-Host 'Salto direto 8.9.3 -> Setup atual validado, incluindo abertura em Windows.'
+
+$version = (Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot '../VERSION')).Trim()
+$expectedIcon = Join-Path $destination "icons-$version\CallasOptimizer.ico"
+if (!(Test-Path -LiteralPath $expectedIcon -PathType Leaf)) { throw 'ICO versionado ausente.' }
+$shell = New-Object -ComObject WScript.Shell
+$shortcutPaths = @(
+    (Join-Path $env:ProgramData 'Microsoft\Windows\Start Menu\Programs\Callas Optimizer.lnk'),
+    (Join-Path $env:PUBLIC 'Desktop\Callas Optimizer.lnk')
+)
+foreach ($link in $shortcutPaths) {
+    if (!(Test-Path -LiteralPath $link -PathType Leaf)) { throw "Atalho não preservado: $link" }
+    $shortcut = $shell.CreateShortcut($link)
+    if ($shortcut.TargetPath -ine $app -or $shortcut.IconLocation -ine "$expectedIcon,0") {
+        throw "Atalho não atualizado: $link ($($shortcut.IconLocation))"
+    }
+}
+Write-Host 'Atalhos existentes no Menu Iniciar e na Área de Trabalho usam o novo arquivo de ícone.'
 
 # Testa o instalador com duas janelas reais, inclusive com os argumentos do
 # atualizador interativo anterior. Desabilita o Restart Manager para que só

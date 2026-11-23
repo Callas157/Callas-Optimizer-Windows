@@ -1,6 +1,8 @@
 """Smoke test real de Qt no runner Windows com display offscreen."""
 import os
 import sys
+import tempfile
+import time
 from pathlib import Path
 from unittest.mock import patch
 root = Path(__file__).resolve().parents[1]
@@ -85,6 +87,35 @@ with patch("app.installed_program", return_value="shell:AppsFolder\\ChatGPT!App"
 for route in ("home", "clean", "gamer", "repair", "programs", "drivers", "updates"):
     win.goto(route)
     assert win.stack.currentWidget() is win.pages[route]
+for route, button in win.nav_buttons.items():
+    button.click()
+    assert win.stack.currentWidget() is win.pages[route], route
+
+assert not win.clean_nvidia.isChecked()
+with tempfile.TemporaryDirectory() as directory:
+    local = Path(directory).resolve()
+    dxcache = local / "NVIDIA" / "DXCache"
+    dxcache.mkdir(parents=True)
+    shader = dxcache / "test.shader"
+    shader.write_bytes(b"test")
+    icons = local / "IconCache.db"
+    icons.write_bytes(b"test")
+    win.goto("clean")
+    win.clean_user.setChecked(False)
+    win.clean_nvidia.setChecked(True)
+    win.clean_icons.setChecked(True)
+    win.clean_recycle.setChecked(True)
+    with patch.dict(os.environ, {"LOCALAPPDATA": str(local)}), patch("app.confirmar", return_value=True):
+        with patch("app.empty_recycle_bin", return_value="já vazia"), patch("cleaner.refresh_shell_icons"):
+            win.clean_start.click()
+            deadline = time.monotonic() + 10
+            while win.cleaner is not None and time.monotonic() < deadline:
+                app.processEvents()
+                time.sleep(.01)
+    assert win.cleaner is None and win.clean_start.isEnabled()
+    output = win.clean_output.toPlainText()
+    assert "Lixeira: já vazia" in output and "Cache de ícones: 1 removido" in output
+    assert not shader.exists() and not icons.exists() and dxcache.is_dir()
 win.resize(930, 610)
 app.processEvents()
 win.showMaximized()

@@ -5,6 +5,7 @@
 #if MyAppVersion == ""
   #error CALLAS_VERSION nao definida
 #endif
+#define MyShortcutIconDir "icons-" + MyAppVersion
 [Setup]
 AppId={{33D8076A-342F-4AF7-8D18-1885BF08FC04}
 AppName={#MyAppName}
@@ -37,11 +38,12 @@ Name: "desktopicon"; Description: "Criar atalho na area de trabalho"; GroupDescr
 [Files]
 Source: "..\dist\Callas_Optimizer_Windows_x64\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\assets\icons\callas.ico"; DestDir: "{app}"; DestName: "CallasOptimizer.ico"; Flags: ignoreversion
+Source: "..\assets\icons\callas.ico"; DestDir: "{app}\{#MyShortcutIconDir}"; DestName: "CallasOptimizer.ico"; Flags: ignoreversion
 Source: "installed.marker"; DestDir: "{app}"; Flags: ignoreversion
 Source: "close_running_app.ps1"; Flags: dontcopy
 [Icons]
-Name: "{autoprograms}\Callas Optimizer"; Filename: "{app}\{#MyAppExe}"; WorkingDir: "{app}"; IconFilename: "{app}\CallasOptimizer.ico"; AppUserModelID: "CallasTeck.CallasOptimizer.Windows"
-Name: "{autodesktop}\Callas Optimizer"; Filename: "{app}\{#MyAppExe}"; WorkingDir: "{app}"; IconFilename: "{app}\CallasOptimizer.ico"; AppUserModelID: "CallasTeck.CallasOptimizer.Windows"; Tasks: desktopicon
+Name: "{autoprograms}\Callas Optimizer"; Filename: "{app}\{#MyAppExe}"; WorkingDir: "{app}"; IconFilename: "{app}\{#MyShortcutIconDir}\CallasOptimizer.ico"; AppUserModelID: "CallasTeck.CallasOptimizer.Windows"
+Name: "{autodesktop}\Callas Optimizer"; Filename: "{app}\{#MyAppExe}"; WorkingDir: "{app}"; IconFilename: "{app}\{#MyShortcutIconDir}\CallasOptimizer.ico"; AppUserModelID: "CallasTeck.CallasOptimizer.Windows"; Tasks: desktopicon
 [Registry]
 Root: HKLM; Subkey: "Software\CallasTeck\CallasOptimizer"; ValueType: string; ValueName: "InstallDir"; ValueData: "{app}"; Flags: uninsdeletekey
 [Run]

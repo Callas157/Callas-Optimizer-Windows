@@ -23,7 +23,10 @@ from PySide6.QtWidgets import (
     QScrollArea, QSplitter, QStackedWidget, QVBoxLayout, QWidget,
 )
 
-from cleaner import clean_folders, empty_recycle_bin, format_size, known_temp_folders
+from cleaner import (
+    clean_folders, clear_icon_cache, empty_recycle_bin, format_size, known_temp_folders,
+    nvidia_dxcache_folders,
+)
 from windows_actions import ACTIONS, BY_ROUTE, HOME as ACTION_HOME, worker as run_windows_action
 from extra_installers import (
     CATALOG as EXTRA_APPS, available_upgrades, download_and_open, installed_program,
@@ -31,7 +34,7 @@ from extra_installers import (
 )
 from virtualbox_templates import create_test_vms, VM_NAMES, get_vboxmanage
 
-APP_VERSION = "8.9.24"
+APP_VERSION = "8.9.25"
 REPO = "Callas157/Callas-Optimizer-Windows"
 PROJECT_URL = f"https://github.com/{REPO}"
 DATA_DIR = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "CallasTeck"
@@ -278,22 +281,39 @@ class CleanerThread(QThread):
     progress = Signal(str)
     complete = Signal(object)
 
-    def __init__(self, roots: list[Path], recycle: bool):
+    def __init__(self, roots: list[Path], recycle: bool, icons: bool):
         super().__init__()
         self.roots = roots
         self.recycle = recycle
+        self.icons = icons
         self.cancel_flag = threading.Event()
 
     def run(self):
         stats = clean_folders(self.roots, self.cancel_flag, self.progress.emit)
-        if self.recycle and not self.cancel_flag.is_set():
-            try:
-                empty_recycle_bin()
-                stats.recycle_bin = True
-                self.progress.emit("Lixeira esvaziada com sucesso")
-            except Exception as e:
-                stats.skipped += 1
-                self.progress.emit(f"Não foi possível esvaziar a lixeira: {e}")
+        if self.recycle:
+            if self.cancel_flag.is_set():
+                stats.recycle_bin = "etapa cancelada"
+                stats.cancelled = True
+            else:
+                try:
+                    stats.recycle_bin = empty_recycle_bin()
+                    self.progress.emit(f"Lixeira: {stats.recycle_bin}.")
+                except (OSError, RuntimeError) as exc:
+                    stats.recycle_bin = "falhou"
+                    stats.recycle_error = str(exc)
+                    self.progress.emit(stats.recycle_error)
+        if self.icons:
+            if self.cancel_flag.is_set():
+                stats.icon_cache = "etapa cancelada"
+                stats.cancelled = True
+            else:
+                try:
+                    removed, skipped = clear_icon_cache()
+                    stats.icon_cache = f"{removed} removido(s), {skipped} preservado(s)"
+                    self.progress.emit("O Windows recebeu o pedido para reconstruir os ícones.")
+                except OSError as exc:
+                    stats.icon_cache = "falhou"
+                    self.progress.emit(f"Cache de ícones: {exc}")
         self.complete.emit(stats)
 
 
@@ -904,7 +924,10 @@ class MainWindow(QMainWindow):
         self.clean_user.setChecked(True)
         self.clean_windows = QCheckBox("Pasta temporária do Windows (pode exigir administrador)")
         self.clean_recycle = QCheckBox("Esvaziar a Lixeira do Windows")
-        for chk in (self.clean_user, self.clean_windows, self.clean_recycle):
+        self.clean_icons = QCheckBox("Limpar e reconstruir o cache de ícones do Windows")
+        self.clean_nvidia = QCheckBox("Cache de shaders NVIDIA (DXCache)")
+        self.clean_nvidia.setToolTip("Os jogos podem recompilar shaders na próxima abertura.")
+        for chk in (self.clean_user, self.clean_windows, self.clean_recycle, self.clean_icons, self.clean_nvidia):
             content.addWidget(chk)
         content.addWidget(label("Não apaga Prefetch, documentos, senhas, favoritos, logs de sistema ou a pasta do Callas Optimizer."))
         buttons = QHBoxLayout()
@@ -1420,30 +1443,44 @@ class MainWindow(QMainWindow):
     def start_clean(self):
         if self.update_mode == "install":
             return
-        if self.cleaner and self.cleaner.isRunning():
+        if self.cleaner:
             return
-        if not any((self.clean_user.isChecked(), self.clean_windows.isChecked(), self.clean_recycle.isChecked())):
+        if not any(check.isChecked() for check in
+                   (self.clean_user, self.clean_windows, self.clean_recycle, self.clean_icons, self.clean_nvidia)):
             QMessageBox.information(self, "Limpeza", "Selecione ao menos uma opção.")
             return
         selection = []
+        unavailable = []
         if self.clean_user.isChecked():
-            selection.extend(known_temp_folders(False))
+            user_temp = known_temp_folders(False)
+            selection.extend(user_temp)
+            if not user_temp:
+                unavailable.append("Pasta temporária do usuário indisponível.")
         if self.clean_windows.isChecked() and os.name == "nt":
             windows_temp = Path(os.environ.get("SystemRoot", r"C:\Windows")) / "Temp"
-            selection.extend([p for p in known_temp_folders(True) if p == windows_temp.resolve()])
+            system_temp = [p for p in known_temp_folders(True) if p == windows_temp]
+            selection.extend(system_temp)
+            if not system_temp:
+                unavailable.append("Pasta temporária do Windows indisponível.")
+        if self.clean_nvidia.isChecked():
+            dxcache = nvidia_dxcache_folders()
+            selection.extend(dxcache)
+            if not dxcache:
+                unavailable.append("Cache NVIDIA DXCache não localizado neste perfil.")
         selection = list(dict.fromkeys(selection))
-        if not confirmar(self, "Confirmar limpeza", "Remover arquivos temporários selecionados e, se marcado, esvaziar a Lixeira?\nArquivos em uso serão ignorados."):
+        if not confirmar(self, "Confirmar limpeza", "Executar as opções selecionadas?\nArquivos protegidos ou em uso serão preservados."):
             return
         self.clean_output.clear()
         self.clean_output.appendPlainText("Iniciando limpeza...")
+        for message in unavailable:
+            self.clean_output.appendPlainText(message)
         self.clean_progress.setRange(0, 0)
         self.clean_start.setEnabled(False)
         self.clean_stop.setEnabled(True)
-        self.cleaner = CleanerThread(selection, self.clean_recycle.isChecked())
+        self.cleaner = CleanerThread(selection, self.clean_recycle.isChecked(), self.clean_icons.isChecked())
         self.cleaner.progress.connect(self.clean_output.appendPlainText)
         self.cleaner.complete.connect(self.clean_finished)
-        self.cleaner.finished.connect(self.cleaner.deleteLater)
-        self.cleaner.finished.connect(lambda: setattr(self, "cleaner", None))
+        self.cleaner.finished.connect(self.clean_thread_finished)
         self.cleaner.start()
         self.status_message("Limpeza em andamento...")
 
@@ -1455,11 +1492,11 @@ class MainWindow(QMainWindow):
     def clean_finished(self, stats):
         self.clean_progress.setRange(0, 100)
         self.clean_progress.setValue(100 if not stats.cancelled else 0)
-        self.clean_start.setEnabled(True)
         self.clean_stop.setEnabled(False)
         final = (f"Arquivos removidos: {stats.files} | Pastas vazias: {stats.folders} | "
                  f"Espaço liberado: {format_size(stats.bytes_freed)} | Ignorados: {stats.skipped} | "
-                 f"Lixeira: {'esvaziada' if stats.recycle_bin else 'mantida'}"
+                 f"Lixeira: {stats.recycle_bin}"
+                 f" | Cache de ícones: {stats.icon_cache}"
                  + (" | Cancelada" if stats.cancelled else ""))
         self.clean_output.appendPlainText("\n" + final)
         self.status_message(final)
@@ -1467,8 +1504,16 @@ class MainWindow(QMainWindow):
             DATA_DIR.mkdir(exist_ok=True, parents=True)
             with (DATA_DIR / "limpeza.log").open("a", encoding="utf-8") as log:
                 log.write(datetime.now().isoformat(timespec="seconds") + " " + final + "\n")
+                if stats.recycle_error:
+                    log.write(stats.recycle_error + "\n")
         except OSError:
             pass
+
+    def clean_thread_finished(self):
+        thread = self.cleaner
+        self.cleaner = None
+        thread.deleteLater()
+        self.clean_start.setEnabled(True)
 
     def check_update(self, manual: bool):
         if self.updater_process is not None and self.updater_process.poll() is None:

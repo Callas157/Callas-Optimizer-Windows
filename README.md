@@ -15,6 +15,12 @@
 **[Baixar a versão estável mais recente](https://github.com/Callas157/Callas-Optimizer-Windows/releases/latest)**
 </div>
 
+## v8.9.25 — Limpeza Total e atalhos do Windows
+
+- **Lixeira:** o resultado distingue Lixeira vazia, esvaziada ou indisponível. O painel também mostra o que foi removido em cada pasta temporária.
+- **Caches opcionais:** marque o cache de ícones do Windows ou o NVIDIA DXCache. O Callas preserva arquivos em uso e pede ao Windows para reconstruir o cache de ícones.
+- **Atalhos:** cada atualização cria um novo caminho para o ícone dos atalhos. O Menu Iniciar e a Área de Trabalho continuam abrindo a mesma instalação.
+
 ## v8.9.24 — VMs com 5 vCPUs e clipboard protegido
 
 - As duas VMs de Windows 11 agora usam **5 vCPUs**, mantendo 6 GB de RAM e disco VDI dinâmico de 80 GB.
