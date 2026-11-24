@@ -2,6 +2,10 @@
 
 # Callas Optima — Fênix Edition
 
+**[Baixar instalador para Windows 11 x64 (.exe)](https://github.com/Callas157/Callas-Optimizer-Windows/releases/latest/download/Callas_Optimizer_Setup_x64.exe)**
+
+[Notas da versão atual](https://github.com/Callas157/Callas-Optimizer-Windows/releases/latest) · [Histórico de versões](CHANGELOG.md)
+
 **Interface redesenhada para Windows 11: desempenho e renovação em uma única janela, com cores azul, roxo e ciano.**
 
 <img src="assets/optima-interface.png" alt="Interface do Callas Optima em execução, com a Fênix, métricas do Windows e atalhos para as seções" width="100%" />
@@ -9,11 +13,74 @@
 <sub>Captura da interface em execução no Windows 11. O círculo mostra a porcentagem de RAM em uso.</sub>
 
 [![Release](https://img.shields.io/github/v/release/Callas157/Callas-Optimizer-Windows?logo=github)](https://github.com/Callas157/Callas-Optimizer-Windows/releases/latest)
-[![Windows 11](https://img.shields.io/badge/Windows-11%20x64-1976FF?logo=windows11&logoColor=white)](#compatibilidade)
+[![Windows 11](https://img.shields.io/badge/Windows-11%20x64-1976FF?logo=windows11&logoColor=white)](#windows-e-requisitos)
 [![Python + Qt](https://img.shields.io/badge/GUI-Python%20%2B%20Qt-2868b2)](#desenvolvimento)
-
-**[Baixar a versão estável mais recente](https://github.com/Callas157/Callas-Optimizer-Windows/releases/latest)**
 </div>
+
+## Windows e requisitos
+
+**Prioridade:** Windows 11 x64 Pro, Enterprise e IoT Enterprise LTSC. Windows 10 e ARM64 não são alvos testados.
+
+O Setup inclui Python/Qt em Program Files, sem depender de Python instalado no computador. Os scripts auxiliares de Windows ficam em `%LOCALAPPDATA%\CallasTeck`. A compilação inclui somente dependências usadas pelo projeto.
+
+1. Baixe o [instalador oficial para Windows 11 x64](https://github.com/Callas157/Callas-Optimizer-Windows/releases/latest/download/Callas_Optimizer_Setup_x64.exe).
+2. Execute o instalador e confirme a solicitação de administrador.
+3. Abra o aplicativo pelo menu Iniciar. A desinstalação fica em Aplicativos Instalados.
+
+> O aplicativo ainda não tem assinatura digital própria; o SmartScreen pode alertar. **Não desative proteções do Windows para executá-lo.** Verifique a origem e o SHA-256 publicado na Release.
+
+## Como funciona a atualização
+
+Consulta: `https://api.github.com/repos/Callas157/Callas-Optimizer-Windows/releases/latest`
+
+- O usuário pode verificar manualmente ou permitir verificação ao abrir.
+- **Nunca atualiza sem perguntar.** A versão antiga permanece aberta durante o download e validação.
+- Só encerra a interface quando a nova versão está pronta para substituir o executável.
+- Mantém até dois backups recentes e tenta restaurar uma versão funcional quando o processo falha.
+- Logs do atualizador em `%LOCALAPPDATA%\CallasTeck\atualizacoes.log`.
+- Nas Releases é distribuído apenas o Setup e seu SHA-256; versões portáteis antigas foram retiradas.
+
+A edição instalada usa o Setup com UAC para atualizar Program Files. Quem possui uma versão portátil antiga deverá instalar o Setup para migrar. Instalação interrompida não tem garantia de rollback transacional.
+
+## Desenvolvimento
+
+- `src/app.py`: interface Qt, navegação, atualização, programas, páginas e logs.
+- `src/windows_actions.py`: ações Python, execução autorizada, backup de Registro/serviços e logs.
+- `src/cleaner.py`: rotina de limpeza nativa, sem seguir links.
+- `src/updater.ps1`: atualização por GitHub Releases, SHA-256 e recuperação.
+- As operações de manutenção já não dependem do BAT. WinUtil abre o site oficial sem executar scripts pela internet; a remoção do Edge depende da edição do Windows.
+- `src/extra_installers.py`: catálogo, download, verificação e execução dos instaladores de terceiros.
+- `src/extensions.ps1` e `src/undo_extensions.ps1`: configuração e reversão das políticas locais de extensões do Brave.
+- `assets/icons/`: Fênix aprovada em PNG e ícones SVG auxiliares; `scripts/make_icon.py` gera ICO multirresolução para a aplicação e os atalhos durante a compilação.
+- `requirements-build.txt`: dependências do ambiente de compilação.
+- `scripts/build.py`: PyInstaller no **Windows x64**; o executável fica em `dist/`.
+- `scripts/check_version.py`, `scripts/verify_build.py`, `tests/`: integridade, proteção contra erros e testes de interface.
+- `.github/workflows/release.yml`: constrói, testa, distribui somente o Setup e remove executáveis portáteis antigos das Releases.
+
+O código pode ser desenvolvido e testado em Windows usando Python 3.12:
+
+```powershell
+py -3.12 -m pip install -r requirements-build.txt
+py -3.12 -m unittest discover -s tests -v
+py -3.12 src\app.py
+```
+
+Para gerar o executável, `py -3.12 scripts\build.py` em uma máquina Windows x64.
+
+### Licenças e identidade visual
+
+- Qt for Python / PySide6-Essentials: distribuição segundo os termos LGPLv3/GPL/comercial aplicáveis. O projeto disponibiliza o código, instruções de build e bibliotecas Qt dinâmicas empacotadas pelo PyInstaller. Respeite as condições da licença ao redistribuir.
+- Os ícones de marca **Brave** e **NVIDIA** usam os caminhos vetoriais do projeto [Simple Icons](https://github.com/simple-icons/simple-icons) (CC0 para os desenhos). As marcas permanecem pertencentes aos respectivos titulares e não indicam afiliação ou endosso.
+- Downloads diretos de instaladores usam as origens HTTPS autorizadas do catálogo e a assinatura Authenticode dos editores. Os instaladores são obtidos dos fornecedores durante a instalação.
+
+## Avisos e testes
+
+A limpeza deve ser usada com os aplicativos fechados. Arquivos bloqueados são ignorados; opções de limpeza adicionais exigem confirmação. Não se promete eliminar todos os temporários do sistema nem recuperar dados apagados.
+
+**Testes:** build e testes estruturais no pipeline Windows. Instalação, desinstalação, UAC e atualização ponta a ponta ainda precisam de teste real no Windows 11.
+
+<details>
+<summary>Notas históricas do README</summary>
 
 ## v8.9.28 — Cartões compactos
 
@@ -204,68 +271,7 @@ A interface fixa anterior foi substituída por uma nova aplicação **Python + P
 - **Registros:** visualização dos logs das operações na interface.
 - **Ferramentas 1–6, 8–10, 12–13:** operações em Python com controles de Registro, energia, serviços, DNS, DISM, SFC e restauração. Remoção do Edge pode não ser permitida em todas as edições; WinUtil abre o projeto oficial.
 
-## Windows e requisitos
-
-**Prioridade:** Windows 11 x64 Pro, Enterprise e IoT Enterprise LTSC. Windows 10 e ARM64 não são alvos testados.
-
-O Setup inclui Python/Qt em Program Files, sem depender de Python instalado no computador. Os scripts auxiliares de Windows ficam em `%LOCALAPPDATA%\CallasTeck`. A compilação inclui somente dependências usadas pelo projeto.
-
-1. Abra **[Releases](https://github.com/Callas157/Callas-Optimizer-Windows/releases/latest)**.
-2. Baixe `Callas_Optimizer_Setup_x64.exe` (único EXE distribuído).
-3. Execute o instalador e autorize o UAC.
-4. Abra o aplicativo pelo menu Iniciar; a desinstalação fica em Aplicativos Instalados.
-
-> O aplicativo ainda não tem assinatura digital própria; o SmartScreen pode alertar. **Não desative proteções do Windows para executá-lo.** Verifique a origem e o SHA-256 publicado na Release.
-
-## Como funciona a atualização
-
-Consulta: `https://api.github.com/repos/Callas157/Callas-Optimizer-Windows/releases/latest`
-
-- O usuário pode verificar manualmente ou permitir verificação ao abrir.
-- **Nunca atualiza sem perguntar.** A versão antiga permanece aberta durante o download e validação.
-- Só encerra a interface quando a nova versão está pronta para substituir o executável.
-- Mantém até dois backups recentes e tenta restaurar uma versão funcional quando o processo falha.
-- Logs do atualizador em `%LOCALAPPDATA%\CallasTeck\atualizacoes.log`.
-- Nas Releases é distribuído apenas o Setup e seu SHA-256; versões portáteis antigas foram retiradas.
-
-A edição instalada usa o Setup com UAC para atualizar Program Files. Quem possui uma versão portátil antiga deverá instalar o Setup para migrar. Instalação interrompida não tem garantia de rollback transacional.
-
-## Desenvolvimento
-
-- `src/app.py`: interface Qt, navegação, atualização, programas, páginas e logs.
-- `src/windows_actions.py`: ações Python, execução autorizada, backup de Registro/serviços e logs.
-- `src/cleaner.py`: rotina de limpeza nativa, sem seguir links.
-- `src/updater.ps1`: atualização por GitHub Releases, SHA-256 e recuperação.
-- As operações de manutenção já não dependem do BAT. WinUtil abre o site oficial sem executar scripts pela internet; a remoção do Edge depende da edição do Windows.
-- `src/extra_installers.py`: catálogo, download, verificação e execução dos instaladores de terceiros.
-- `src/extensions.ps1` e `src/undo_extensions.ps1`: configuração e reversão das políticas locais de extensões do Brave.
-- `assets/icons/`: Fênix aprovada em PNG e ícones SVG auxiliares; `scripts/make_icon.py` gera ICO multirresolução para a aplicação e os atalhos durante a compilação.
-- `requirements-build.txt`: dependências do ambiente de compilação.
-- `scripts/build.py`: PyInstaller no **Windows x64**; o executável fica em `dist/`.
-- `scripts/check_version.py`, `scripts/verify_build.py`, `tests/`: integridade, proteção contra erros e testes de interface.
-- `.github/workflows/release.yml`: constrói, testa, distribui somente o Setup e remove executáveis portáteis antigos das Releases.
-
-O código pode ser desenvolvido e testado em Windows usando Python 3.12:
-
-```powershell
-py -3.12 -m pip install -r requirements-build.txt
-py -3.12 -m unittest discover -s tests -v
-py -3.12 src\app.py
-```
-
-Para gerar o executável, `py -3.12 scripts\build.py` em uma máquina Windows x64.
-
-### Licenças e identidade visual
-
-- Qt for Python / PySide6-Essentials: distribuição segundo os termos LGPLv3/GPL/comercial aplicáveis. O projeto disponibiliza o código, instruções de build e bibliotecas Qt dinâmicas empacotadas pelo PyInstaller. Respeite as condições da licença ao redistribuir.
-- Os ícones de marca **Brave** e **NVIDIA** usam os caminhos vetoriais do projeto [Simple Icons](https://github.com/simple-icons/simple-icons) (CC0 para os desenhos). As marcas permanecem pertencentes aos respectivos titulares e não indicam afiliação ou endosso.
-- Downloads diretos de instaladores usam as origens HTTPS autorizadas do catálogo e a assinatura Authenticode dos editores. Os instaladores são obtidos dos fornecedores durante a instalação.
-
-## Avisos e testes
-
-A limpeza deve ser usada com os aplicativos fechados. Arquivos bloqueados são ignorados; opções de limpeza adicionais exigem confirmação. Não se promete eliminar todos os temporários do sistema nem recuperar dados apagados.
-
-**Testes:** build e testes estruturais no pipeline Windows. Instalação, desinstalação, UAC e atualização ponta a ponta ainda precisam de teste real no Windows 11.
+</details>
 
 ---
 

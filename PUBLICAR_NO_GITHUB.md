@@ -9,6 +9,12 @@ O Callas Optima para Windows publica versões estáveis em [Callas157/Callas-Opt
 3. Para publicar a atualização aprovada, integre o PR à `main`. O workflow **Testar e publicar Callas Optimizer Windows** compila, testa e cria a Release estável com a versão do arquivo `VERSION`. Uma tag `vX.Y.Z` no commit aprovado ou a execução manual do workflow na `main` também aciona esse fluxo.
 4. Acompanhe a execução até a publicação. A Release deve estar marcada como mais recente, com `draft=false` e `prerelease=false`. Ela deve incluir um único `Callas_Optimizer_Setup_x64.exe` com estado `uploaded`, digest `sha256:<64 dígitos hexadecimais>` e o `SHA256SUMS.txt` correspondente. Preserve os instaladores que já foram publicados.
 
+## Destacar o instalador
+
+- Mantenha o link direto do Setup estável no topo do README, antes da imagem. Use `https://github.com/Callas157/Callas-Optimizer-Windows/releases/latest/download/Callas_Optimizer_Setup_x64.exe` para acompanhar a versão estável.
+- O workflow usa `scripts/release_notes.py` para abrir as notas da Release com o link direto do Setup da própria tag. Em seguida, exibe a entrada da versão em `CHANGELOG.md` e um link para o histórico completo.
+- Depois da publicação, confira os dois links sem login. O do README deve baixar a versão estável. O da Release deve baixar o Setup da tag exibida.
+
 ## Confirmar a detecção
 
 1. Consulte a API pública sem autenticação. Confirme a nova tag, a estabilidade e os arquivos da Release que o atualizador vê. Um PR aprovado ou um Setup na seção **Artifacts** é uma etapa de validação do código. A fonte do atualizador é a API `/releases/latest`.

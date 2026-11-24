@@ -174,7 +174,10 @@ jobs:
             Write-Output 'Release mantida: checksum apenas do Setup.'
             exit 0
           }
-          gh release create $env:RELEASE_TAG dist/Callas_Optimizer_Setup_x64.exe dist/SHA256SUMS.txt --target $env:GITHUB_SHA --title "Callas Optimizer $env:RELEASE_TAG" --notes-file CHANGELOG.md --latest
+          $notes = Join-Path $env:RUNNER_TEMP 'callas-release-notes.md'
+          python scripts/release_notes.py $env:RELEASE_TAG $env:GITHUB_REPOSITORY $notes
+          if ($LASTEXITCODE -ne 0) { throw 'Falha ao gerar notas da Release' }
+          gh release create $env:RELEASE_TAG dist/Callas_Optimizer_Setup_x64.exe dist/SHA256SUMS.txt --target $env:GITHUB_SHA --title "Callas Optimizer $env:RELEASE_TAG" --notes-file $notes --latest
           if ($LASTEXITCODE -ne 0) { throw 'Falha ao criar Release' }
 
   remover-portateis-antigos:
