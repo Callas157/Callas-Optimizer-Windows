@@ -19,7 +19,16 @@ import truststore
 ROOT = Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "CallasTeck" / "Downloads"
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 SUCCESS_CODES = {0, 1641, 3010}
+WINGET_INSTALLER_FALLBACK = {
+    0x8A150012,  # Source name does not exist
+    0x8A150014,  # No applications found
+    0x8A150045,  # Source open failed
+    0x8A15004B,  # Failed to open all sources
+}
 CHATGPT_PACKAGE = "OpenAI.Codex_2p2nqsd0c76g0"
+CHATGPT_STORE_ID = "9PLM9XGG6VKS"
+SPOTIFY_PACKAGE = "SpotifyAB.SpotifyMusic_zpdnekdrzrea0"
+SPOTIFY_STORE_ID = "9NCBCSZSJRSB"
 
 CATALOG = {
     "brave": {
@@ -105,7 +114,7 @@ CATALOG = {
     },
     "chatgpt": {
         "name": "ChatGPT com Codex",
-        "url": "https://get.microsoft.com/installer/download/9PLM9XGG6VKS?cid=website_cta_psi",
+        "url": f"https://get.microsoft.com/installer/download/{CHATGPT_STORE_ID}?cid=website_cta_psi",
         "website": "https://chatgpt.com/download/",
         "hosts": {"get.microsoft.com"},
         "publisher": r"Microsoft Corporation",
@@ -208,17 +217,23 @@ def verify_authenticode(path: Path, publisher_regex: str) -> str:
     return signer
 
 
+def _installed_store_program(package: str, application: str) -> str | None:
+    count = wintypes.UINT()
+    length = wintypes.UINT()
+    # A primeira consulta enumera apenas o tamanho necessário para o usuário atual.
+    error = ctypes.windll.kernel32.GetPackagesByPackageFamily(
+        package, ctypes.byref(count), None, ctypes.byref(length), None,
+    )
+    if error == 122 and count.value:
+        return f"shell:AppsFolder\\{package}!{application}"
+    return None
+
+
 def installed_program(app_id: str) -> Path | str | None:
     if os.name != "nt":
         return None
     if app_id == "chatgpt":
-        count = wintypes.UINT()
-        length = wintypes.UINT()
-        # A primeira consulta enumera apenas o tamanho necessário para o usuário atual.
-        error = ctypes.windll.kernel32.GetPackagesByPackageFamily(
-            CHATGPT_PACKAGE, ctypes.byref(count), None, ctypes.byref(length), None,
-        )
-        return f"shell:AppsFolder\\{CHATGPT_PACKAGE}!App" if error == 122 and count.value else None
+        return _installed_store_program(CHATGPT_PACKAGE, "App")
     if app_id == "steam":
         import winreg
         try:
@@ -241,6 +256,8 @@ def installed_program(app_id: str) -> Path | str | None:
                         return tuple(int(part) for part in re.findall(r"\d+", path.parent.name))
                     return max(found, key=version)
                 return found[0]
+    if app_id == "spotify":
+        return _installed_store_program(SPOTIFY_PACKAGE, "Spotify")
     return None
 
 
@@ -287,17 +304,38 @@ def available_upgrades() -> set[str] | None:
     return _upgrade_ids(result.stdout) if result.returncode == 0 else None
 
 
-def upgrade_program(app_id: str, notify) -> None:
-    notify("Atualizando pelo WinGet…", -1)
-    result = subprocess.run(
-        [str(winget_path()), "upgrade", "--id", WINGET_IDS[app_id], "--exact",
-         "--source", "winget", "--interactive", "--disable-interactivity"],
-        stdin=subprocess.DEVNULL, creationflags=NO_WINDOW,
-    )
-    if result.returncode & 0xFFFFFFFF == 0x8A15002B:
-        # O programa pode ter recebido a atualização sozinho entre a consulta e o clique.
-        return
-    _check_setup_exit(result.returncode)
+def upgrade_program(app_id: str, notify) -> str:
+    app_id = program_key(app_id)
+    store_id = None
+    if app_id == "chatgpt":
+        store_id = CHATGPT_STORE_ID
+    elif app_id == "spotify" and isinstance(installed_program(app_id), str):
+        store_id = SPOTIFY_STORE_ID
+    if store_id:
+        open_program(f"ms-windows-store://pdp/?ProductId={store_id}")
+        return "Página aberta na Microsoft Store para verificar a atualização."
+
+    package_id = WINGET_IDS.get(app_id)
+    if package_id:
+        notify("Consultando atualização pelo WinGet…", -1)
+        try:
+            result = subprocess.run(
+                [str(winget_path()), "upgrade", "--id", package_id, "--exact",
+                 "--source", "winget", "--interactive", "--disable-interactivity"],
+                stdin=subprocess.DEVNULL, creationflags=NO_WINDOW,
+            )
+        except FileNotFoundError:
+            pass  # Without WinGet, use the manufacturer's signed installer.
+        else:
+            code = result.returncode & 0xFFFFFFFF
+            if code == 0x8A15002B:
+                return "O WinGet não encontrou atualização aplicável para este aplicativo."
+            if code not in WINGET_INSTALLER_FALLBACK:
+                _check_setup_exit(result.returncode)
+                return "Atualização pelo WinGet concluída."
+
+    download_and_open(app_id, notify)
+    return "Instalador oficial concluído."
 
 
 class _ShellExecuteInfo(ctypes.Structure):
@@ -434,6 +472,27 @@ def resolve_virtualbox_release() -> tuple[str, str]:
     return parse_virtualbox_release(version, directory, sums)
 
 
+def resolve_nvidia_release() -> str:
+    hosts = {"www.nvidia.com"}
+    url = official_website("nvidia")
+    request = urllib.request.Request(url, headers={"User-Agent": "CallasOptima"})
+    with official_https_opener(hosts).open(request, timeout=30) as response:
+        if not _safe_https(response.geturl(), hosts):
+            raise RuntimeError("Redirecionamento inesperado da NVIDIA.")
+        limit = 2 * 1024 * 1024
+        page = response.read(limit + 1)
+    if len(page) > limit:
+        raise RuntimeError("Página oficial da NVIDIA maior que o esperado.")
+    pattern = (
+        r"https://us\.download\.nvidia\.com/nvapp/client/(\d+(?:\.\d+){3})/x64/"
+        r"NVIDIA_app_v\1_x64\.exe(?=[\"'])"
+    )
+    match = re.search(pattern, page.decode("utf-8", errors="replace"))
+    if not match:
+        raise RuntimeError("Instalador x64 não encontrado na página oficial da NVIDIA.")
+    return match[0]
+
+
 def download_and_open(app_id: str, notify) -> None:
     """Executa apenas o instalador oficial verificado e espera a conclusão."""
     if os.name != "nt":
@@ -444,6 +503,9 @@ def download_and_open(app_id: str, notify) -> None:
         _check_nvidia_gpu()
     app = CATALOG[app_id].copy()
     expected_sha256 = None
+    if app_id == "nvidia":
+        notify("Consultando a versão oficial da NVIDIA…", -1)
+        app["url"] = resolve_nvidia_release()
     if app_id == "virtualbox":
         notify("Consultando a versão estável oficial da Oracle…", -1)
         app["url"], expected_sha256 = resolve_virtualbox_release()

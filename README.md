@@ -15,6 +15,10 @@
 **[Baixar a versão estável mais recente](https://github.com/Callas157/Callas-Optimizer-Windows/releases/latest)**
 </div>
 
+## v8.9.28 — Cartões compactos
+
+As ferramentas do Windows e a aba **Programas** se organizam em até três colunas. Use **Atualizar** ao lado de **Abrir** para consultar o WinGet ou acessar a atualização pelo fabricante ou pela Microsoft Store. No Modo Gamer, Edge, Privacidade e Menu clássico, o mesmo botão oferece a reversão quando ela está disponível.
+
 ## v8.9.25 — Limpeza Total e atalhos do Windows
 
 - **Lixeira:** o resultado distingue Lixeira vazia, esvaziada ou indisponível. O painel também mostra o que foi removido em cada pasta temporária.

@@ -202,9 +202,7 @@ Download-Verified $latest (Join-Path $env:LOCALAPPDATA 'asset.exe')
         self.assertLess(UPDATER.index("Status 'READY'"), UPDATER.index(wait_for_captured_process))
         self.assertIn('QApplication.quit()', APP)
     def test_maintains_13_menu_routes(self):
-        for num in (1,2,3,4,5,6,8,9,10,12,13):
-            self.assertRegex(APP, rf'\({num},\s*"')
-        nav = APP.split("NAV_SECTIONS = [", 1)[1].split("LEGACY = {", 1)[0]
+        nav = APP.split("NAV_SECTIONS = [", 1)[1].split("TOOL_PAGES = {", 1)[0]
         for route, title in (
             ("gamer", "Modo Gamer"), ("edge", "Microsoft Edge"),
             ("windows_update", "Windows Update"), ("network", "Rede e DNS"),

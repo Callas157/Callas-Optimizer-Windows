@@ -264,6 +264,27 @@ def load():
     return data
 
 
+def applied_action_backups() -> set[str]:
+    """Identify settings for which this profile still holds a previous value."""
+    state = load()
+    applied = set()
+    registry_actions = {
+        "gamer_on": ("CU", GAME_BAR, "AutoGameModeEnabled"),
+        "telemetry_reduce": ("LM", DATA_COLLECTION, "AllowTelemetry"),
+        "classic_on": ("CU", CLASSIC_MENU, ""),
+    }
+    for action, location in registry_actions.items():
+        if "|".join(location) in state["reg"]:
+            applied.add(action)
+    if any(service in state["svc"] for service in GAME_SERVICES):
+        applied.add("gamer_services_off")
+    if state["power"]:
+        applied.add("power_on")
+    if state["hiber"] is True:
+        applied.add("hiber_off")
+    return applied
+
+
 def save(data):
     HOME.mkdir(parents=True,exist_ok=True)
     tmp=BACKUP.with_suffix(".tmp")
@@ -417,9 +438,20 @@ def hibernate(enable):
     return result
 
 
+def edge_install_dirs():
+    for variable, fallback in (("PROGRAMFILES(X86)", r"C:\Program Files (x86)"),
+                               ("PROGRAMFILES", r"C:\Program Files")):
+        yield Path(os.environ.get(variable, fallback)) / "Microsoft" / "Edge" / "Application"
+
+
+def edge_installed() -> bool:
+    return os.name == "nt" and any((location / "msedge.exe").is_file() for location in edge_install_dirs())
+
+
 def edge(uninstall):
     if uninstall:
-        location=Path(os.environ.get("PROGRAMFILES(X86)",r"C:\Program Files (x86)"))/"Microsoft/Edge/Application"
+        location = next((path for path in edge_install_dirs() if (path / "msedge.exe").is_file()),
+                        next(edge_install_dirs()))
         found=sorted(location.glob("*/Installer/setup.exe"),reverse=True) if location.exists() else []
         if not found:raise RuntimeError("Desinstalador Edge não encontrado ou protegido nesta edição.")
         verify_authenticode(found[0], r"Microsoft Corporation")

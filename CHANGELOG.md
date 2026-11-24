@@ -1,3 +1,9 @@
+## v8.9.28 — Cartões compactos e reversão no mesmo botão
+
+- Programas e ferramentas do Windows usam cartões retangulares em até três colunas, de acordo com a largura da janela. WinUtil e Ponto de restauração ficam alinhados à esquerda.
+- Modo Gamer, Edge, Privacidade e Menu clássico usam o mesmo botão para aplicar e restaurar. O cartão mostra a animação durante a tarefa e o resultado ao terminar.
+- Aplicativos instalados exibem Abrir e Atualizar lado a lado. A atualização usa WinGet, o instalador oficial ou a Microsoft Store, conforme o aplicativo.
+
 ## v8.9.27 — Progresso das tarefas no próprio aplicativo
 
 - O botão Executar dá lugar a uma barra animada com a porcentagem no centro. O resultado fica no cartão e a saída detalhada fica em Registros.

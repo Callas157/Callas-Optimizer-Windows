@@ -59,7 +59,6 @@ class NativeActionContracts(unittest.TestCase):
         ast.parse(s)
         self.assertNotIn('start_admin_bat(',s)
         self.assertNotIn('GUI_Engine.bat',s)
-        self.assertIn('self.native_action(code)',s)
         self.assertIn('--callas-task',s)
 
 

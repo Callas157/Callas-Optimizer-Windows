@@ -15,13 +15,13 @@ import threading
 import uuid
 import webbrowser
 
-from PySide6.QtCore import QByteArray, QFileInfo, QRectF, QSettings, QSize, Qt, QThread, QTimer, Signal, Slot
+from PySide6.QtCore import QByteArray, QFileInfo, QRect, QRectF, QSettings, QSize, Qt, QThread, QTimer, Signal, Slot
 from PySide6.QtGui import QBrush, QColor, QConicalGradient, QIcon, QLinearGradient, QPainter, QPainterPath, QPen, QPixmap
 from PySide6.QtSvg import QSvgRenderer
 from PySide6.QtWidgets import (
     QApplication, QButtonGroup, QCheckBox, QFileDialog, QFileIconProvider, QFrame, QGridLayout, QHBoxLayout,
-    QLabel, QMainWindow, QMessageBox, QPlainTextEdit, QProgressBar, QPushButton,
-    QScrollArea, QSplitter, QStackedWidget, QVBoxLayout, QWidget,
+    QLabel, QLayout, QMainWindow, QMessageBox, QPlainTextEdit, QProgressBar, QPushButton,
+    QScrollArea, QSizePolicy, QSplitter, QStackedWidget, QVBoxLayout, QWidget,
 )
 
 from cleaner import (
@@ -29,7 +29,8 @@ from cleaner import (
     nvidia_dxcache_folders, windows_temp_folder,
 )
 from windows_actions import (
-    ACTIONS, BY_ROUTE, HOME as ACTION_HOME, PROFILE_MISMATCH, ElevatedAction, worker as run_windows_action,
+    ACTIONS, BY_ROUTE, HOME as ACTION_HOME, PROFILE_MISMATCH, ElevatedAction,
+    applied_action_backups, edge_installed, worker as run_windows_action,
 )
 from extra_installers import (
     CATALOG as EXTRA_APPS, available_upgrades, download_and_open, installed_program,
@@ -38,7 +39,7 @@ from extra_installers import (
 from task_progress import TaskProgressBar
 from virtualbox_templates import create_test_vms, VM_NAMES, get_vboxmanage
 
-APP_VERSION = "8.9.27"
+APP_VERSION = "8.9.28"
 REPO = "Callas157/Callas-Optimizer-Windows"
 PROJECT_URL = f"https://github.com/{REPO}"
 DATA_DIR = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "CallasTeck"
@@ -70,30 +71,30 @@ NAV_SECTIONS = [
     ]),
 ]
 
-LEGACY = {
-    "gamer": (1, "Modo Gamer", "Ajustes para jogos, Xbox, hibernação e plano de energia.",
-              "Confira cada ajuste antes de aplicar. Algumas mudanças exigem reinicialização."),
-    "edge": (2, "Microsoft Edge", "Ferramentas de remoção e recuperação do navegador.",
-             "Remover o Edge pode afetar componentes do Windows. Faça backup primeiro."),
-    "windows_update": (3, "Windows Update", "Configurações do serviço de atualização do Windows.",
-                       "Desativar atualizações reduz a segurança do sistema. Prefira as opções reversíveis."),
-    "network": (4, "Rede e DNS", "Gerenciamento de DNS, rede e configurações dos adaptadores.",
-                "Algumas opções podem desconectar temporariamente a internet."),
-    "privacy": (5, "Privacidade", "Controles de telemetria, permissões e privacidade.",
-                "Revise cada configuração para não desativar funcionalidades importantes."),
-    "repair": (6, "Reparar Windows", "Ferramentas oficiais de diagnóstico e recuperação.",
-               "DISM e SFC podem demorar. Não desligue o computador durante reparos."),
-    "classic": (8, "Menu clássico", "Alternar o menu de contexto clássico do Windows 11.",
-                "A alteração pode exigir reinício do Explorer para ficar visível."),
-    "shutdown": (9, "Desligamento", "Agendar e cancelar desligamentos automáticos.",
-                 "Confira os horários para evitar fechar aplicativos ou perder trabalho."),
-    "winutil": (10, "WinUtil", "Abrir a ferramenta WinUtil de Chris Titus Tech.",
-                "Ferramenta de terceiros: revise seus comandos antes de executá-los."),
-    "restore_point": (12, "Ponto de restauração", "Criar um ponto de restauração do Windows.",
-                      "O Windows precisa ter a proteção do sistema habilitada."),
-    "restore": (13, "Restaurar padrões", "Reverter modificações efetuadas pelo Callas Optimizer.",
-                "Só configurações contempladas no motor original podem ser revertidas."),
+TOOL_PAGES = {
+    "gamer": ("Modo Gamer", "Ajustes para jogos, Xbox, hibernação e plano de energia."),
+    "repair": ("Reparar Windows", "Ferramentas oficiais de diagnóstico e recuperação."),
+    "edge": ("Microsoft Edge", "Remoção e recuperação do navegador."),
+    "windows_update": ("Windows Update", "Gerencie as políticas e os serviços de atualização do Windows."),
+    "network": ("Rede e DNS", "Gerencie a rede e o DNS dos adaptadores."),
+    "privacy": ("Privacidade", "Controles dos dados de diagnóstico do Windows."),
+    "classic": ("Menu clássico", "Alterne o menu de contexto do Windows 11."),
+    "shutdown": ("Desligamento", "Agende ou cancele um desligamento automático."),
+    "winutil": ("WinUtil", "Ferramenta de manutenção de Chris Titus Tech."),
+    "restore_point": ("Ponto de restauração", "A proteção do sistema precisa estar habilitada no Windows."),
+    "restore": ("Restaurar padrões", "Recupere as configurações salvas pelo Callas Optimizer."),
 }
+
+REVERSIBLE_ACTIONS = {
+    "gamer_on": ("gamer_off", "Modo Jogo", "Aplicar"),
+    "power_on": ("power_off", "Alto desempenho", "Aplicar"),
+    "gamer_services_off": ("gamer_services_on", "SysMain e Pesquisa", "Desativar"),
+    "hiber_off": ("hiber_on", "Hibernação", "Desativar"),
+    "edge_uninstall": ("edge_restore", "Navegador Microsoft Edge", "Remover"),
+    "telemetry_reduce": ("telemetry_restore", "Telemetria opcional", "Reduzir"),
+    "classic_on": ("classic_off", "Menu de contexto clássico", "Ativar"),
+}
+ACTION_CARD_KEYS = {undo: code for code, (undo, _, _) in REVERSIBLE_ACTIONS.items()}
 
 STYLE = """
 * { font-family: 'Segoe UI'; font-size: 13px; color: #e8ecff; }
@@ -111,6 +112,7 @@ QLabel#Title { font-size: 27px; font-weight: 700; color: #f9f8ff; }
 QLabel#HeroTitle { font-size: 26px; font-weight: 700; color: #fff; }
 QLabel#SystemMetric { color: #e6efff; font-size: 14px; font-weight: 600; }
 QLabel#CardTitle { font-size: 17px; font-weight: 700; color: #f8f8ff; }
+QLabel#ProgramTitle { font-size: 15px; font-weight: 700; color: #f8f8ff; }
 QLabel#Muted { color: #a8b9d8; }
 QLabel#Section { color: #bc91ff; font-weight: 700; font-size: 11px; letter-spacing: 1px; }
 QPushButton { background: #22234e; color: #f2f3ff; border: 1px solid #635e9b; border-radius: 11px; padding: 10px 13px; font-weight: 600; }
@@ -118,6 +120,11 @@ QPushButton:hover { background: #38347c; border-color: #b87aff; }
 QPushButton:disabled { color: #7880a6; background: #1b2241; border-color: #3a3b61; }
 QPushButton#Primary { background: qlineargradient(x1:0,y1:0,x2:1,y2:0,stop:0 #a02bdf,stop:.55 #523cec,stop:1 #087bff); border: 1px solid #9e6dff; color: #fff; }
 QPushButton#Primary:hover { background: #8753ee; border-color: #52e3ff; }
+QPushButton[compact="true"] { padding: 5px 10px; border-radius: 8px; }
+QPushButton[updateAvailable="true"] { border-color: #6cc9f4; background: #213c65; }
+QPushButton[updateAvailable="true"]:hover { background: #2d517d; }
+QPushButton#Primary[compact="true"]:disabled { color: #a8b9d8; background: #1b2241; border-color: #3a3b61; }
+QLabel#ActionWarning { color: #e6c890; }
 QPushButton#Quick { text-align: left; background: transparent; border: none; padding: 4px 0; color: #ffffff; font-size: 21px; font-weight: 700; }
 QPushButton#Quick:hover { background: #3a2877; }
 QPushButton#Nav { background: transparent; border: none; border-radius: 9px; padding: 9px 12px; text-align: left; color: #d0d7f6; font-size: 13px; }
@@ -233,8 +240,8 @@ class ExtraInstallerThread(QThread):
     def run(self):
         try:
             operation = upgrade_program if self.upgrade else download_and_open
-            operation(self.app_id, self.progress.emit)
-            self.result.emit(True, "", self.app_id)
+            message = operation(self.app_id, self.progress.emit)
+            self.result.emit(True, message or "", self.app_id)
         except OSError as exc:
             message = "A instalação foi cancelada." if getattr(exc, "winerror", None) == 1223 else str(exc)
             self.result.emit(False, message, self.app_id)
@@ -396,22 +403,152 @@ def label(text: str, kind: str = "Muted", wrap: bool = True) -> QLabel:
     return obj
 
 
-def card_layout(variant: str = "Card") -> tuple[QFrame, QVBoxLayout]:
+def compact_status() -> QLabel:
+    status = label("")
+    status.setTextFormat(Qt.TextFormat.PlainText)
+    policy = status.sizePolicy()
+    policy.setHorizontalPolicy(QSizePolicy.Policy.Ignored)
+    status.setSizePolicy(policy)
+    return status
+
+
+def card_layout(variant: str = "Card", *, compact: bool = False) -> tuple[QFrame, QVBoxLayout]:
     outer = QFrame()
     outer.setObjectName(variant)
     layout = QVBoxLayout(outer)
-    layout.setContentsMargins(22, 22, 22, 22)
-    layout.setSpacing(12)
+    margin = 14 if compact else 22
+    layout.setContentsMargins(margin, margin, margin, margin)
+    layout.setSpacing(7 if compact else 12)
     return outer, layout
 
 
-def action_button(text: str, function, primary: bool = False) -> QPushButton:
+def action_button(text: str, function, primary: bool = False, *, compact: bool = False) -> QPushButton:
     button = QPushButton(text)
     if primary:
         button.setObjectName("Primary")
+    if compact:
+        button.setProperty("compact", True)
+        button.setFixedHeight(34)
     button.setCursor(Qt.CursorShape.PointingHandCursor)
     button.clicked.connect(function)
     return button
+
+
+class CompactCardLayout(QLayout):
+    """Measure and arrange each row using the same width, including wrapped labels."""
+
+    def __init__(self, parent: QWidget):
+        super().__init__(parent)
+        self.items = []
+        self.setContentsMargins(0, 0, 0, 0)
+        self.setSpacing(12)
+
+    def addItem(self, item):
+        self.items.append(item)
+        self.invalidate()
+
+    def count(self):
+        return len(self.items)
+
+    def itemAt(self, index):
+        return self.items[index] if 0 <= index < self.count() else None
+
+    def takeAt(self, index):
+        if self.itemAt(index) is None:
+            return None
+        item = self.items.pop(index)
+        self.invalidate()
+        return item
+
+    def hasHeightForWidth(self):
+        return True
+
+    def minimumSize(self):
+        size = QSize(0, 0)
+        for item in self.items:
+            size = size.expandedTo(item.minimumSize())
+        return size
+
+    def sizeHint(self):
+        columns = min(3, self.count())
+        width = columns * 395 + max(0, columns - 1) * self.spacing()
+        return QSize(width, self.heightForWidth(width))
+
+    def _rows(self, width: int):
+        gap = self.spacing()
+        columns = min(3, max(1, (width + gap) // (275 + gap)))
+        card_width = max(0, (width - (columns - 1) * gap) // columns)
+        for start in range(0, self.count(), columns):
+            items = self.items[start:start + columns]
+            height = max(max(item.minimumSize().height(), item.heightForWidth(card_width)) for item in items)
+            yield items, card_width, height
+
+    def heightForWidth(self, width):
+        heights = [height for _, _, height in self._rows(width)]
+        return sum(heights) + max(0, len(heights) - 1) * self.spacing()
+
+    def setGeometry(self, rect):
+        super().setGeometry(rect)
+        y = rect.y()
+        gap = self.spacing()
+        for items, width, height in self._rows(rect.width()):
+            for column, item in enumerate(items):
+                item.setGeometry(QRect(rect.x() + column * (width + gap), y, width, height))
+            y += height + gap
+
+
+class CompactGrid(QWidget):
+    def __init__(self, cards: list[QFrame]):
+        super().__init__()
+        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
+        layout = CompactCardLayout(self)
+        for card in cards:
+            layout.addWidget(card)
+        self.setMaximumWidth(layout.sizeHint().width())
+
+
+class NativeActionCard:
+    def __init__(self, code: str, run_action):
+        task = ACTIONS[code]
+        self.reversal = REVERSIBLE_ACTIONS.get(code)
+        title = self.reversal[1] if self.reversal else task["name"]
+        self.widget, contents = card_layout(compact=True)
+        contents.addWidget(label(title, "CardTitle"))
+        self.description = label("")
+        contents.addWidget(self.description)
+        self.warning = label("", "ActionWarning")
+        contents.addWidget(self.warning)
+        contents.addStretch()
+        self.button = action_button("", lambda: run_action(self.code), True, compact=True)
+        self.progress = TaskProgressBar(f"Progresso de {title}")
+        self.execution = QStackedWidget()
+        self.execution.setFixedSize(118, 34)
+        self.execution.addWidget(self.button)
+        self.execution.addWidget(self.progress)
+        self.progress.setFixedHeight(34)
+        contents.addWidget(self.execution, alignment=Qt.AlignmentFlag.AlignLeft)
+        self.status = compact_status()
+        self.status.hide()
+        contents.addWidget(self.status)
+        self.set_action(code)
+
+    def set_action(self, code: str):
+        self.code = code
+        task = ACTIONS[code]
+        if self.reversal:
+            text = self.reversal[2] if code != self.reversal[0] else (
+                "Restaurar" if code == "edge_restore" else "Reverter")
+        else:
+            text = "Executar"
+        self.button.setText(text)
+        self.button.setAccessibleName(f"{text} — {task['name']}")
+        tooltip = task["name"]
+        if task["admin"]:
+            tooltip += " (requer administrador)"
+        self.button.setToolTip(tooltip)
+        self.description.setText(task["description"])
+        self.warning.setText(task["warning"])
+        self.warning.setVisible(bool(task["warning"]))
 
 
 class MemoryRing(QWidget):
@@ -508,7 +645,7 @@ class MainWindow(QMainWindow):
         self.settings = QSettings("Callas", "OptimizerWindows")
         self.cleaner: CleanerThread | None = None
         self.native_timer: QTimer | None = None
-        self.native_controls = {}
+        self.native_controls: dict[str, NativeActionCard] = {}
         self.extra_installer: ExtraInstallerThread | None = None
         self.vm_template_thread: VirtualBoxTemplateThread | None = None
         self.checking_program_updates = False
@@ -664,8 +801,9 @@ class MainWindow(QMainWindow):
         self._update_page()
         self._logs_page()
         self._about_page()
-        for route, (op, title, description, warning) in LEGACY.items():
-            self._legacy_page(route, op, title, description, warning)
+        for route, (title, description) in TOOL_PAGES.items():
+            self._tool_page(route, title, description)
+        self.refresh_native_actions()
 
     def _home_page(self):
         """Painel Fênix interativo; todos os atalhos usam páginas da mesma janela."""
@@ -905,59 +1043,52 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Configurações", str(exc))
 
     def _drivers_page(self):
-        col = self._page(
-            "drivers", "Drivers", "Acesso às ferramentas oficiais. Nenhum driver é trocado automaticamente.")
-        c, body = card_layout()
-        body.addWidget(label("NVIDIA APP", "Section"))
-        body.addWidget(label(
-            "Abra o instalador oficial do NVIDIA App. Nele, você pode verificar "
-            "drivers disponíveis e escolher quando instalar; o Callas não remove "
-            "drivers nem força versões sem sua confirmação."))
-        body.addWidget(action_button("ABRIR NVIDIA APP EM PROGRAMAS", self._show_nvidia_card, True))
-        col.addWidget(c)
-        other, layout = card_layout()
-        layout.addWidget(label("DRIVERS PELO WINDOWS", "Section"))
-        layout.addWidget(label("Use as opções oficiais de Windows Update para drivers opcionais. "
-                               "Evite instaladores de terceiros que prometem atualizar tudo."))
-        layout.addWidget(action_button("ABRIR ATUALIZAÇÕES OPCIONAIS",
-                                       lambda: self.open_windows_settings("windowsupdate-optionalupdates")))
-        col.addWidget(other)
-        col.addStretch()
+        col = self._page("drivers", "Drivers", "Acesso às ferramentas oficiais de atualização de drivers.")
+        nvidia, body = card_layout(compact=True)
+        body.addWidget(label("NVIDIA App", "CardTitle"))
+        body.addWidget(label("Confira os drivers disponíveis e escolha quando instalá-los."))
+        body.addStretch()
+        body.addWidget(action_button("Ver em Programas", self._show_nvidia_card, True, compact=True),
+                       alignment=Qt.AlignmentFlag.AlignLeft)
+        windows, body = card_layout(compact=True)
+        body.addWidget(label("Drivers pelo Windows", "CardTitle"))
+        body.addWidget(label("Veja os drivers opcionais nas Configurações do Windows."))
+        body.addStretch()
+        body.addWidget(action_button("Abrir atualizações opcionais",
+                                     lambda: self.open_windows_settings("windowsupdate-optionalupdates"),
+                                     compact=True), alignment=Qt.AlignmentFlag.AlignLeft)
+        col.addWidget(CompactGrid([nvidia, windows]))
+        col.addStretch(1)
 
     def _show_nvidia_card(self):
         self.goto("programs")
         self.pages["programs"].ensureWidgetVisible(self.nvidia_card)
 
-    def _legacy_page(self, route, option, title, description, warning):
+    def _tool_page(self, route, title, description):
         col = self._page(route, title, description)
-        header, panel = card_layout()
-        panel.addWidget(label("AÇÕES EM PYTHON", "Section"))
-        panel.addWidget(label("Cada função roda no Windows com confirmação e registro de resultado."))
-        col.addWidget(header)
-        for action in BY_ROUTE.get(route, []):
-            card, contents = card_layout()
-            contents.addWidget(label(action["name"], "CardTitle"))
-            contents.addWidget(label(action["description"]))
-            if action["warning"]:
-                contents.addWidget(label("Atenção: " + action["warning"]))
-            text = "EXECUTAR (ADMINISTRADOR)" if action["admin"] else "EXECUTAR"
-            run = action_button(text, lambda _=False, code=action["id"]: self.native_action(code), True)
-            progress = TaskProgressBar(f"Progresso de {action['name']}")
-            execution = QStackedWidget()
-            execution.addWidget(run)
-            execution.addWidget(progress)
-            contents.addWidget(execution)
-            status = label("")
-            status.setTextFormat(Qt.TextFormat.PlainText)
-            status.hide()
-            contents.addWidget(status)
-            repeat = action_button("EXECUTAR NOVAMENTE", lambda _=False, code=action["id"]: self.native_action(code))
-            repeat.hide()
-            contents.addWidget(repeat, alignment=Qt.AlignmentFlag.AlignLeft)
-            self.native_controls[action["id"]] = run, progress, execution, status, repeat
-            col.addWidget(card)
-        col.addWidget(action_button("VER REGISTROS", lambda: self.goto("logs")))
-        col.addStretch()
+        cards = []
+        for action in BY_ROUTE[route]:
+            code = action["id"]
+            if code in ACTION_CARD_KEYS:
+                continue
+            card = NativeActionCard(code, self.native_action)
+            self.native_controls[code] = card
+            cards.append(card.widget)
+        col.addWidget(CompactGrid(cards))
+        col.addWidget(action_button("Ver registros", lambda: self.goto("logs"), compact=True),
+                      alignment=Qt.AlignmentFlag.AlignLeft)
+        col.addStretch(1)
+
+    def refresh_native_actions(self):
+        edge = "edge_uninstall"
+        self.native_controls[edge].set_action(edge if edge_installed() else "edge_restore")
+        try:
+            applied = applied_action_backups()
+        except RuntimeError:
+            return  # Preserve the current buttons if the backup cannot be read.
+        for code, (undo, _, _) in REVERSIBLE_ACTIONS.items():
+            if code != edge:
+                self.native_controls[code].set_action(undo if code in applied else code)
 
     def _clean_page(self):
         col = self._page("clean", "Limpeza Total", "Limpeza nativa com progresso, cancelamento e registro de arquivos ignorados.")
@@ -997,7 +1128,7 @@ class MainWindow(QMainWindow):
     def set_program_icon(self, app_id: str, executable: Path | None = None):
         if app_id in self.program_icon_sources and self.program_icon_sources[app_id] == executable:
             return
-        size = QSize(55, 55)
+        size = QSize(42, 42)
         scale = self.devicePixelRatioF()
         pixmap = QPixmap()
         if executable and QApplication.platformName() == "windows":
@@ -1010,37 +1141,42 @@ class MainWindow(QMainWindow):
         self.program_icon_sources[app_id] = executable
 
     def _program_card(self, name: str, icon: str, description: str, action_title: str, action):
-        outer, content = card_layout()
-        title_row = QHBoxLayout()
+        outer, content = card_layout(compact=True)
+        content.setContentsMargins(13, 10, 13, 10)
+        row = QHBoxLayout()
+        row.setSpacing(10)
         img = QLabel()
-        img.setFixedSize(57, 57)
+        img.setFixedSize(44, 44)
         img.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.program_icons[icon] = img
         self.set_program_icon(icon)
-        title_row.addWidget(img)
-        names = QVBoxLayout()
-        names.addWidget(label(name, "CardTitle"))
-        names.addWidget(label(description))
-        title_row.addLayout(names, 1)
-        content.addLayout(title_row)
-        primary = action_button(action_title, action, True)
-        if program_key(icon) not in EXTRA_APPS:
-            content.addWidget(primary)
-            return outer
+        row.addWidget(img, alignment=Qt.AlignmentFlag.AlignTop)
+        details = QVBoxLayout()
+        details.setSpacing(3)
+        details.addWidget(label(name, "ProgramTitle"))
+        details.addWidget(label(description))
+        details.addStretch()
+        row.addLayout(details, 1)
+        content.addLayout(row)
+
         actions = QHBoxLayout()
-        actions.addWidget(primary, 1)
-        upgrade = action_button("Atualizar", lambda: self.install_extra(icon, upgrade=True))
-        upgrade.hide()
-        actions.addWidget(upgrade)
+        primary = action_button(action_title, action, True, compact=True)
+        upgrade = action_button("Atualizar", lambda: self.install_extra(icon, upgrade=True), compact=True)
+        for button in (primary, upgrade):
+            button.setFixedSize(84, 32)
+            actions.addWidget(button)
+        actions.addStretch()
         content.addLayout(actions)
+
         progress = TaskProgressBar(f"Progresso de {name}")
+        progress.setFixedHeight(32)
         progress.hide()
         content.addWidget(progress)
-        status = label("")
-        status.setTextFormat(Qt.TextFormat.PlainText)
+        status = compact_status()
         status.hide()
         content.addWidget(status)
-        support = action_button("ABRIR SITE OFICIAL", lambda: webbrowser.open(official_website(program_key(icon))))
+        support = action_button("Abrir site oficial", lambda: webbrowser.open(official_website(program_key(icon))),
+                                compact=True)
         support.hide()
         content.addWidget(support, alignment=Qt.AlignmentFlag.AlignLeft)
         self.program_support_links[icon] = support
@@ -1049,7 +1185,8 @@ class MainWindow(QMainWindow):
 
     def _program_page(self):
         col = self._page("programs", "Central de aplicativos", "Instale, abra e atualize seus aplicativos.")
-        self.program_update_button = action_button("VERIFICAR ATUALIZAÇÕES DOS APPS", self.check_program_updates)
+        self.program_update_button = action_button("Verificar atualizações dos apps", self.check_program_updates,
+                                                   compact=True)
         col.addWidget(self.program_update_button, alignment=Qt.AlignmentFlag.AlignLeft)
         self.program_updates_progress = TaskProgressBar("Progresso da verificação pelo WinGet")
         self.program_updates_progress.hide()
@@ -1057,8 +1194,6 @@ class MainWindow(QMainWindow):
         self.program_updates_status = label("")
         self.program_updates_status.hide()
         col.addWidget(self.program_updates_status)
-        self.program_grid = QGridLayout()
-        self.program_grid.setSpacing(16)
         self.brave_card = self._program_card(
             "Brave Browser", "brave", "Navegador com configuração opcional de SteamDB e Bonjourr", "Instalar",
             lambda: self.install_extra("brave"))
@@ -1066,13 +1201,13 @@ class MainWindow(QMainWindow):
             "NVIDIA App", "nvidia", "Gerencie drivers e configurações da GPU", "Instalar",
             lambda: self.install_extra("nvidia"))
         self.medal_card = self._program_card(
-            "Medal", "medal", "Gravação de clipes e melhores momentos", "BAIXAR INSTALADOR",
+            "Medal", "medal", "Gravação de clipes e melhores momentos", "Instalar",
             lambda: self.install_extra("medal"))
         self.lghub_card = self._program_card(
-            "Logitech G HUB", "lghub", "Configuração de periféricos Logitech G", "BAIXAR INSTALADOR",
+            "Logitech G HUB", "lghub", "Configuração de periféricos Logitech G", "Instalar",
             lambda: self.install_extra("lghub"))
         self.spotify_card = self._program_card(
-            "Spotify", "spotify", "Aplicativo de música para Windows", "BAIXAR INSTALADOR",
+            "Spotify", "spotify", "Aplicativo de música para Windows", "Instalar",
             lambda: self.install_extra("spotify"))
         self.chatgpt_card = self._program_card(
             "ChatGPT", "chatgpt", "Chat, Work e Codex no aplicativo oficial para Windows",
@@ -1083,10 +1218,10 @@ class MainWindow(QMainWindow):
             "Instalar",
             lambda: self.install_extra("codex"))
         self.discord_card = self._program_card(
-            "Discord", "discord", "Conversas, comunidades e voz", "BAIXAR INSTALADOR",
+            "Discord", "discord", "Conversas, comunidades e voz", "Instalar",
             lambda: self.install_extra("discord"))
         self.steam_card = self._program_card(
-            "Steam", "steam", "Biblioteca de jogos para PC", "BAIXAR INSTALADOR",
+            "Steam", "steam", "Biblioteca de jogos para PC", "Instalar",
             lambda: self.install_extra("steam"))
         self.epic_card = self._program_card(
             "Epic Games Launcher", "epic", "Loja e biblioteca Epic Games", "Instalar",
@@ -1102,63 +1237,54 @@ class MainWindow(QMainWindow):
             self.epic_card, self.wise_card, self.virtualbox_card, self.medal_card,
             self.lghub_card, self.spotify_card, self.chatgpt_card, self.codex_card,
         ]
-        for index, card in enumerate(self.all_program_cards):
-            self.program_grid.addWidget(card, index // 2, index % 2)
-        col.addLayout(self.program_grid)
-        lab_card, lab = card_layout()
-        lab.addWidget(label("LABORATÓRIO VIRTUALBOX · WINDOWS 11", "Section"))
+        col.addWidget(CompactGrid(self.all_program_cards))
+        lab_card, lab = card_layout(compact=True)
+        lab.addWidget(label("Laboratório VirtualBox", "CardTitle"))
         lab.addWidget(label(
-            "Prepare duas máquinas independentes para testar o Callas: "
-            "Windows 11 Pro e Windows 11 IoT Enterprise LTSC. "
-            "Cada VM terá 6 GB de RAM, 5 vCPUs, disco dinâmico de 80 GB, "
-            "UEFI, Secure Boot, TPM 2.0 e rede NAT. "
-            "Os links podem ser copiados do PC para a VM após instalar Guest Additions. "
-            "Arrastar arquivos permanece desativado. "
-            "Você escolhe a pasta e adiciona as ISOs posteriormente."
+            "Prepare duas VMs, uma para Windows 11 Pro e outra para IoT Enterprise LTSC. "
+            "Você escolhe a pasta e adiciona as ISOs depois."
         ))
+        lab.addStretch()
         self.vm_template_button = action_button(
-            "PREPARAR / AJUSTAR 2 VMS", self.prepare_virtualbox_templates, True)
+            "PREPARAR / AJUSTAR 2 VMS", self.prepare_virtualbox_templates, True, compact=True)
         lab.addWidget(self.vm_template_button, alignment=Qt.AlignmentFlag.AlignLeft)
         self.vm_template_progress = TaskProgressBar("Progresso da preparação das VMs")
         self.vm_template_progress.hide()
         lab.addWidget(self.vm_template_progress)
-        self.vm_template_status = label("")
-        self.vm_template_status.setTextFormat(Qt.TextFormat.PlainText)
+        self.vm_template_status = compact_status()
         self.vm_template_status.hide()
         lab.addWidget(self.vm_template_status)
-        col.addWidget(lab_card)
-        openai_card, openai_box = card_layout()
-        openai_box.addWidget(label("CHATGPT + CODEX NO WINDOWS", "Section"))
+        openai_card, openai_box = card_layout(compact=True)
+        openai_box.addWidget(label("ChatGPT e Codex", "CardTitle"))
         openai_box.addWidget(label(
-            "O ChatGPT para desktop já inclui o Codex. É um único aplicativo oficial, "
-            "sem precisar instalar dois programas. Entre com sua conta e, no Codex, "
-            "selecione a pasta do projeto que deseja analisar. O Callas não concede "
-            "acesso automático aos arquivos nem solicita chaves de API."
+            "O Codex já vem no ChatGPT para Windows. Entre na sua conta e escolha a pasta "
+            "do projeto que deseja usar."
         ))
+        openai_box.addStretch()
         openai_box.addWidget(action_button(
-            "COMO USAR COM ARQUIVOS LOCAIS",
-            lambda: webbrowser.open("https://learn.chatgpt.com/pt-BR/docs/quickstart")
-        ))
-        col.addWidget(openai_card)
-        c, box = card_layout()
-        box.addWidget(label("EXTENSÕES DO BRAVE", "Section"))
-        box.addWidget(label("SteamDB e Bonjourr podem ser configurados por política local. Isso faz o Brave exibir 'Gerenciado pela organização'."))
+            "Como usar arquivos locais",
+            lambda: webbrowser.open("https://learn.chatgpt.com/pt-BR/docs/quickstart"),
+            compact=True), alignment=Qt.AlignmentFlag.AlignLeft)
+        c, box = card_layout(compact=True)
+        box.addWidget(label("Extensões do Brave", "CardTitle"))
+        box.addWidget(label("Configure SteamDB e Bonjourr. O Brave poderá exibir 'Gerenciado pela organização'."))
+        box.addStretch()
         row = QHBoxLayout()
         self.extension_buttons = (
-            action_button("CONFIGURAR EXTENSÕES", lambda: self.configure_brave_extensions(False), True),
-            action_button("DESFAZER POLÍTICAS", lambda: self.configure_brave_extensions(True)),
+            action_button("Configurar", lambda: self.configure_brave_extensions(False), True, compact=True),
+            action_button("Desfazer", lambda: self.configure_brave_extensions(True), compact=True),
         )
         for button in self.extension_buttons:
             row.addWidget(button)
+        row.addStretch()
         box.addLayout(row)
         self.extensions_progress = TaskProgressBar("Progresso das políticas do Brave")
         self.extensions_progress.hide()
         box.addWidget(self.extensions_progress)
-        self.extensions_status = label("")
-        self.extensions_status.setTextFormat(Qt.TextFormat.PlainText)
+        self.extensions_status = compact_status()
         box.addWidget(self.extensions_status)
-        col.addWidget(c)
-        col.addStretch()
+        col.addWidget(CompactGrid([lab_card, openai_card, c]))
+        col.addStretch(1)
         self.refresh_program_cards()
 
     def _update_page(self):
@@ -1230,6 +1356,8 @@ class MainWindow(QMainWindow):
             self.home_timer.start()
         else:
             self.home_timer.stop()
+        if route in TOOL_PAGES and self.native_timer is None:
+            self.refresh_native_actions()
         if route == "programs":
             self.refresh_program_cards()
             if not self.program_updates_checked:
@@ -1261,15 +1389,14 @@ class MainWindow(QMainWindow):
         self.native_progress_file = self.native_report.with_suffix(".progress")
         self.native_code = code
         self.native_task_name = task["name"]
-        _, progress, execution, status, repeat = self.native_controls[code]
-        repeat.hide()
-        progress.begin()
-        execution.setCurrentWidget(progress)
-        status.setText("Aguardando permissão do Windows…" if task["admin"] else "Executando…")
-        status.show()
-        for run, _, _, _, retry in self.native_controls.values():
-            run.setEnabled(False)
-            retry.setEnabled(False)
+        card = self.native_controls[ACTION_CARD_KEYS.get(code, code)]
+        self.active_native_card = card
+        card.progress.begin()
+        card.execution.setCurrentWidget(card.progress)
+        card.status.setText("Aguardando permissão do Windows…" if task["admin"] else "Executando…")
+        card.status.show()
+        for control in self.native_controls.values():
+            control.button.setEnabled(False)
         if os.name != "nt":
             self.finish_native_action(False, "Esta opção exige Windows.")
             return
@@ -1289,7 +1416,7 @@ class MainWindow(QMainWindow):
             detail = "Permissão UAC cancelada." if getattr(exc, "winerror", None) == 1223 else str(exc)
             self.finish_native_action(False, detail)
             return
-        status.setText("Executando…")
+        card.status.setText("Executando…")
         self.status_message(self.native_task_name + " em execução")
         self.native_timer = QTimer(self)
         self.native_timer.timeout.connect(self.poll_native_action)
@@ -1304,7 +1431,7 @@ class MainWindow(QMainWindow):
             pending = None
         percent = pending.get("percent") if isinstance(pending, dict) else None
         if type(percent) is int and 0 <= percent <= 99:
-            progress = self.native_controls[self.native_code][1]
+            progress = self.active_native_card.progress
             progress.advance(max(progress.value(), percent))
         try:
             code = self.native_process.poll()
@@ -1339,8 +1466,12 @@ class MainWindow(QMainWindow):
         self.finish_native_action(ok, message)
 
     def finish_native_action(self, ok: bool, message: str):
-        _, progress, _, status, repeat = self.native_controls[self.native_code]
-        progress.finish(ok)
+        card = self.active_native_card
+        self.refresh_native_actions()
+        if ok and self.native_code in ACTION_CARD_KEYS and card.code == self.native_code and card.reversal[0] != "edge_restore":
+            ok = False  # A previous setting is still backed up after the restore attempt.
+        card.progress.finish(ok)
+        card.execution.setCurrentWidget(card.button)
         outcome = "Concluído." if ok else "Falhou."
         lines = [line.strip() for line in message.splitlines() if line.strip()]
         detail = "\n".join(lines)
@@ -1354,12 +1485,10 @@ class MainWindow(QMainWindow):
             if not ok:
                 summary = " ".join(lines[:2])
             detail = (summary[:260] + "\n" if summary else "") + "Saída em Registros."
-        status.setText(outcome + ("\n" + detail if detail else ""))
-        status.show()
-        repeat.show()
-        for run, _, _, _, retry in self.native_controls.values():
-            run.setEnabled(True)
-            retry.setEnabled(True)
+        card.status.setText(outcome + ("\n" + detail if detail else ""))
+        card.status.show()
+        for control in self.native_controls.values():
+            control.button.setEnabled(True)
         self.status_message(self.native_task_name + (" concluído" if ok else " falhou"))
 
     def configure_brave_extensions(self, undo: bool):
@@ -1387,6 +1516,7 @@ class MainWindow(QMainWindow):
     @Slot(bool, str)
     def brave_extensions_done(self, ok: bool, message: str):
         self.extensions_progress.finish(ok)
+        self.extensions_progress.hide()
         for button in self.extension_buttons:
             button.setEnabled(True)
         self.extensions_status.setText(message)
@@ -1402,9 +1532,17 @@ class MainWindow(QMainWindow):
             primary.setText("Abrir" if installed[key] else "Instalar")
             primary.setVisible(self.installing_program != key)
             primary.setEnabled(not self.installing_program)
-            upgrade.setVisible(installed[key] is not None and key in self.upgradeable_programs
-                               and self.installing_program != key)
+            upgrade.setVisible(installed[key] is not None and self.installing_program != key)
             upgrade.setEnabled(not self.installing_program)
+            available = key in self.upgradeable_programs
+            if upgrade.property("updateAvailable") != available:
+                upgrade.setProperty("updateAvailable", available)
+                upgrade.style().unpolish(upgrade)
+                upgrade.style().polish(upgrade)
+            detail = ("Atualização disponível pelo WinGet." if available
+                      else "Procurar uma atualização para este aplicativo.")
+            upgrade.setToolTip(detail)
+            upgrade.setAccessibleDescription(detail)
 
     def check_program_updates(self, automatic=False):
         if self.checking_program_updates or self.installing_program:
@@ -1436,10 +1574,11 @@ class MainWindow(QMainWindow):
         self.upgradeable_programs = upgrades or set()
         self.refresh_program_cards()
         self.program_updates_progress.finish(upgrades is not None)
+        self.program_updates_progress.hide()
         if upgrades is None:
-            message = "Consulta indisponível. Os apps podem ser atualizados pelo próprio fabricante."
+            message = "Consulta do WinGet indisponível. Use Atualizar no cartão do aplicativo."
         elif upgrades:
-            message = "Atualizações disponíveis nos cartões dos aplicativos."
+            message = "Os botões em destaque indicam os apps com atualização no WinGet."
         else:
             message = "O WinGet não encontrou atualizações para os aplicativos do catálogo."
         self.program_updates_status.setText(message)
@@ -1489,6 +1628,7 @@ class MainWindow(QMainWindow):
     @Slot(bool, str)
     def virtualbox_templates_finished(self, ok: bool, message: str):
         self.vm_template_progress.finish(ok)
+        self.vm_template_progress.hide()
         self.vm_template_button.setEnabled(True)
         self.vm_template_status.setText(message)
         self.status_message("Máquinas de teste preparadas." if ok else "Erro ao preparar VMs.")
@@ -1502,25 +1642,22 @@ class MainWindow(QMainWindow):
             return
         name = EXTRA_APPS[app_id]["name"]
         if not upgrade and (installed := installed_program(app_id)):
-            opened = False
             try:
                 open_program(installed)
                 message = f"{name} aberto."
-                opened = True
             except OSError as exc:
                 message = f"Falha ao abrir {name}: {exc}"
             for card, (_, _, progress, status) in self.program_controls.items():
                 if program_key(card) == app_id:
-                    progress.begin()
-                    progress.finish(opened)
-                    progress.show()
+                    progress.hide()
                     status.setText(message)
                     status.show()
             self.status_message(message)
             return
-        if upgrade and app_id not in self.upgradeable_programs:
+        if upgrade and not installed_program(app_id):
+            self.refresh_program_cards()
             return
-        message = (f"Atualizar {name} pelo WinGet?" if upgrade else
+        message = (f"Verificar e atualizar {name} pela fonte oficial?" if upgrade else
                    f"Instalar {name}? A assinatura digital será conferida antes da execução.")
         if not confirmar(self, "Instalador oficial", message):
             return
@@ -1558,12 +1695,14 @@ class MainWindow(QMainWindow):
         installed = installed_program(app_id)
         if ok:
             self.upgradeable_programs.discard(app_id)
-            message = "Pronto para abrir." if installed else (
-                "O instalador terminou. O programa ainda não foi localizado; "
-                "revise a instalação do fabricante.")
+            if not message:
+                message = "Pronto para abrir." if installed else (
+                    "O instalador terminou. O programa ainda não foi localizado; "
+                    "revise a instalação do fabricante.")
         for card, (_, _, progress, status) in self.program_controls.items():
             if program_key(card) == app_id:
                 progress.finish(ok)
+                progress.hide()
                 status.setText(message)
                 status.show()
                 self.program_support_links[card].setVisible(not ok)
@@ -1842,18 +1981,6 @@ class MainWindow(QMainWindow):
     def resizeEvent(self, event):
         super().resizeEvent(event)
         self._refresh_home_layout()
-        if not hasattr(self, "program_grid"):
-            return
-        # Reorganiza os cards sem posicoes absolutas, conforme a largura visivel.
-        narrow = self.width() < 1120
-        if getattr(self, "_program_stacked", None) == narrow:
-            return
-        self._program_stacked = narrow
-        columns = 1 if narrow else 2
-        for card in self.all_program_cards:
-            self.program_grid.removeWidget(card)
-        for index, card in enumerate(self.all_program_cards):
-            self.program_grid.addWidget(card, index // columns, index % columns)
 
     def closeEvent(self, event):
         if self.vm_template_thread and self.vm_template_thread.isRunning():
