@@ -39,6 +39,10 @@ QTest.mouseClick(win.pages["repair"].viewport(), Qt.MouseButton.BackButton)
 assert win.stack.currentWidget() is win.pages["gamer"]
 QTest.mouseClick(win.nav_buttons["gamer"], Qt.MouseButton.ForwardButton)
 assert win.stack.currentWidget() is win.pages["repair"]
+QTest.keyClick(win.pages["repair"].viewport(), Qt.Key.Key_Back)
+assert win.stack.currentWidget() is win.pages["gamer"]
+QTest.keyClick(win.pages["gamer"].viewport(), Qt.Key.Key_Forward)
+assert win.stack.currentWidget() is win.pages["repair"]
 QTest.mouseClick(win.pages["repair"].viewport(), Qt.MouseButton.BackButton)
 QTest.mouseClick(win.pages["gamer"].viewport(), Qt.MouseButton.BackButton)
 assert win.stack.currentWidget() is win.pages["clean"]
@@ -312,7 +316,10 @@ with tempfile.TemporaryDirectory() as directory:
         worker.poll_native_action()
         assert card.button.text() == "Remover" and card.execution.currentWidget() is card.button
 
-    with patch("windows_actions.HOME", local), patch("windows_actions.cmd", return_value="OK"), \
+    deadline = [None]
+    with patch("windows_actions._read_shutdown_deadline", side_effect=lambda: deadline[0]), \
+            patch("windows_actions._write_shutdown_deadline", side_effect=lambda value: deadline.__setitem__(0, value)), \
+            patch("windows_actions.cmd", return_value="OK"), \
             patch("app.ACTION_HOME", local), patch("app.confirmar", return_value=True), \
             patch("app.subprocess.Popen") as spawn:
         worker.goto("shutdown")
@@ -334,13 +341,18 @@ with tempfile.TemporaryDirectory() as directory:
             controls["60 min"].click()
             seen["preset"] = picker.value()
             picker.setValue(35)
-            controls["Agendar"].click()
+            QTest.keyClick(picker, Qt.Key.Key_Return)
+            if dialog.isVisible():
+                seen["enter_submitted"] = False
+                dialog.reject()
+            else:
+                seen["enter_submitted"] = True
 
         spawn.return_value.poll.return_value = 0
         with patch("app.os", SimpleNamespace(name="nt")):
             QTimer.singleShot(0, choose_time)
             timer_card.button.click()
-        assert seen == {"centered": True, "preset": 60}, seen
+        assert seen == {"centered": True, "preset": 60, "enter_submitted": True}, seen
         assert spawn.call_args.args[0][-2:] == ["--shutdown-minutes", "35"]
         assert timer_card.execution.currentWidget() is timer_card.progress
 
@@ -350,16 +362,12 @@ with tempfile.TemporaryDirectory() as directory:
         assert timer_card.title.text() == "Desligando em 35 minutos"
         assert timer_card.button.text() == "Reagendar"
 
-        state_path = local / "shutdown_timer.json"
-        state = json.loads(state_path.read_text(encoding="utf-8"))
-        state["deadline"] -= 30 * 60
-        state_path.write_text(json.dumps(state), encoding="utf-8")
+        deadline[0] -= 30 * 60_000_000_000
         restored = MainWindow()
         restored.goto("shutdown")
         restored_card = restored.native_controls["shutdown_custom"]
         assert restored_card.title.text() == "Desligando em 5 minutos"
-        state["deadline"] -= 60
-        state_path.write_text(json.dumps(state), encoding="utf-8")
+        deadline[0] -= 60_000_000_000
         restored.shutdown_countdown.timeout.emit()
         assert restored_card.title.text() == "Desligando em 4 minutos"
         with patch("app.os", SimpleNamespace(name="nt")):

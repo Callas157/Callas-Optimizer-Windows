@@ -1126,7 +1126,9 @@ class MainWindow(QMainWindow):
         panel.addWidget(minutes)
         presets = QHBoxLayout()
         for value in (15, 30, 60):
-            presets.addWidget(action_button(f"{value} min", lambda _=False, n=value: minutes.setValue(n), compact=True))
+            preset = action_button(f"{value} min", lambda _=False, n=value: minutes.setValue(n), compact=True)
+            preset.setAutoDefault(False)
+            presets.addWidget(preset)
         panel.addLayout(presets)
         panel.addWidget(label("Salve seus arquivos antes do desligamento. O novo tempo substitui o agendamento atual.",
                               "ActionWarning"))
@@ -1135,7 +1137,7 @@ class MainWindow(QMainWindow):
         cancel = action_button("Voltar", dialog.reject, compact=True)
         submit = action_button("Agendar", dialog.accept, True, compact=True)
         cancel.setAutoDefault(False)
-        submit.setAutoDefault(False)
+        submit.setDefault(True)
         buttons.addWidget(cancel)
         buttons.addWidget(submit)
         panel.addLayout(buttons)
@@ -1412,19 +1414,28 @@ class MainWindow(QMainWindow):
         col.addWidget(about)
         col.addStretch()
 
+    def step_navigation(self, delta: int):
+        index = self.navigation_index + delta
+        if 0 <= index < len(self.navigation_history):
+            self.navigation_index = index
+            self.goto(self.navigation_history[index], remember=False)
+
     def eventFilter(self, watched, event):
-        if (event.type() in (QEvent.Type.MouseButtonPress, QEvent.Type.MouseButtonRelease,
-                             QEvent.Type.MouseButtonDblClick)
-                and isinstance(watched, QWidget) and watched.window() is self):
-            mouse_button = event.button()
-            if mouse_button in (Qt.MouseButton.BackButton, Qt.MouseButton.ForwardButton):
-                if event.type() == QEvent.Type.MouseButtonRelease:
-                    delta = -1 if mouse_button == Qt.MouseButton.BackButton else 1
-                    index = self.navigation_index + delta
-                    if 0 <= index < len(self.navigation_history):
-                        self.navigation_index = index
-                        self.goto(self.navigation_history[index], remember=False)
-                return True
+        if isinstance(watched, QWidget) and watched.window() is self:
+            event_type = event.type()
+            if event_type in (QEvent.Type.MouseButtonPress, QEvent.Type.MouseButtonRelease,
+                              QEvent.Type.MouseButtonDblClick):
+                mouse_button = event.button()
+                if mouse_button in (Qt.MouseButton.BackButton, Qt.MouseButton.ForwardButton):
+                    if event_type == QEvent.Type.MouseButtonRelease:
+                        self.step_navigation(-1 if mouse_button == Qt.MouseButton.BackButton else 1)
+                    return True
+            if event_type == QEvent.Type.KeyPress:
+                key = event.key()
+                if key in (Qt.Key.Key_Back, Qt.Key.Key_Forward):
+                    if not event.isAutoRepeat():
+                        self.step_navigation(-1 if key == Qt.Key.Key_Back else 1)
+                    return True
         return super().eventFilter(watched, event)
 
     def goto(self, route: str, *, remember: bool = True):

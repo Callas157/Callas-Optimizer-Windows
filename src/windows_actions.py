@@ -10,7 +10,6 @@ import ctypes
 from ctypes import wintypes
 import hashlib
 import json
-import math
 import os
 from pathlib import Path
 import re
@@ -38,6 +37,9 @@ REPORT_MESSAGE_LIMIT = 5000
 PROFILE_MISMATCH = 3
 MAX_SHUTDOWN_MINUTES = 315_360_000 // 60
 NO_SHUTDOWN_IN_PROGRESS = 1116
+SHUTDOWN_TIMER_KEY = r"Software\Callas\OptimizerWindows\ShutdownTimer"
+SHUTDOWN_DEADLINE = "Deadline"
+NANOSECONDS_PER_MINUTE = 60_000_000_000
 WINUTIL_VERSION = "26.11.13"
 WINUTIL_URL = f"https://github.com/ChrisTitusTech/winutil/releases/download/{WINUTIL_VERSION}/winutil.ps1"
 WINUTIL_SHA256 = "e9d05a59d564b4fbb61fcfa1a594504a0f81e8d27c787119e72a99b57ddbe66d"
@@ -500,21 +502,55 @@ def open_winutil() -> str:
     raise RuntimeError(f"O WinUtil encerrou durante a inicialização (código {process.returncode}).")
 
 
-def remaining_shutdown_minutes() -> int | None:
+def _read_shutdown_deadline() -> int | None:
+    if sys.platform != "win32":
+        return None
     try:
-        state = json.loads((HOME / "shutdown_timer.json").read_text(encoding="utf-8"))
-        deadline = state["deadline"]
-        boot_time = state["boot_time"]
-        if not math.isfinite(deadline) or not math.isfinite(boot_time):
-            return None
-    except (OSError, ValueError, KeyError, TypeError, OverflowError):
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, SHUTDOWN_TIMER_KEY) as key:
+            value, kind = winreg.QueryValueEx(key, SHUTDOWN_DEADLINE)
+            return value if kind == winreg.REG_QWORD else None
+    except OSError:
         return None
-    uptime = time.monotonic()
-    # The monotonic deadline is shared by all app processes within the same boot.
-    if abs(time.time() - uptime - boot_time) > 60:
+
+
+def _write_shutdown_deadline(deadline: int | None):
+    if deadline is None:
+        try:
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, SHUTDOWN_TIMER_KEY, 0, winreg.KEY_SET_VALUE) as key:
+                winreg.DeleteValue(key, SHUTDOWN_DEADLINE)
+        except FileNotFoundError:
+            pass
+        return
+
+    # A volatile key survives closing the app and is discarded when Windows unloads the hive.
+    reg_option_volatile = 1
+    create_key = ctypes.windll.advapi32.RegCreateKeyExW
+    create_key.argtypes = (
+        wintypes.HKEY, wintypes.LPCWSTR, wintypes.DWORD, wintypes.LPWSTR,
+        wintypes.DWORD, wintypes.DWORD, ctypes.c_void_p, ctypes.POINTER(wintypes.HKEY),
+        ctypes.POINTER(wintypes.DWORD),
+    )
+    create_key.restype = wintypes.LONG
+    current_user = wintypes.HKEY(ctypes.c_int32(winreg.HKEY_CURRENT_USER).value)
+    key = wintypes.HKEY()
+    error = create_key(current_user, SHUTDOWN_TIMER_KEY, 0, None, reg_option_volatile,
+                       winreg.KEY_SET_VALUE, None, ctypes.byref(key), None)
+    if error:
+        raise ctypes.WinError(error)
+    try:
+        winreg.SetValueEx(key.value, SHUTDOWN_DEADLINE, 0, winreg.REG_QWORD, deadline)
+    finally:
+        winreg.CloseKey(key.value)
+
+
+def remaining_shutdown_minutes() -> int | None:
+    deadline = _read_shutdown_deadline()
+    if deadline is None:
         return None
-    seconds = deadline - uptime
-    return math.ceil(seconds / 60) if 0 < seconds <= MAX_SHUTDOWN_MINUTES * 60 else None
+    remaining = deadline - time.monotonic_ns()
+    if 0 < remaining <= MAX_SHUTDOWN_MINUTES * NANOSECONDS_PER_MINUTE:
+        return (remaining + NANOSECONDS_PER_MINUTE - 1) // NANOSECONDS_PER_MINUTE
+    return None
 
 
 def abort_shutdown():
@@ -524,17 +560,15 @@ def abort_shutdown():
 def shutdown(minutes: int | None):
     if minutes is not None and (type(minutes) is not int or not 1 <= minutes <= MAX_SHUTDOWN_MINUTES):
         raise ValueError(f"Escolha entre 1 e {MAX_SHUTDOWN_MINUTES} minutos.")
-    path = HOME / "shutdown_timer.json"
     abort_shutdown()
-    path.unlink(missing_ok=True)
+    _write_shutdown_deadline(None)
     if minutes is None:
         return "Nenhum desligamento pendente."
     seconds = minutes * 60
-    uptime = time.monotonic()
-    state = {"deadline": uptime + seconds, "boot_time": time.time() - uptime}
+    deadline = time.monotonic_ns() + minutes * NANOSECONDS_PER_MINUTE
     cmd("shutdown.exe", "/s", "/t", str(seconds))
     try:
-        _write_report(path, state)
+        _write_shutdown_deadline(deadline)
     except OSError:
         abort_shutdown()
         raise
