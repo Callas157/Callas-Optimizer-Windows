@@ -316,6 +316,62 @@ with tempfile.TemporaryDirectory() as directory:
         worker.poll_native_action()
         assert card.button.text() == "Remover" and card.execution.currentWidget() is card.button
 
+    provider = {}
+    with patch("app.dns_provider_status", side_effect=lambda: dict(provider)), \
+            patch("app.ACTION_HOME", local), patch("app.os", SimpleNamespace(name="nt")), \
+            patch("app.confirmar", return_value=True), patch("app.ElevatedAction") as elevate:
+        cloudflare = worker.native_controls["dns_cloudflare"]
+        google = worker.native_controls["dns_google"]
+
+        def wait_dns():
+            deadline = time.monotonic() + 2
+            while (not cloudflare.button.isEnabled() or not google.button.isEnabled()) and time.monotonic() < deadline:
+                app.processEvents()
+                time.sleep(0.01)
+            assert cloudflare.button.isEnabled() and google.button.isEnabled()
+
+        def finish_dns(selected):
+            provider.clear()
+            if selected:
+                provider[selected] = False
+            worker.native_report.write_text('{"ok": true, "message": "DNS confirmado."}', encoding="utf-8")
+            worker.poll_native_action()
+            wait_dns()
+
+        elevate.return_value.poll.return_value = 0
+        worker.goto("network")
+        wait_dns()
+        assert "dns_auto" not in worker.native_controls
+        assert cloudflare.button.text() == google.button.text() == "Aplicar"
+        cloudflare.button.click()
+        assert worker.native_code == "dns_cloudflare"
+        assert cloudflare.execution.currentWidget() is cloudflare.progress
+        finish_dns("dns_cloudflare")
+        assert cloudflare.button.text() == "Reverter"
+        assert cloudflare.execution.currentWidget() is cloudflare.button
+        assert google.button.text() == "Aplicar"
+        google.button.click()
+        assert worker.native_code == "dns_google"
+        finish_dns("dns_google")
+        assert cloudflare.button.text() == "Aplicar"
+        assert google.button.text() == "Reverter"
+        google.button.click()
+        assert worker.native_code == "dns_google_auto"
+        finish_dns(None)
+        assert cloudflare.button.text() == google.button.text() == "Aplicar"
+        assert google.status.text().startswith("Concluído.")
+        worker.update_dns_actions(worker.dns_status_request, {"dns_cloudflare": True, "dns_google": True})
+        assert cloudflare.button.text() == google.button.text() == "Reverter"
+        assert not worker.dns_apply_buttons["dns_google"].isHidden()
+        worker.dns_apply_buttons["dns_google"].click()
+        assert worker.native_code == "dns_google"
+        finish_dns("dns_google")
+        assert worker.dns_apply_buttons["dns_google"].isHidden()
+        assert cloudflare.status.isHidden()
+        worker.update_dns_actions(worker.dns_status_request, None)
+        assert not google.button.isEnabled()
+        assert "Não foi possível consultar o DNS" in worker.status_label.text()
+
     deadline = [None]
     with patch("windows_actions._read_shutdown_deadline", side_effect=lambda: deadline[0]), \
             patch("windows_actions._write_shutdown_deadline", side_effect=lambda value: deadline.__setitem__(0, value)), \

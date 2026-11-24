@@ -30,6 +30,8 @@ from extra_installers import (
     verify_authenticode, winget_path,
 )
 
+from network_dns import DNS_PROVIDERS, DNS_REVERSALS, change_dns, provider_status, read_interfaces
+
 HOME = Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "CallasTeck"
 BACKUP = HOME / "actions_backup.json"
 LOG = HOME / "acoes.log"
@@ -73,9 +75,12 @@ ROWS = [
  ("wu_pause","windows_update","Desativar atualização automática","Altera política, sem alterar serviços.",True,"Reduz a proteção de segurança."),
  ("wu_services_off","windows_update","Suspender serviços de atualização","Salva o modo de inicialização.",True,"Pode impedir Store e atualizações."),
  ("wu_restore","windows_update","Restaurar Windows Update","Recupera políticas e serviços.",True,""),
+ ("dns_cloudflare","network","DNS Cloudflare","Usa 1.1.1.1 e 1.0.0.1 nas conexões IPv4 de Internet.",True,""),
+ ("dns_google","network","DNS Google","Usa 8.8.8.8 e 8.8.4.4 nas conexões IPv4 de Internet.",True,""),
+ ("dns_cloudflare_auto","network","Desfazer DNS Cloudflare","Volta ao automático nas interfaces com DNS manual do Cloudflare.",True,""),
+ ("dns_google_auto","network","Desfazer DNS Google","Volta ao automático nas interfaces com DNS manual do Google.",True,""),
  ("flush_dns","network","Limpar cache DNS","Executa ipconfig /flushdns.",True,""),
  ("reset_winsock","network","Redefinir Winsock","Redefine rede, pode exigir reinício.",True,"A rede pode cair."),
- ("dns_cloudflare","network","DNS Cloudflare","Aplica 1.1.1.1 e 1.0.0.1 nas interfaces ativas.",True,""),
  ("dns_auto","network","Restaurar DNS automático","Restabelece DNS fornecido pela rede.",True,""),
  ("telemetry_reduce","privacy","Reduzir telemetria opcional","Define política de dados de diagnóstico.",True,"Limite varia por edição."),
  ("telemetry_restore","privacy","Restaurar telemetria","Restaura valor anterior.",True,""),
@@ -244,7 +249,7 @@ def cmd(*argv, optional=False, env=None, timeout=1800, success_codes=(0,), encod
     return output or f"Concluído (código {code})."
 
 
-def ps(source):
+def ps(source, *, timeout=1800):
     script = (
         "[Console]::OutputEncoding = [Text.UTF8Encoding]::new($false); "
         "$ErrorActionPreference = 'Stop'; $ProgressPreference = 'SilentlyContinue'; "
@@ -252,7 +257,15 @@ def ps(source):
     )
     encoded=base64.b64encode(script.encode("utf-16le")).decode("ascii")
     return cmd(str(powershell_path()),"-NoLogo","-NoProfile","-NonInteractive","-EncodedCommand",encoded,
-               env=powershell_env(), encoding="utf-8")
+               env=powershell_env(), encoding="utf-8", timeout=timeout)
+
+
+def dns_interfaces():
+    return read_interfaces(lambda source: ps(source, timeout=20))
+
+
+def dns_provider_status() -> dict[str, bool]:
+    return provider_status(dns_interfaces())
 
 
 def load():
@@ -633,8 +646,6 @@ def execute(action_id, *, progress=None, shutdown_minutes=None):
         "wu_restore":lambda:restore_reg("LM|"+wu)+" "+services(sw,False),
         "flush_dns":lambda:cmd("ipconfig.exe","/flushdns"),
         "reset_winsock":lambda:cmd("netsh.exe","winsock","reset"),
-        "dns_cloudflare":lambda:ps("$a=Get-NetAdapter | Where-Object {$_.Status -eq 'Up'}; if(!$a){throw 'Sem adaptador ativo'}; $a | ForEach-Object {Set-DnsClientServerAddress -InterfaceIndex $_.ifIndex -ServerAddresses @('1.1.1.1','1.0.0.1') -ErrorAction Stop}"),
-        "dns_auto":lambda:ps("$a=Get-NetAdapter | Where-Object {$_.Status -eq 'Up'}; if(!$a){throw 'Sem adaptador ativo'}; $a | ForEach-Object {Set-DnsClientServerAddress -InterfaceIndex $_.ifIndex -ResetServerAddresses -ErrorAction Stop}"),
         "telemetry_reduce":lambda:setreg("LM",dc,"AllowTelemetry",0),
         "telemetry_restore":lambda:restore_reg("LM|"+dc),
         "repair_dism":lambda:repair_image(progress),
@@ -655,7 +666,10 @@ def execute(action_id, *, progress=None, shutdown_minutes=None):
     try:
         if action_id == "shutdown_custom" and shutdown_minutes is None:
             raise ValueError("Informe o tempo do desligamento personalizado.")
-        result = tasks[action_id]()
+        if action_id in DNS_PROVIDERS or action_id in DNS_REVERSALS or action_id == "dns_auto":
+            result = change_dns(action_id, dns_interfaces, cmd)
+        else:
+            result = tasks[action_id]()
     except Exception as exc:
         log_action(action_id, f"Falha: {exc}")
         raise

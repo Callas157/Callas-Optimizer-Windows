@@ -30,16 +30,17 @@ from cleaner import (
 )
 from windows_actions import (
     ACTIONS, BY_ROUTE, HOME as ACTION_HOME, MAX_SHUTDOWN_MINUTES, PROFILE_MISMATCH, ElevatedAction,
-    applied_action_backups, edge_installed, remaining_shutdown_minutes, worker as run_windows_action,
+    applied_action_backups, dns_provider_status, edge_installed, remaining_shutdown_minutes, worker as run_windows_action,
 )
 from extra_installers import (
     CATALOG as EXTRA_APPS, available_upgrades, download_and_open, installed_program,
     official_website, open_program, powershell_env, powershell_path, program_key, upgrade_program,
 )
+from network_dns import DNS_PROVIDERS, DNS_REVERSALS
 from task_progress import TaskProgressBar
 from virtualbox_templates import create_test_vms, VM_NAMES, get_vboxmanage
 
-APP_VERSION = "8.9.29"
+APP_VERSION = "8.9.30"
 REPO = "Callas157/Callas-Optimizer-Windows"
 PROJECT_URL = f"https://github.com/{REPO}"
 DATA_DIR = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "CallasTeck"
@@ -93,6 +94,8 @@ REVERSIBLE_ACTIONS = {
     "edge_uninstall": ("edge_restore", "Navegador Microsoft Edge", "Remover"),
     "telemetry_reduce": ("telemetry_restore", "Telemetria opcional", "Reduzir"),
     "classic_on": ("classic_off", "Menu de contexto clássico", "Ativar"),
+    "dns_cloudflare": ("dns_cloudflare_auto", "DNS Cloudflare", "Aplicar"),
+    "dns_google": ("dns_google_auto", "DNS Google", "Aplicar"),
 }
 ACTION_CARD_KEYS = {undo: code for code, (undo, _, _) in REVERSIBLE_ACTIONS.items()}
 
@@ -636,6 +639,7 @@ def phoenix_art() -> QPixmap:
 
 
 class MainWindow(QMainWindow):
+    dns_status_result = Signal(int, object)
     program_updates_result = Signal(object, bool)
 
     def __init__(self):
@@ -649,6 +653,9 @@ class MainWindow(QMainWindow):
         self.cleaner: CleanerThread | None = None
         self.native_timer: QTimer | None = None
         self.native_controls: dict[str, NativeActionCard] = {}
+        self.dns_status_request = 0
+        self.dns_apply_buttons: dict[str, QPushButton] = {}
+        self.dns_status_result.connect(self.update_dns_actions)
         self.extra_installer: ExtraInstallerThread | None = None
         self.vm_template_thread: VirtualBoxTemplateThread | None = None
         self.checking_program_updates = False
@@ -1078,11 +1085,17 @@ class MainWindow(QMainWindow):
         cards = []
         for action in BY_ROUTE[route]:
             code = action["id"]
-            if code in ACTION_CARD_KEYS:
+            if code in ACTION_CARD_KEYS or code == "dns_auto":
                 continue
             callback = self.configure_shutdown if code == "shutdown_custom" else self.native_action
             card = NativeActionCard(code, callback)
             self.native_controls[code] = card
+            if code in DNS_PROVIDERS:
+                button = action_button("Aplicar nas ativas",
+                                       lambda _=False, selected=code: self.native_action(selected), compact=True)
+                button.hide()
+                card.widget.layout().addWidget(button, alignment=Qt.AlignmentFlag.AlignLeft)
+                self.dns_apply_buttons[code] = button
             cards.append(card.widget)
         col.addWidget(CompactGrid(cards))
         col.addWidget(action_button("Ver registros", lambda: self.goto("logs"), compact=True),
@@ -1158,8 +1171,45 @@ class MainWindow(QMainWindow):
         except RuntimeError:
             return  # Preserve the current buttons if the backup cannot be read.
         for code, (undo, _, _) in REVERSIBLE_ACTIONS.items():
-            if code != edge:
+            if code != edge and code not in DNS_PROVIDERS:
                 self.native_controls[code].set_action(undo if code in applied else code)
+
+    def refresh_dns_actions(self):
+        if os.name != "nt" or self.native_timer is not None:
+            return
+        self.dns_status_request += 1
+        request = self.dns_status_request
+        for code in DNS_PROVIDERS:
+            self.native_controls[code].button.setEnabled(False)
+            self.dns_apply_buttons[code].setEnabled(False)
+
+        def check():
+            try:
+                active = dns_provider_status()
+            except (OSError, RuntimeError, subprocess.SubprocessError):
+                active = None
+            try:
+                self.dns_status_result.emit(request, active)
+            except RuntimeError:
+                pass  # The window may have been closed during the query.
+
+        threading.Thread(target=check, daemon=True).start()
+
+    @Slot(int, object)
+    def update_dns_actions(self, request: int, active):
+        if request != self.dns_status_request:
+            return
+        if active is None and self.stack.currentWidget() is self.pages["network"]:
+            self.status_message("Não foi possível consultar o DNS. Reabra a aba Rede e DNS para tentar novamente.")
+        available = active is not None and self.native_timer is None
+        for code in DNS_PROVIDERS:
+            card = self.native_controls[code]
+            if active is not None:
+                card.set_action(card.reversal[0] if code in active else code)
+            card.button.setEnabled(available)
+            apply_button = self.dns_apply_buttons[code]
+            apply_button.setVisible(available and active.get(code, False))
+            apply_button.setEnabled(available)
 
     def _clean_page(self):
         col = self._page("clean", "Limpeza Total", "Limpeza nativa com progresso, cancelamento e registro de arquivos ignorados.")
@@ -1462,6 +1512,8 @@ class MainWindow(QMainWindow):
             self.shutdown_countdown.stop()
         if route in TOOL_PAGES and self.native_timer is None:
             self.refresh_native_actions()
+        if route == "network":
+            self.refresh_dns_actions()
         if route == "programs":
             self.refresh_program_cards()
             if not self.program_updates_checked:
@@ -1504,6 +1556,10 @@ class MainWindow(QMainWindow):
         card.status.show()
         for control in self.native_controls.values():
             control.button.setEnabled(False)
+        for provider, button in self.dns_apply_buttons.items():
+            button.setEnabled(False)
+            if task["route"] == "network" and self.native_controls[provider] is not card:
+                self.native_controls[provider].status.hide()
         if os.name != "nt":
             self.finish_native_action(False, "Esta opção exige Windows.")
             return
@@ -1577,7 +1633,8 @@ class MainWindow(QMainWindow):
     def finish_native_action(self, ok: bool, message: str):
         card = self.active_native_card
         self.refresh_native_actions()
-        if ok and self.native_code in ACTION_CARD_KEYS and card.code == self.native_code and card.reversal[0] != "edge_restore":
+        if (ok and self.native_code in ACTION_CARD_KEYS and self.native_code not in DNS_REVERSALS
+                and card.code == self.native_code and self.native_code != "edge_restore"):
             ok = False  # A previous setting is still backed up after the restore attempt.
         card.progress.finish(ok)
         card.execution.setCurrentWidget(card.button)
@@ -1601,6 +1658,8 @@ class MainWindow(QMainWindow):
         for control in self.native_controls.values():
             control.button.setEnabled(True)
         self.status_message(self.native_task_name + (" concluído" if ok else " falhou"))
+        if self.stack.currentWidget() is self.pages["network"]:
+            self.refresh_dns_actions()
 
     def configure_brave_extensions(self, undo: bool):
         if self.update_mode == "install" or (self.extensions_job and self.extensions_job.isRunning()):
