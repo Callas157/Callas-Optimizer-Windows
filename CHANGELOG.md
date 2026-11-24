@@ -1,3 +1,10 @@
+## v8.9.27 — Progresso das tarefas no próprio aplicativo
+
+- O botão Executar dá lugar a uma barra animada com a porcentagem no centro. O resultado fica no cartão e a saída detalhada fica em Registros.
+- A barra acompanha o progresso do CHKDSK, DISM e SFC quando o Windows fornece uma porcentagem. O CHKDSK preserva os acentos na saída em português.
+- Limpeza, Programas, extensões do Brave, VirtualBox e atualização do Callas mostram a atividade e o resultado na própria página. Falhas e cancelamentos preservam o último progresso informado.
+- O verificador continua oferecendo novas versões do GitHub Releases quando a consulta termina.
+
 ## v8.9.26 — Correções nas ferramentas do Windows
 
 - O CHKDSK examina o volume do Windows com o identificador correto. SFC e DISM podem terminar reparos longos, e a interface mostra os resultados e registra falhas.

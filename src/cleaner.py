@@ -111,10 +111,13 @@ def clean_folders(
     roots: list[Path],
     cancelled: threading.Event,
     on_progress: Callable[[str], None] | None = None,
+    *,
+    root_finished: Callable[[Path], None] | None = None,
 ) -> CleanStats:
     """Apaga conteudo dos diretorios aprovados, preservando as raizes.
 
     Recursao sem seguir reparse points. Arquivos bloqueados sao ignorados.
+    root_finished recebe cada raiz processada ou ignorada antes do cancelamento.
     """
     stats = CleanStats()
     def emit(message: str) -> None:
@@ -173,16 +176,20 @@ def clean_folders(
             break
         if root.name.lower() != "temp" and root not in approved:
             stats.skipped += 1
-            continue
-        before = stats.files, stats.folders, stats.skipped
-        emit(f"Limpando: {root}")
-        # Revalida a raiz e seus ancestrais antes de percorrer o conteudo.
-        if _plain_local_directory(root):
-            visit(root)
+            finished = True
         else:
-            stats.skipped += 1
-        emit(f"{root}: {stats.files - before[0]} arquivo(s) e {stats.folders - before[1]} "
-             f"pasta(s) vazia(s) removidos, {stats.skipped - before[2]} item(ns) ignorado(s).")
+            before = stats.files, stats.folders, stats.skipped
+            emit(f"Limpando: {root}")
+            # Revalida a raiz e seus ancestrais antes de percorrer o conteudo.
+            if _plain_local_directory(root):
+                visit(root)
+            else:
+                stats.skipped += 1
+            finished = not cancelled.is_set()
+            emit(f"{root}: {stats.files - before[0]} arquivo(s) e {stats.folders - before[1]} "
+                 f"pasta(s) vazia(s) removidos, {stats.skipped - before[2]} item(ns) ignorado(s).")
+        if finished and root_finished is not None:
+            root_finished(root)
     stats.cancelled = cancelled.is_set()
     return stats
 

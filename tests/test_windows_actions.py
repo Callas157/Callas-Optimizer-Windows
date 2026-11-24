@@ -1,6 +1,8 @@
 """Testes das funções Python Windows (não realizam mutações no runner)."""
 import ast
+import json
 from pathlib import Path
+import subprocess
 import sys
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
@@ -87,6 +89,95 @@ class MaintenanceRegressions(unittest.TestCase):
                 patch.object(self.actions.subprocess, "run", return_value=result):
             self.assertEqual(self.actions.cmd("sfc.exe", "/scannow"), text)
 
+    def test_disk_scan_decodes_portuguese_ansi_output(self):
+        for encoding in ("cp1252", "utf-8-sig", "utf-16"):
+            message = "Estágio 1: Verificação concluída."
+            result = SimpleNamespace(returncode=0, stdout=message.encode(encoding), stderr=b"")
+            with self.subTest(encoding=encoding), \
+                    patch.object(self.actions, "os", SimpleNamespace(name="nt")), \
+                    patch.object(self.actions, "_system_program", return_value=Path("chkdsk.exe")), \
+                    patch.object(self.actions.subprocess, "run", return_value=result):
+                self.assertEqual(self.actions.cmd("chkdsk.exe", "/scan"), message)
+
+    def test_repairs_report_progress_before_the_child_exits(self):
+        cases = (
+            ("chkdsk.exe", "Estágio: 78%; Total: 2", "1%; ETA:   0:00:05\r",
+             "Stage: 5%; Total: 33%; ETA: 0:00:03\r\nTotal: 100%; ETA: 0:00:00\r\n",
+             "cp1252", [21, 33, 99]),
+            ("dism.exe", "[=========42,", "3%=================]\r",
+             "[===========62.3%================]\r[=========100.0%================]\r\n",
+             "utf-8-sig", [42, 62, 99]),
+            ("sfc.exe", "Verificação 4", "% concluída.\r",
+             "Verification 32% complete.\r\nVerificação 100% concluída.\r\n",
+             "utf-16le", [4, 32, 99]),
+        )
+        for tool, start, update, remaining, encoding, expected in cases:
+            with self.subTest(tool=tool), TemporaryDirectory() as directory:
+                acknowledged = Path(directory) / "first-update"
+                text = "A operação foi concluída."
+                data = (start + update + remaining + text).encode(encoding)
+                prefix_size = len(start.encode(encoding))
+                first_update_size = len((start + update).encode(encoding))
+                # Wait for the parent to see the first report before producing more output.
+                script = (
+                    "import sys, time\n"
+                    "from pathlib import Path\n"
+                    f"acknowledged = Path({str(acknowledged)!r})\n"
+                    f"sys.stdout.buffer.write({data[:prefix_size]!r})\n"
+                    "sys.stdout.buffer.flush()\n"
+                    "time.sleep(0.03)\n"
+                    f"sys.stdout.buffer.write({data[prefix_size:first_update_size]!r})\n"
+                    "sys.stdout.buffer.flush()\n"
+                    "deadline = time.monotonic() + 5\n"
+                    "while not acknowledged.is_file() and time.monotonic() < deadline:\n"
+                    "    time.sleep(0.01)\n"
+                    "if not acknowledged.is_file():\n"
+                    "    sys.exit(4)\n"
+                    f"sys.stderr.buffer.write({data[first_update_size:]!r})\n"
+                )
+                updates = []
+
+                def progress(percent):
+                    updates.append(percent)
+                    acknowledged.touch()
+
+                with patch.object(self.actions, "os", SimpleNamespace(name="nt")), \
+                        patch.object(self.actions, "_system_program", return_value=Path(sys.executable)):
+                    output = self.actions.cmd(tool, "-c", script, progress=progress, timeout=10,
+                                              encoding="cp1252")
+                self.assertEqual(updates, expected)
+                self.assertTrue(output.endswith(text), output)
+
+    def test_streamed_command_honors_timeout_even_without_output(self):
+        with patch.object(self.actions, "os", SimpleNamespace(name="nt")), \
+                patch.object(self.actions, "_system_program", return_value=Path(sys.executable)):
+            with self.assertRaises(subprocess.TimeoutExpired):
+                self.actions.cmd("dism.exe", "-c", "import time; time.sleep(10)",
+                                 progress=lambda percent: None, timeout=0.3)
+
+    def test_worker_writes_live_progress_and_keeps_the_final_report_contract(self):
+        with TemporaryDirectory() as directory:
+            home = Path(directory)
+            report = home / ("acao-" + "b" * 32 + ".json")
+            progress_file = report.with_suffix(".progress")
+
+            def operation(action_id, progress):
+                self.assertEqual(json.loads(progress_file.read_text(encoding="utf-8")), {"percent": 0})
+                progress(37)
+                self.assertEqual(json.loads(progress_file.read_text(encoding="utf-8")), {"percent": 37})
+                self.assertFalse(report.exists())
+                return "Verificação concluída."
+
+            locking = SimpleNamespace(locking=lambda *args: None, LK_NBLCK=1)
+            with patch.object(self.actions, "HOME", home), \
+                    patch.object(self.actions, "sys", SimpleNamespace(platform="win32")), \
+                    patch.object(self.actions, "msvcrt", locking, create=True), \
+                    patch.object(self.actions, "execute", side_effect=operation):
+                code = self.actions.worker("repair_disk", report.name, str(home))
+            result = json.loads(report.read_text(encoding="utf-8"))
+            self.assertEqual(code, 0, result)
+            self.assertEqual(result, {"ok": True, "message": "Verificação concluída."})
+
     def test_disk_scan_accepts_repaired_errors_but_reports_scan_failure(self):
         for code in (1, 3):
             result = SimpleNamespace(returncode=code, stdout=b"Resultado do exame", stderr=b"")
@@ -124,6 +215,18 @@ class MaintenanceRegressions(unittest.TestCase):
                 with self.assertRaisesRegex(RuntimeError, "DISM indisponível"):
                     self.actions.execute("repair_dism")
             self.assertIn("DISM indisponível", log.read_text(encoding="utf-8"))
+
+    def test_action_log_keeps_verbose_scan_details(self):
+        with TemporaryDirectory() as directory:
+            home = Path(directory)
+            log = home / "acoes.log"
+            message = "Estágio 1: Verificação concluída.\n" + "dados de diagnóstico " * 145
+            with patch.object(self.actions, "HOME", home), patch.object(self.actions, "LOG", log), \
+                    patch.object(self.actions, "os", SimpleNamespace(name="nt", environ={"SystemDrive": "D:"})), \
+                    patch.object(self.actions, "admin", return_value=True), \
+                    patch.object(self.actions, "cmd", return_value=message):
+                self.actions.execute("repair_disk")
+            self.assertIn(message, log.read_text(encoding="utf-8"))
 
     def test_hibernation_already_off_does_not_save_an_enabled_state(self):
         backup = {"hiber": False}

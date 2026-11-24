@@ -55,15 +55,28 @@ jobs:
           assert admin(), "O runner precisa ter o token administrativo para executar o teste."
           app = Path("dist/Callas_Optimizer_Windows_x64/Callas_Optimizer_Windows_x64.exe").resolve()
           report = HOME / f"acao-{uuid4().hex}.json"
+          intermediate = report.with_suffix(".progress")
           args = ["--callas-task", "repair_disk", "--callas-report", report.name, "--callas-profile", str(HOME)]
           process = ElevatedAction(app, args)
+          seen_progress = 0
           while (code := process.poll()) is None:
-              time.sleep(1)
+              try:
+                  state = json.loads(intermediate.read_text(encoding="utf-8"))
+                  percent = state["percent"]
+              except (OSError, ValueError):
+                  percent = 0
+              assert 0 <= percent < 100
+              if percent > seen_progress:
+                  seen_progress = percent
+                  print(f"Progresso durante o exame: {seen_progress}%", flush=True)
+              time.sleep(0.25)
+          intermediate.unlink(missing_ok=True)
           assert report.is_file(), f"Sem relatório do CHKDSK. Código do processo: {code}"
           result = json.loads(report.read_text(encoding="utf-8"))
           report.unlink()
           print(result["message"])
           assert code == 0 and result["ok"], "O aplicativo não concluiu o exame do disco."
+          assert seen_progress > 0, "O CHKDSK não publicou porcentagem intermediária."
           '@ | python -
       - name: Testar atualização real do Setup 8.9.3
         shell: pwsh
