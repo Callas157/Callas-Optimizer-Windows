@@ -86,8 +86,12 @@ def _uses_provider(adapter: DnsInterface, addresses: tuple[str, ...]) -> bool:
 
 
 def configured_providers(interfaces: list[DnsInterface]) -> set[str]:
-    return {provider for provider, addresses in DNS_PROVIDERS.items()
-            if any(adapter.eligible and _uses_provider(adapter, addresses) for adapter in interfaces)}
+    configured = set()
+    for provider, addresses in DNS_PROVIDERS.items():
+        if any(adapter.eligible and _uses_provider(adapter, addresses) for adapter in interfaces):
+            configured.add(provider)
+    return configured or {provider for provider, addresses in DNS_PROVIDERS.items()
+                          if any(_uses_provider(adapter, addresses) for adapter in interfaces)}
 
 
 def _configure(cmd, index: int, addresses: tuple[str, ...]):
@@ -110,12 +114,14 @@ def change_dns(action: str, read, cmd) -> str:
         raise ValueError("Ação de DNS desconhecida.")
     previous_provider = DNS_REVERSALS.get(action)
     addresses = DNS_PROVIDERS.get(action, ())
-    eligible = [adapter for adapter in read() if adapter.eligible]
-    if not eligible:
-        raise RuntimeError("Nenhuma interface IPv4 com rota padrão e suporte a DNS foi encontrada. "
-                           "Conecte-se à rede e tente novamente.")
-    targets = [adapter for adapter in eligible
-               if previous_provider is None or _uses_provider(adapter, DNS_PROVIDERS[previous_provider])]
+    interfaces = read()
+    if previous_provider is None:
+        targets = [adapter for adapter in interfaces if adapter.eligible]
+        if not targets:
+            raise RuntimeError("Nenhuma interface IPv4 com rota padrão e suporte a DNS foi encontrada. "
+                               "Conecte-se à rede e tente novamente.")
+    else:
+        targets = [adapter for adapter in interfaces if _uses_provider(adapter, DNS_PROVIDERS[previous_provider])]
     changed = []
     try:
         for adapter in targets:
@@ -160,6 +166,6 @@ def change_dns(action: str, read, cmd) -> str:
             raise RuntimeError(f"{exc}\nRestauração incompleta: {'; '.join(failures)}") from exc
         raise RuntimeError(f"{exc}\nA configuração anterior foi reaplicada.") from exc
     if not targets:
-        return "Nenhuma interface ativa usa esse provedor como DNS manual."
+        return "Nenhuma interface usa esse provedor como DNS manual."
     mode = "DNS automático" if not addresses else "DNS " + " e ".join(addresses)
     return f"{mode} confirmado em " + ", ".join(adapter.name for adapter in targets) + "."

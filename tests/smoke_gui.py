@@ -360,6 +360,17 @@ with tempfile.TemporaryDirectory() as directory:
         finish_dns(None)
         assert cloudflare.button.text() == google.button.text() == "Aplicar"
         assert google.status.text().startswith("Concluído.")
+        worker.update_dns_actions(worker.dns_status_request, {"dns_cloudflare", "dns_google"})
+        assert cloudflare.button.text() == google.button.text() == "Reverter"
+        assert not worker.dns_apply_buttons["dns_google"].isHidden()
+        worker.dns_apply_buttons["dns_google"].click()
+        assert worker.native_code == "dns_google"
+        finish_dns("dns_google")
+        assert worker.dns_apply_buttons["dns_google"].isHidden()
+        assert cloudflare.status.isHidden()
+        worker.update_dns_actions(worker.dns_status_request, None)
+        assert not google.button.isEnabled()
+        assert "Não foi possível consultar o DNS" in worker.status_label.text()
 
     deadline = [None]
     with patch("windows_actions._read_shutdown_deadline", side_effect=lambda: deadline[0]), \

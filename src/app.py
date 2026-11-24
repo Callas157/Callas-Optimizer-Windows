@@ -654,6 +654,7 @@ class MainWindow(QMainWindow):
         self.native_timer: QTimer | None = None
         self.native_controls: dict[str, NativeActionCard] = {}
         self.dns_status_request = 0
+        self.dns_apply_buttons: dict[str, QPushButton] = {}
         self.dns_status_result.connect(self.update_dns_actions)
         self.extra_installer: ExtraInstallerThread | None = None
         self.vm_template_thread: VirtualBoxTemplateThread | None = None
@@ -1089,6 +1090,12 @@ class MainWindow(QMainWindow):
             callback = self.configure_shutdown if code == "shutdown_custom" else self.native_action
             card = NativeActionCard(code, callback)
             self.native_controls[code] = card
+            if code in DNS_PROVIDERS:
+                button = action_button("Aplicar nas ativas",
+                                       lambda _=False, selected=code: self.native_action(selected), compact=True)
+                button.hide()
+                card.widget.layout().addWidget(button, alignment=Qt.AlignmentFlag.AlignLeft)
+                self.dns_apply_buttons[code] = button
             cards.append(card.widget)
         col.addWidget(CompactGrid(cards))
         col.addWidget(action_button("Ver registros", lambda: self.goto("logs"), compact=True),
@@ -1174,6 +1181,7 @@ class MainWindow(QMainWindow):
         request = self.dns_status_request
         for code in DNS_PROVIDERS:
             self.native_controls[code].button.setEnabled(False)
+            self.dns_apply_buttons[code].setEnabled(False)
 
         def check():
             try:
@@ -1191,11 +1199,17 @@ class MainWindow(QMainWindow):
     def update_dns_actions(self, request: int, active):
         if request != self.dns_status_request:
             return
+        if active is None and self.stack.currentWidget() is self.pages["network"]:
+            self.status_message("Não foi possível consultar o DNS. Reabra a aba Rede e DNS para tentar novamente.")
+        available = active is not None and self.native_timer is None
         for code in DNS_PROVIDERS:
             card = self.native_controls[code]
             if active is not None:
                 card.set_action(card.reversal[0] if code in active else code)
-            card.button.setEnabled(self.native_timer is None)
+            card.button.setEnabled(available)
+            apply_button = self.dns_apply_buttons[code]
+            apply_button.setVisible(active is not None and len(active) > 1)
+            apply_button.setEnabled(available)
 
     def _clean_page(self):
         col = self._page("clean", "Limpeza Total", "Limpeza nativa com progresso, cancelamento e registro de arquivos ignorados.")
@@ -1542,6 +1556,10 @@ class MainWindow(QMainWindow):
         card.status.show()
         for control in self.native_controls.values():
             control.button.setEnabled(False)
+        for provider, button in self.dns_apply_buttons.items():
+            button.setEnabled(False)
+            if task["route"] == "network" and self.native_controls[provider] is not card:
+                self.native_controls[provider].status.hide()
         if os.name != "nt":
             self.finish_native_action(False, "Esta opção exige Windows.")
             return

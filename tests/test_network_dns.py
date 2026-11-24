@@ -60,6 +60,13 @@ class NetworkDnsTest(unittest.TestCase):
         self.assertEqual(self.adapters["ethernet"].static, ())
         self.assertEqual(self.adapters["virtual"].static, ("9.9.9.9",))
 
+    def test_revert_removes_provider_from_a_disconnected_adapter(self):
+        self.change("dns_cloudflare")
+        self.adapters["ethernet"] = replace(self.adapters["ethernet"], eligible=False)
+        self.assertEqual(configured_providers(self.read()), {"dns_cloudflare"})
+        self.change("dns_cloudflare_auto")
+        self.assertEqual(self.adapters["ethernet"].static, ())
+
     def test_failed_secondary_rolls_back_previous_interfaces_and_the_partial_write(self):
         self.adapters["virtual"] = replace(self.adapters["virtual"], eligible=True)
         self.fail_secondary = ("name=14", "address=8.8.4.4")
