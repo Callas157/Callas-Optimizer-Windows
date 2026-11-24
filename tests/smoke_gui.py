@@ -132,6 +132,15 @@ for card in win.all_program_cards:
     for button in card.findChildren(QPushButton):
         if not button.isHidden():
             assert card.rect().contains(button.mapTo(card, QPoint()) + button.rect().bottomRight())
+status = win.program_controls["brave"][3]
+status.setText(r"[WinError 5] Acesso negado: C:\Users\very.long.enterprise.username.fl.name\AppData\Local\CallasTeck\Downloads\brave-E7J5wxxG\BraveBrowserStandaloneSetup.exe")
+status.show()
+app.processEvents()
+app.processEvents()
+viewport = win.pages["programs"].viewport()
+assert first.mapTo(viewport, first.rect().topRight()).x() < viewport.width()
+assert first.x() == second.x() and first.y() < second.y()
+status.hide()
 win.goto("winutil")
 app.processEvents()
 execute = next(button for button in win.pages["winutil"].findChildren(QPushButton)

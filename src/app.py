@@ -403,6 +403,15 @@ def label(text: str, kind: str = "Muted", wrap: bool = True) -> QLabel:
     return obj
 
 
+def compact_status() -> QLabel:
+    status = label("")
+    status.setTextFormat(Qt.TextFormat.PlainText)
+    policy = status.sizePolicy()
+    policy.setHorizontalPolicy(QSizePolicy.Policy.Ignored)
+    status.setSizePolicy(policy)
+    return status
+
+
 def card_layout(variant: str = "Card", *, compact: bool = False) -> tuple[QFrame, QVBoxLayout]:
     outer = QFrame()
     outer.setObjectName(variant)
@@ -518,8 +527,7 @@ class NativeActionCard:
         self.execution.addWidget(self.progress)
         self.progress.setFixedHeight(34)
         contents.addWidget(self.execution, alignment=Qt.AlignmentFlag.AlignLeft)
-        self.status = label("")
-        self.status.setTextFormat(Qt.TextFormat.PlainText)
+        self.status = compact_status()
         self.status.hide()
         contents.addWidget(self.status)
         self.set_action(code)
@@ -1164,8 +1172,7 @@ class MainWindow(QMainWindow):
         progress.setFixedHeight(32)
         progress.hide()
         content.addWidget(progress)
-        status = label("")
-        status.setTextFormat(Qt.TextFormat.PlainText)
+        status = compact_status()
         status.hide()
         content.addWidget(status)
         support = action_button("Abrir site oficial", lambda: webbrowser.open(official_website(program_key(icon))),
@@ -1244,8 +1251,7 @@ class MainWindow(QMainWindow):
         self.vm_template_progress = TaskProgressBar("Progresso da preparação das VMs")
         self.vm_template_progress.hide()
         lab.addWidget(self.vm_template_progress)
-        self.vm_template_status = label("")
-        self.vm_template_status.setTextFormat(Qt.TextFormat.PlainText)
+        self.vm_template_status = compact_status()
         self.vm_template_status.hide()
         lab.addWidget(self.vm_template_status)
         openai_card, openai_box = card_layout(compact=True)
@@ -1275,8 +1281,7 @@ class MainWindow(QMainWindow):
         self.extensions_progress = TaskProgressBar("Progresso das políticas do Brave")
         self.extensions_progress.hide()
         box.addWidget(self.extensions_progress)
-        self.extensions_status = label("")
-        self.extensions_status.setTextFormat(Qt.TextFormat.PlainText)
+        self.extensions_status = compact_status()
         box.addWidget(self.extensions_status)
         col.addWidget(CompactGrid([lab_card, openai_card, c]))
         col.addStretch(1)

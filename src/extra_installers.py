@@ -27,6 +27,8 @@ WINGET_INSTALLER_FALLBACK = {
 }
 CHATGPT_PACKAGE = "OpenAI.Codex_2p2nqsd0c76g0"
 CHATGPT_STORE_ID = "9PLM9XGG6VKS"
+SPOTIFY_PACKAGE = "SpotifyAB.SpotifyMusic_zpdnekdrzrea0"
+SPOTIFY_STORE_ID = "9NCBCSZSJRSB"
 
 CATALOG = {
     "brave": {
@@ -215,17 +217,23 @@ def verify_authenticode(path: Path, publisher_regex: str) -> str:
     return signer
 
 
+def _installed_store_program(package: str, application: str) -> str | None:
+    count = wintypes.UINT()
+    length = wintypes.UINT()
+    # A primeira consulta enumera apenas o tamanho necessário para o usuário atual.
+    error = ctypes.windll.kernel32.GetPackagesByPackageFamily(
+        package, ctypes.byref(count), None, ctypes.byref(length), None,
+    )
+    if error == 122 and count.value:
+        return f"shell:AppsFolder\\{package}!{application}"
+    return None
+
+
 def installed_program(app_id: str) -> Path | str | None:
     if os.name != "nt":
         return None
     if app_id == "chatgpt":
-        count = wintypes.UINT()
-        length = wintypes.UINT()
-        # A primeira consulta enumera apenas o tamanho necessário para o usuário atual.
-        error = ctypes.windll.kernel32.GetPackagesByPackageFamily(
-            CHATGPT_PACKAGE, ctypes.byref(count), None, ctypes.byref(length), None,
-        )
-        return f"shell:AppsFolder\\{CHATGPT_PACKAGE}!App" if error == 122 and count.value else None
+        return _installed_store_program(CHATGPT_PACKAGE, "App")
     if app_id == "steam":
         import winreg
         try:
@@ -248,6 +256,8 @@ def installed_program(app_id: str) -> Path | str | None:
                         return tuple(int(part) for part in re.findall(r"\d+", path.parent.name))
                     return max(found, key=version)
                 return found[0]
+    if app_id == "spotify":
+        return _installed_store_program(SPOTIFY_PACKAGE, "Spotify")
     return None
 
 
@@ -296,9 +306,14 @@ def available_upgrades() -> set[str] | None:
 
 def upgrade_program(app_id: str, notify) -> str:
     app_id = program_key(app_id)
+    store_id = None
     if app_id == "chatgpt":
-        open_program(f"ms-windows-store://pdp/?ProductId={CHATGPT_STORE_ID}")
-        return "Página do ChatGPT aberta na Microsoft Store para verificar a atualização."
+        store_id = CHATGPT_STORE_ID
+    elif app_id == "spotify" and isinstance(installed_program(app_id), str):
+        store_id = SPOTIFY_STORE_ID
+    if store_id:
+        open_program(f"ms-windows-store://pdp/?ProductId={store_id}")
+        return "Página aberta na Microsoft Store para verificar a atualização."
 
     package_id = WINGET_IDS.get(app_id)
     if package_id:
