@@ -37,7 +37,8 @@ REPORT_MESSAGE_LIMIT = 5000
 PROFILE_MISMATCH = 3
 MAX_SHUTDOWN_MINUTES = 315_360_000 // 60
 NO_SHUTDOWN_IN_PROGRESS = 1116
-SHUTDOWN_TIMER_KEY = r"Software\Callas\OptimizerWindows\ShutdownTimer"
+SHUTDOWN_SETTINGS_KEY = r"Software\Callas\OptimizerWindows"
+SHUTDOWN_TIMER_KEY = SHUTDOWN_SETTINGS_KEY + r"\ShutdownTimer"
 SHUTDOWN_DEADLINE = "Deadline"
 NANOSECONDS_PER_MINUTE = 60_000_000_000
 WINUTIL_VERSION = "26.11.13"
@@ -531,10 +532,11 @@ def _write_shutdown_deadline(deadline: int | None):
         ctypes.POINTER(wintypes.DWORD),
     )
     create_key.restype = wintypes.LONG
-    current_user = wintypes.HKEY(ctypes.c_int32(winreg.HKEY_CURRENT_USER).value)
     key = wintypes.HKEY()
-    error = create_key(current_user, SHUTDOWN_TIMER_KEY, 0, None, reg_option_volatile,
-                       winreg.KEY_SET_VALUE, None, ctypes.byref(key), None)
+    # RegCreateKeyExW applies volatility to missing ancestors too. Keep preferences persistent.
+    with winreg.CreateKeyEx(winreg.HKEY_CURRENT_USER, SHUTDOWN_SETTINGS_KEY, 0, winreg.KEY_CREATE_SUB_KEY) as parent:
+        error = create_key(wintypes.HKEY(int(parent)), "ShutdownTimer", 0, None, reg_option_volatile,
+                           winreg.KEY_SET_VALUE, None, ctypes.byref(key), None)
     if error:
         raise ctypes.WinError(error)
     try:
