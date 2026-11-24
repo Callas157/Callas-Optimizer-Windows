@@ -19,6 +19,12 @@ import truststore
 ROOT = Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "CallasTeck" / "Downloads"
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 SUCCESS_CODES = {0, 1641, 3010}
+WINGET_INSTALLER_FALLBACK = {
+    0x8A150012,  # Source name does not exist
+    0x8A150014,  # No applications found
+    0x8A150045,  # Source open failed
+    0x8A15004B,  # Failed to open all sources
+}
 CHATGPT_PACKAGE = "OpenAI.Codex_2p2nqsd0c76g0"
 CHATGPT_STORE_ID = "9PLM9XGG6VKS"
 
@@ -308,8 +314,8 @@ def upgrade_program(app_id: str, notify) -> str:
         else:
             code = result.returncode & 0xFFFFFFFF
             if code == 0x8A15002B:
-                return "Você já está com a versão mais recente disponível no WinGet."
-            if code != 0x8A150014:
+                return "O WinGet não encontrou atualização aplicável para este aplicativo."
+            if code not in WINGET_INSTALLER_FALLBACK:
                 _check_setup_exit(result.returncode)
                 return "Atualização pelo WinGet concluída."
 

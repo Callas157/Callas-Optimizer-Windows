@@ -70,10 +70,16 @@ class ProgramLifecycleTest(unittest.TestCase):
             message = installers.upgrade_program("spotify", lambda *_: None)
         command = run.call_args.args[0]
         self.assertEqual(command[1:5], ["upgrade", "--id", "Spotify.Spotify", "--exact"])
-        self.assertIn("versão mais recente", message)
+        self.assertIn("atualização aplicável", message)
 
     def test_package_missing_uses_verified_manufacturer_installer(self):
         with patch.object(installers.subprocess, "run", return_value=Mock(returncode=0x8A150014)), \
+                patch.object(installers, "download_and_open") as official:
+            installers.upgrade_program("spotify", lambda *_: None)
+        self.assertEqual(official.call_args.args[0], "spotify")
+
+    def test_unavailable_winget_source_uses_manufacturer_installer(self):
+        with patch.object(installers.subprocess, "run", return_value=Mock(returncode=0x8A15004B)), \
                 patch.object(installers, "download_and_open") as official:
             installers.upgrade_program("spotify", lambda *_: None)
         self.assertEqual(official.call_args.args[0], "spotify")
