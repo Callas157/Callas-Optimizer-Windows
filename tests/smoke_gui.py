@@ -11,9 +11,11 @@ root = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(root / 'src'))
 os.environ['QT_QPA_PLATFORM'] = 'offscreen'
 os.environ['CALLAS_SMOKE'] = '1'
-from PySide6.QtCore import QPoint
-from PySide6.QtWidgets import QApplication, QFrame, QLabel, QPushButton
+from PySide6.QtCore import QPoint, Qt, QTimer
+from PySide6.QtTest import QTest
+from PySide6.QtWidgets import QApplication, QDialog, QFrame, QLabel, QPushButton, QSpinBox
 from app import MainWindow, STYLE
+import windows_actions
 
 app = QApplication(sys.argv)
 app.setStyleSheet(STYLE)
@@ -27,6 +29,22 @@ assert len(win.home_tiles) == 6
 assert len(win.home_panels) == 5
 assert hasattr(win, "home_detail_grid")
 assert callable(win.open_windows_settings)
+
+# Navegação por botões laterais e novo percurso depois de retroceder.
+win.goto("clean")
+win.goto("gamer")
+win.goto("gamer")
+win.goto("repair")
+QTest.mouseClick(win.pages["repair"].viewport(), Qt.MouseButton.BackButton)
+assert win.stack.currentWidget() is win.pages["gamer"]
+QTest.mouseClick(win.nav_buttons["gamer"], Qt.MouseButton.ForwardButton)
+assert win.stack.currentWidget() is win.pages["repair"]
+QTest.mouseClick(win.pages["repair"].viewport(), Qt.MouseButton.BackButton)
+QTest.mouseClick(win.pages["gamer"].viewport(), Qt.MouseButton.BackButton)
+assert win.stack.currentWidget() is win.pages["clean"]
+win.goto("shutdown")
+QTest.mouseClick(win.pages["shutdown"].viewport(), Qt.MouseButton.ForwardButton)
+assert win.stack.currentWidget() is win.pages["shutdown"]
 
 # Testar clique real nos cartões da tela inicial sem nova janela.
 win.goto('home')
@@ -293,6 +311,65 @@ with tempfile.TemporaryDirectory() as directory:
         worker.native_report.write_text('{"ok": true, "message": "Restaurado."}', encoding="utf-8")
         worker.poll_native_action()
         assert card.button.text() == "Remover" and card.execution.currentWidget() is card.button
+
+    with patch("windows_actions.HOME", local), patch("windows_actions.cmd", return_value="OK"), \
+            patch("app.ACTION_HOME", local), patch("app.confirmar", return_value=True), \
+            patch("app.subprocess.Popen") as spawn:
+        worker.goto("shutdown")
+        timer_card = worker.native_controls["shutdown_custom"]
+        assert timer_card.button.text() == "Configurar"
+        seen = {}
+
+        def choose_time():
+            dialog = app.activeModalWidget()
+            if not isinstance(dialog, QDialog):
+                worker.close()
+                return
+            picker = dialog.findChild(QSpinBox)
+            controls = {button.text(): button for button in dialog.findChildren(QPushButton)}
+            if picker is None or not {"60 min", "Agendar"} <= controls.keys():
+                dialog.reject()
+                return
+            seen["centered"] = (dialog.geometry().center() - worker.frameGeometry().center()).manhattanLength() < 20
+            controls["60 min"].click()
+            seen["preset"] = picker.value()
+            picker.setValue(35)
+            controls["Agendar"].click()
+
+        spawn.return_value.poll.return_value = 0
+        with patch("app.os", SimpleNamespace(name="nt")):
+            QTimer.singleShot(0, choose_time)
+            timer_card.button.click()
+        assert seen == {"centered": True, "preset": 60}, seen
+        assert spawn.call_args.args[0][-2:] == ["--shutdown-minutes", "35"]
+        assert timer_card.execution.currentWidget() is timer_card.progress
+
+        windows_actions.shutdown(35)
+        worker.native_report.write_text('{"ok": true, "message": "Agendado."}', encoding="utf-8")
+        worker.poll_native_action()
+        assert timer_card.title.text() == "Desligando em 35 minutos"
+        assert timer_card.button.text() == "Reagendar"
+
+        state_path = local / "shutdown_timer.json"
+        state = json.loads(state_path.read_text(encoding="utf-8"))
+        state["deadline"] -= 30 * 60
+        state_path.write_text(json.dumps(state), encoding="utf-8")
+        restored = MainWindow()
+        restored.goto("shutdown")
+        restored_card = restored.native_controls["shutdown_custom"]
+        assert restored_card.title.text() == "Desligando em 5 minutos"
+        state["deadline"] -= 60
+        state_path.write_text(json.dumps(state), encoding="utf-8")
+        restored.shutdown_countdown.timeout.emit()
+        assert restored_card.title.text() == "Desligando em 4 minutos"
+        with patch("app.os", SimpleNamespace(name="nt")):
+            restored.native_controls["shutdown_cancel"].button.click()
+        windows_actions.shutdown(None)
+        restored.native_report.write_text('{"ok": true, "message": "Cancelado."}', encoding="utf-8")
+        restored.poll_native_action()
+        assert restored_card.title.text() == "Desligamento personalizado"
+        assert restored_card.button.text() == "Configurar"
+        restored.close()
 
     worker.update_mode = 'install'
     worker.update_timer = Mock()

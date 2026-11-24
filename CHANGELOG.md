@@ -1,3 +1,9 @@
+## v8.9.29 — Desligamento personalizado e navegação pelo mouse
+
+- A aba Desligamento ganha um cartão para escolher os minutos em uma janela central, com atalhos de 15, 30 e 60 minutos. O cartão acompanha o prazo que o Windows mantém após fechar e reabrir o Callas.
+- Cancelar desligamento também cancela o temporizador personalizado. Agendar um novo prazo substitui o anterior.
+- Os botões laterais Voltar e Avançar percorrem o histórico das abas visitadas no Callas.
+
 ## v8.9.28 — Cartões compactos e reversão no mesmo botão
 
 - Programas e ferramentas do Windows usam cartões retangulares em até três colunas, de acordo com a largura da janela. WinUtil e Ponto de restauração ficam alinhados à esquerda.
