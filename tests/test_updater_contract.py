@@ -16,6 +16,19 @@ APP = (ROOT / 'src/app.py').read_text(encoding='utf-8')
 UPDATER = (ROOT / 'src/updater.ps1').read_text(encoding='utf-8')
 POWERSHELL = shutil.which('powershell') or shutil.which('pwsh')
 
+
+def updater_environment(folder, status):
+    # O aplicativo usa os módulos da versão que inicia. No runner, o PowerShell
+    # 7 pode ter definido um caminho de módulos incompatível com o Windows PowerShell.
+    return {
+        **os.environ,
+        'PSModulePath': str(Path(POWERSHELL).resolve().parent / 'Modules'),
+        'LOCALAPPDATA': folder,
+        'CALLAS_TEST_STATUS': str(status),
+        'CALLAS_TEST_UPDATER': str(ROOT / 'src/updater.ps1'),
+    }
+
+
 class UpdateContract(unittest.TestCase):
     def test_python_gui_parses(self):
         ast.parse(APP)
@@ -80,9 +93,7 @@ class UpdateContract(unittest.TestCase):
     def test_check_without_install_marker_recognizes_setup_only_release(self):
         with tempfile.TemporaryDirectory() as folder:
             status = Path(folder) / 'updater.status'
-            env = {**os.environ, 'LOCALAPPDATA': folder,
-                   'CALLAS_TEST_STATUS': str(status),
-                   'CALLAS_TEST_UPDATER': str(ROOT / 'src/updater.ps1')}
+            env = updater_environment(folder, status)
             script = """
 function Invoke-RestMethod($Uri, $Headers, $TimeoutSec) {
     if (Test-Path -LiteralPath $env:CALLAS_TEST_STATUS) {
@@ -152,10 +163,8 @@ exit $LASTEXITCODE
                 worker = threading.Thread(target=server.serve_forever, daemon=True)
                 worker.start()
                 try:
-                    env = {**os.environ, 'LOCALAPPDATA': folder,
-                           'CALLAS_TEST_STATUS': str(status),
-                           'CALLAS_TEST_URL': f'http://127.0.0.1:{server.server_port}/asset.exe',
-                           'CALLAS_TEST_UPDATER': str(ROOT / 'src/updater.ps1')}
+                    env = updater_environment(folder, status)
+                    env['CALLAS_TEST_URL'] = f'http://127.0.0.1:{server.server_port}/asset.exe'
                     script = """
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
