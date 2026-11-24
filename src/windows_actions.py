@@ -35,6 +35,12 @@ BACKUP = HOME / "actions_backup.json"
 LOG = HOME / "acoes.log"
 REPORT_MESSAGE_LIMIT = 5000
 PROFILE_MISMATCH = 3
+MAX_SHUTDOWN_MINUTES = 315_360_000 // 60
+NO_SHUTDOWN_IN_PROGRESS = 1116
+SHUTDOWN_SETTINGS_KEY = r"Software\Callas\OptimizerWindows"
+SHUTDOWN_TIMER_KEY = SHUTDOWN_SETTINGS_KEY + r"\ShutdownTimer"
+SHUTDOWN_DEADLINE = "Deadline"
+NANOSECONDS_PER_MINUTE = 60_000_000_000
 WINUTIL_VERSION = "26.11.13"
 WINUTIL_URL = f"https://github.com/ChrisTitusTech/winutil/releases/download/{WINUTIL_VERSION}/winutil.ps1"
 WINUTIL_SHA256 = "e9d05a59d564b4fbb61fcfa1a594504a0f81e8d27c787119e72a99b57ddbe66d"
@@ -81,6 +87,7 @@ ROWS = [
  ("shutdown_15","shutdown","Desligar em 15 minutos","Agenda desligamento.",False,"Salve seus arquivos."),
  ("shutdown_30","shutdown","Desligar em 30 minutos","Agenda desligamento.",False,"Salve seus arquivos."),
  ("shutdown_60","shutdown","Desligar em 60 minutos","Agenda desligamento.",False,"Salve seus arquivos."),
+ ("shutdown_custom","shutdown","Desligamento personalizado","Escolha o tempo em minutos.",False,""),
  ("shutdown_cancel","shutdown","Cancelar desligamento","Cancela um desligamento pendente.",False,""),
  ("winutil_open","winutil","Abrir WinUtil oficial","Baixa a versão verificada e abre a interface do WinUtil.",True,
   "As opções que você escolher no WinUtil podem alterar o sistema."),
@@ -496,10 +503,78 @@ def open_winutil() -> str:
     raise RuntimeError(f"O WinUtil encerrou durante a inicialização (código {process.returncode}).")
 
 
-def shutdown(minutes):
-    if minutes is None:return cmd("shutdown.exe","/a")
-    cmd("shutdown.exe","/a",optional=True)
-    return cmd("shutdown.exe","/s","/t",str(minutes*60))
+def _read_shutdown_deadline() -> int | None:
+    if sys.platform != "win32":
+        return None
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, SHUTDOWN_TIMER_KEY) as key:
+            value, kind = winreg.QueryValueEx(key, SHUTDOWN_DEADLINE)
+            return value if kind == winreg.REG_QWORD else None
+    except OSError:
+        return None
+
+
+def _write_shutdown_deadline(deadline: int | None):
+    if deadline is None:
+        try:
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, SHUTDOWN_TIMER_KEY, 0, winreg.KEY_SET_VALUE) as key:
+                winreg.DeleteValue(key, SHUTDOWN_DEADLINE)
+        except FileNotFoundError:
+            pass
+        return
+
+    # A volatile key survives closing the app and is discarded when Windows unloads the hive.
+    reg_option_volatile = 1
+    create_key = ctypes.windll.advapi32.RegCreateKeyExW
+    create_key.argtypes = (
+        wintypes.HKEY, wintypes.LPCWSTR, wintypes.DWORD, wintypes.LPWSTR,
+        wintypes.DWORD, wintypes.DWORD, ctypes.c_void_p, ctypes.POINTER(wintypes.HKEY),
+        ctypes.POINTER(wintypes.DWORD),
+    )
+    create_key.restype = wintypes.LONG
+    key = wintypes.HKEY()
+    # RegCreateKeyExW applies volatility to missing ancestors too. Keep preferences persistent.
+    with winreg.CreateKeyEx(winreg.HKEY_CURRENT_USER, SHUTDOWN_SETTINGS_KEY, 0, winreg.KEY_CREATE_SUB_KEY) as parent:
+        error = create_key(wintypes.HKEY(int(parent)), "ShutdownTimer", 0, None, reg_option_volatile,
+                           winreg.KEY_SET_VALUE, None, ctypes.byref(key), None)
+    if error:
+        raise ctypes.WinError(error)
+    try:
+        winreg.SetValueEx(key.value, SHUTDOWN_DEADLINE, 0, winreg.REG_QWORD, deadline)
+    finally:
+        winreg.CloseKey(key.value)
+
+
+def remaining_shutdown_minutes() -> int | None:
+    deadline = _read_shutdown_deadline()
+    if deadline is None:
+        return None
+    remaining = deadline - time.monotonic_ns()
+    if 0 < remaining <= MAX_SHUTDOWN_MINUTES * NANOSECONDS_PER_MINUTE:
+        return (remaining + NANOSECONDS_PER_MINUTE - 1) // NANOSECONDS_PER_MINUTE
+    return None
+
+
+def abort_shutdown():
+    cmd("shutdown.exe", "/a", success_codes=(0, NO_SHUTDOWN_IN_PROGRESS))
+
+
+def shutdown(minutes: int | None):
+    if minutes is not None and (type(minutes) is not int or not 1 <= minutes <= MAX_SHUTDOWN_MINUTES):
+        raise ValueError(f"Escolha entre 1 e {MAX_SHUTDOWN_MINUTES} minutos.")
+    abort_shutdown()
+    _write_shutdown_deadline(None)
+    if minutes is None:
+        return "Nenhum desligamento pendente."
+    seconds = minutes * 60
+    deadline = time.monotonic_ns() + minutes * NANOSECONDS_PER_MINUTE
+    cmd("shutdown.exe", "/s", "/t", str(seconds))
+    try:
+        _write_shutdown_deadline(deadline)
+    except OSError:
+        abort_shutdown()
+        raise
+    return f"Desligamento agendado em {minutes} {'minuto' if minutes == 1 else 'minutos'}."
 
 
 def repair_disk(progress=None):
@@ -537,7 +612,7 @@ def log_action(action_id, result):
         pass
 
 
-def execute(action_id, *, progress=None):
+def execute(action_id, *, progress=None, shutdown_minutes=None):
     if action_id not in ACTIONS:raise ValueError("Ação inexistente.")
     if os.name!="nt":raise OSError("Requer Windows.")
     if ACTIONS[action_id]["admin"] and not admin():
@@ -569,6 +644,7 @@ def execute(action_id, *, progress=None):
         "classic_off":lambda:restore_reg("CU|"+cl),
         "shutdown_15":lambda:shutdown(15),"shutdown_30":lambda:shutdown(30),
         "shutdown_60":lambda:shutdown(60),"shutdown_cancel":lambda:shutdown(None),
+        "shutdown_custom":lambda:shutdown(shutdown_minutes),
         "winutil_open":open_winutil,
         "restore_point":lambda:ps("Checkpoint-Computer -Description 'Callas Optimizer' "
                                   "-RestorePointType MODIFY_SETTINGS -WarningAction Stop"),
@@ -577,6 +653,8 @@ def execute(action_id, *, progress=None):
         "restore_all":restore_all,
     }
     try:
+        if action_id == "shutdown_custom" and shutdown_minutes is None:
+            raise ValueError("Informe o tempo do desligamento personalizado.")
         result = tasks[action_id]()
     except Exception as exc:
         log_action(action_id, f"Falha: {exc}")
@@ -596,7 +674,7 @@ def _write_report(path, payload):
         tmp.unlink(missing_ok=True)
 
 
-def worker(action_id, filename, report_home=None):
+def worker(action_id, filename, report_home=None, shutdown_minutes=None):
     if not re.fullmatch(r"acao-[a-f0-9]{32}\.json",filename):return 2
     # O valor informado pela interface só serve para comparação. O trabalhador
     # escreve exclusivamente na pasta do próprio perfil.
@@ -623,7 +701,9 @@ def worker(action_id, filename, report_home=None):
             except OSError as exc:
                 raise RuntimeError("Outra ferramenta de manutenção está em execução neste perfil.") from exc
             publish_progress(0)
-            result = {"ok": True, "message": execute(action_id, progress=publish_progress)[-REPORT_MESSAGE_LIMIT:]}
+            options = {"shutdown_minutes": shutdown_minutes} if action_id == "shutdown_custom" else {}
+            message = execute(action_id, progress=publish_progress, **options)
+            result = {"ok": True, "message": message[-REPORT_MESSAGE_LIMIT:]}
     except Exception as e:
         result = {"ok": False, "message": str(e)[-REPORT_MESSAGE_LIMIT:]}
     _write_report(report, result)

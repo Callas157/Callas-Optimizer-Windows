@@ -15,13 +15,13 @@ import threading
 import uuid
 import webbrowser
 
-from PySide6.QtCore import QByteArray, QFileInfo, QRect, QRectF, QSettings, QSize, Qt, QThread, QTimer, Signal, Slot
+from PySide6.QtCore import QByteArray, QEvent, QFileInfo, QRect, QRectF, QSettings, QSize, Qt, QThread, QTimer, Signal, Slot
 from PySide6.QtGui import QBrush, QColor, QConicalGradient, QIcon, QLinearGradient, QPainter, QPainterPath, QPen, QPixmap
 from PySide6.QtSvg import QSvgRenderer
 from PySide6.QtWidgets import (
-    QApplication, QButtonGroup, QCheckBox, QFileDialog, QFileIconProvider, QFrame, QGridLayout, QHBoxLayout,
+    QApplication, QButtonGroup, QCheckBox, QDialog, QFileDialog, QFileIconProvider, QFrame, QGridLayout, QHBoxLayout,
     QLabel, QLayout, QMainWindow, QMessageBox, QPlainTextEdit, QProgressBar, QPushButton,
-    QScrollArea, QSizePolicy, QSplitter, QStackedWidget, QVBoxLayout, QWidget,
+    QScrollArea, QSizePolicy, QSpinBox, QSplitter, QStackedWidget, QVBoxLayout, QWidget,
 )
 
 from cleaner import (
@@ -29,8 +29,8 @@ from cleaner import (
     nvidia_dxcache_folders, windows_temp_folder,
 )
 from windows_actions import (
-    ACTIONS, BY_ROUTE, HOME as ACTION_HOME, PROFILE_MISMATCH, ElevatedAction,
-    applied_action_backups, edge_installed, worker as run_windows_action,
+    ACTIONS, BY_ROUTE, HOME as ACTION_HOME, MAX_SHUTDOWN_MINUTES, PROFILE_MISMATCH, ElevatedAction,
+    applied_action_backups, edge_installed, remaining_shutdown_minutes, worker as run_windows_action,
 )
 from extra_installers import (
     CATALOG as EXTRA_APPS, available_upgrades, download_and_open, installed_program,
@@ -39,7 +39,7 @@ from extra_installers import (
 from task_progress import TaskProgressBar
 from virtualbox_templates import create_test_vms, VM_NAMES, get_vboxmanage
 
-APP_VERSION = "8.9.28"
+APP_VERSION = "8.9.29"
 REPO = "Callas157/Callas-Optimizer-Windows"
 PROJECT_URL = f"https://github.com/{REPO}"
 DATA_DIR = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "CallasTeck"
@@ -124,6 +124,8 @@ QPushButton[compact="true"] { padding: 5px 10px; border-radius: 8px; }
 QPushButton[updateAvailable="true"] { border-color: #6cc9f4; background: #213c65; }
 QPushButton[updateAvailable="true"]:hover { background: #2d517d; }
 QPushButton#Primary[compact="true"]:disabled { color: #a8b9d8; background: #1b2241; border-color: #3a3b61; }
+QDialog#ShutdownDialog { background: #111b37; }
+QSpinBox#ShutdownMinutes { background: #0a1026; border: 1px solid #635e9b; border-radius: 8px; padding: 7px 9px; }
 QLabel#ActionWarning { color: #e6c890; }
 QPushButton#Quick { text-align: left; background: transparent; border: none; padding: 4px 0; color: #ffffff; font-size: 21px; font-weight: 700; }
 QPushButton#Quick:hover { background: #3a2877; }
@@ -513,7 +515,8 @@ class NativeActionCard:
         self.reversal = REVERSIBLE_ACTIONS.get(code)
         title = self.reversal[1] if self.reversal else task["name"]
         self.widget, contents = card_layout(compact=True)
-        contents.addWidget(label(title, "CardTitle"))
+        self.title = label(title, "CardTitle")
+        contents.addWidget(self.title)
         self.description = label("")
         contents.addWidget(self.description)
         self.warning = label("", "ActionWarning")
@@ -666,6 +669,11 @@ class MainWindow(QMainWindow):
         self.update_elapsed = 0
         self.nav_buttons: dict[str, QPushButton] = {}
         self.pages: dict[str, QWidget] = {}
+        self.navigation_history: list[str] = []
+        self.navigation_index = -1
+        self.shutdown_countdown = QTimer(self)
+        self.shutdown_countdown.setInterval(1000)
+        self.shutdown_countdown.timeout.connect(self.refresh_shutdown_timer)
 
         root = QWidget()
         root.setObjectName("MainRoot")
@@ -681,6 +689,7 @@ class MainWindow(QMainWindow):
         self.splitter.setStretchFactor(0, 0)
         self.splitter.setStretchFactor(1, 1)
         self.goto("home")
+        QApplication.instance().installEventFilter(self)
 
         try:
             runtime_files()
@@ -1071,13 +1080,75 @@ class MainWindow(QMainWindow):
             code = action["id"]
             if code in ACTION_CARD_KEYS:
                 continue
-            card = NativeActionCard(code, self.native_action)
+            callback = self.configure_shutdown if code == "shutdown_custom" else self.native_action
+            card = NativeActionCard(code, callback)
             self.native_controls[code] = card
             cards.append(card.widget)
         col.addWidget(CompactGrid(cards))
         col.addWidget(action_button("Ver registros", lambda: self.goto("logs"), compact=True),
                       alignment=Qt.AlignmentFlag.AlignLeft)
         col.addStretch(1)
+
+    def refresh_shutdown_timer(self):
+        card = self.native_controls["shutdown_custom"]
+        minutes = remaining_shutdown_minutes()
+        if minutes is None:
+            card.title.setText(ACTIONS["shutdown_custom"]["name"])
+            card.description.setText(ACTIONS["shutdown_custom"]["description"])
+            card.button.setText("Configurar")
+        else:
+            unit = "minuto" if minutes == 1 else "minutos"
+            card.title.setText(f"Desligando em {minutes} {unit}")
+            card.description.setText("O Windows mantém o agendamento mesmo com o Callas fechado.")
+            card.button.setText("Reagendar")
+        card.button.setAccessibleName(f"{card.button.text()} — {card.title.text()}")
+
+    def configure_shutdown(self, code: str):
+        if self.native_timer is not None or self.update_mode == "install":
+            return
+        dialog = QDialog(self)
+        dialog.setObjectName("ShutdownDialog")
+        dialog.setWindowTitle("Desligamento personalizado")
+        dialog.setFixedWidth(360)
+        panel = QVBoxLayout(dialog)
+        panel.setContentsMargins(18, 16, 18, 16)
+        panel.setSpacing(10)
+        prompt = label("Desligar em quantos minutos?", "CardTitle")
+        panel.addWidget(prompt)
+
+        minutes = QSpinBox()
+        minutes.setObjectName("ShutdownMinutes")
+        minutes.setRange(1, MAX_SHUTDOWN_MINUTES)
+        minutes.setSuffix(" min")
+        minutes.setValue(remaining_shutdown_minutes() or 30)
+        prompt.setBuddy(minutes)
+        minutes.setAccessibleName("Tempo até o desligamento, em minutos")
+        panel.addWidget(minutes)
+        presets = QHBoxLayout()
+        for value in (15, 30, 60):
+            preset = action_button(f"{value} min", lambda _=False, n=value: minutes.setValue(n), compact=True)
+            preset.setAutoDefault(False)
+            presets.addWidget(preset)
+        panel.addLayout(presets)
+        panel.addWidget(label("Salve seus arquivos antes do desligamento. O novo tempo substitui o agendamento atual.",
+                              "ActionWarning"))
+        buttons = QHBoxLayout()
+        buttons.addStretch()
+        cancel = action_button("Voltar", dialog.reject, compact=True)
+        submit = action_button("Agendar", dialog.accept, True, compact=True)
+        cancel.setAutoDefault(False)
+        submit.setDefault(True)
+        buttons.addWidget(cancel)
+        buttons.addWidget(submit)
+        panel.addLayout(buttons)
+
+        dialog.adjustSize()
+        dialog.move(self.frameGeometry().center() - dialog.rect().center())
+        minutes.setFocus()
+        minutes.selectAll()
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            self.native_action(code, shutdown_minutes=minutes.value())
+        dialog.deleteLater()
 
     def refresh_native_actions(self):
         edge = "edge_uninstall"
@@ -1343,9 +1414,37 @@ class MainWindow(QMainWindow):
         col.addWidget(about)
         col.addStretch()
 
-    def goto(self, route: str):
+    def step_navigation(self, delta: int):
+        index = self.navigation_index + delta
+        if 0 <= index < len(self.navigation_history):
+            self.navigation_index = index
+            self.goto(self.navigation_history[index], remember=False)
+
+    def eventFilter(self, watched, event):
+        if isinstance(watched, QWidget) and watched.window() is self:
+            event_type = event.type()
+            if event_type in (QEvent.Type.MouseButtonPress, QEvent.Type.MouseButtonRelease,
+                              QEvent.Type.MouseButtonDblClick):
+                mouse_button = event.button()
+                if mouse_button in (Qt.MouseButton.BackButton, Qt.MouseButton.ForwardButton):
+                    if event_type == QEvent.Type.MouseButtonRelease:
+                        self.step_navigation(-1 if mouse_button == Qt.MouseButton.BackButton else 1)
+                    return True
+            if event_type == QEvent.Type.KeyPress:
+                key = event.key()
+                if key in (Qt.Key.Key_Back, Qt.Key.Key_Forward):
+                    if not event.isAutoRepeat():
+                        self.step_navigation(-1 if key == Qt.Key.Key_Back else 1)
+                    return True
+        return super().eventFilter(watched, event)
+
+    def goto(self, route: str, *, remember: bool = True):
         if route not in self.pages:
             return
+        if remember and (self.navigation_index < 0 or self.navigation_history[self.navigation_index] != route):
+            del self.navigation_history[self.navigation_index + 1:]
+            self.navigation_history.append(route)
+            self.navigation_index += 1
         self.stack.setCurrentWidget(self.pages[route])
         self.nav_buttons[route].setChecked(True)
         if route == "logs":
@@ -1356,6 +1455,11 @@ class MainWindow(QMainWindow):
             self.home_timer.start()
         else:
             self.home_timer.stop()
+        if route == "shutdown":
+            self.refresh_shutdown_timer()
+            self.shutdown_countdown.start()
+        else:
+            self.shutdown_countdown.stop()
         if route in TOOL_PAGES and self.native_timer is None:
             self.refresh_native_actions()
         if route == "programs":
@@ -1366,7 +1470,7 @@ class MainWindow(QMainWindow):
     def status_message(self, message: str):
         self.status_label.setText(message)
 
-    def native_action(self, code: str):
+    def native_action(self, code: str, *, shutdown_minutes: int | None = None):
         if self.update_mode == "install":
             self.status_message("Aguarde a atualização do Callas Optima.")
             return
@@ -1381,7 +1485,10 @@ class MainWindow(QMainWindow):
             message += "\n\nATENÇÃO: " + task["warning"]
         if task["admin"]:
             message += "\n\nO Windows solicitará permissão de administrador."
-        if not confirmar(self, "Confirmação da operação", message):
+        if code == "shutdown_custom":
+            if shutdown_minutes is None:
+                return
+        elif not confirmar(self, "Confirmação da operação", message):
             return
         if self.update_mode == "install" or self.native_timer is not None:
             return
@@ -1403,6 +1510,8 @@ class MainWindow(QMainWindow):
         script_args = [] if getattr(sys, "frozen", False) else [str(Path(__file__).resolve())]
         args = [*script_args, "--callas-task", code, "--callas-report", self.native_report.name,
                 "--callas-profile", str(ACTION_HOME)]
+        if code == "shutdown_custom":
+            args.extend(("--shutdown-minutes", str(shutdown_minutes)))
         try:
             ACTION_HOME.mkdir(parents=True, exist_ok=True)
             if task["admin"]:
@@ -1486,7 +1595,9 @@ class MainWindow(QMainWindow):
                 summary = " ".join(lines[:2])
             detail = (summary[:260] + "\n" if summary else "") + "Saída em Registros."
         card.status.setText(outcome + ("\n" + detail if detail else ""))
-        card.status.show()
+        card.status.setVisible(not (ok and self.native_code == "shutdown_custom"))
+        if ACTIONS[self.native_code]["route"] == "shutdown":
+            self.refresh_shutdown_timer()
         for control in self.native_controls.values():
             control.button.setEnabled(True)
         self.status_message(self.native_task_name + (" concluído" if ok else " falhou"))
@@ -2006,6 +2117,7 @@ class MainWindow(QMainWindow):
                 f"{self.native_task_name} continuará em segundo plano. Fechar o Callas agora?"):
             event.ignore()
             return
+        self.shutdown_countdown.stop()
         event.accept()
 
 
@@ -2015,7 +2127,10 @@ def main():
             index = sys.argv.index("--callas-task")
             report_index = sys.argv.index("--callas-report")
             profile = sys.argv[sys.argv.index("--callas-profile") + 1] if "--callas-profile" in sys.argv else None
-            return run_windows_action(sys.argv[index+1], sys.argv[report_index+1], profile)
+            minutes = None
+            if "--shutdown-minutes" in sys.argv:
+                minutes = int(sys.argv[sys.argv.index("--shutdown-minutes") + 1])
+            return run_windows_action(sys.argv[index+1], sys.argv[report_index+1], profile, minutes)
         except (ValueError, IndexError):
             return 2
     if "--self-test" in sys.argv:

@@ -39,6 +39,44 @@ jobs:
           & $iscc 'installer/CallasOptimizer.iss'
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python scripts/verify_build.py
+      - name: Agendar e cancelar desligamento no runner descartável
+        shell: pwsh
+        run: |
+          @'
+          import json
+          from pathlib import Path
+          import subprocess
+          import sys
+          from uuid import uuid4
+
+          sys.path.insert(0, str(Path("src").resolve()))
+          from windows_actions import HOME, remaining_shutdown_minutes
+
+          app = Path("dist/Callas_Optimizer_Windows_x64/Callas_Optimizer_Windows_x64.exe").resolve()
+
+          def run_action(action, *options):
+              report = HOME / f"acao-{uuid4().hex}.json"
+              try:
+                  run = subprocess.run([str(app), "--callas-task", action, "--callas-report",
+                                        report.name, "--callas-profile", str(HOME), *options], timeout=25)
+                  assert report.is_file(), f"Sem relatório de {action}: {run.returncode}"
+                  result = json.loads(report.read_text(encoding="utf-8"))
+                  assert run.returncode == 0 and result["ok"], result["message"]
+              finally:
+                  report.unlink(missing_ok=True)
+                  report.with_suffix(".progress").unlink(missing_ok=True)
+
+          # O prazo é maior que o limite de 25 minutos do job.
+          try:
+              run_action("shutdown_custom", "--shutdown-minutes", "34")
+              assert remaining_shutdown_minutes() == 34
+              run_action("shutdown_cancel")
+              assert remaining_shutdown_minutes() is None
+          finally:
+              subprocess.run(["shutdown.exe", "/a"], capture_output=True, timeout=10)
+          print("O Windows agendou e cancelou o temporizador pelo executável.")
+          '@ | python -
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Examinar o disco do runner pelo executor administrativo
         shell: pwsh
         run: |
