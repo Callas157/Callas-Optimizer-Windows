@@ -39,6 +39,39 @@ jobs:
           & $iscc 'installer/CallasOptimizer.iss'
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python scripts/verify_build.py
+      - name: Validar troca de DNS IPv4 no runner descartável
+        shell: pwsh
+        run: |
+          @'
+          from pathlib import Path
+          import sys
+
+          sys.path.insert(0, str(Path("src").resolve()))
+          from network_dns import _configure, change_dns, configured_providers
+          from windows_actions import cmd, dns_interfaces
+
+          initial = next(adapter for adapter in dns_interfaces() if adapter.eligible and adapter.effective)
+
+          def read_target():
+              return [adapter for adapter in dns_interfaces() if adapter.guid == initial.guid]
+
+          # Altera só um adaptador da VM efêmera e restaura o estado original
+          # mesmo após uma falha de teste. As verificações usam consultas locais.
+          try:
+              change_dns("dns_cloudflare", read_target, cmd)
+              assert configured_providers(read_target()) == {"dns_cloudflare"}
+              change_dns("dns_google", read_target, cmd)
+              assert configured_providers(read_target()) == {"dns_google"}
+              change_dns("dns_cloudflare", read_target, cmd)
+              assert configured_providers(read_target()) == {"dns_cloudflare"}
+              change_dns("dns_cloudflare_auto", read_target, cmd)
+              assert read_target()[0].static == ()
+          finally:
+              _configure(cmd, initial.index, initial.static)
+              assert read_target()[0].static == initial.static
+          print("Cloudflare, Google, volta ao automático e configuração original confirmados no Windows.")
+          '@ | python -
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Agendar e cancelar desligamento no runner descartável
         shell: pwsh
         run: |

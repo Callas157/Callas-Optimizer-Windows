@@ -1,3 +1,9 @@
+## v8.9.30 — Google, Cloudflare e DNS automático
+
+- A aba Rede e DNS permite alternar diretamente entre Google e Cloudflare. O botão do provedor configurado muda para Reverter e volta ao DNS automático.
+- O Callas aplica os endereços IPv4 nas conexões de Internet que têm configuração de DNS no Windows. Interfaces sem um cliente DNS válido deixam de causar o erro de índice.
+- O Callas relê a configuração após aplicar. Se a operação falhar, tenta restaurar as configurações anteriores das interfaces alteradas e informa o resultado.
+
 ## v8.9.29 — Desligamento personalizado e navegação pelo mouse
 
 - A aba Desligamento ganha um cartão para escolher os minutos em uma janela central, com atalhos de 15, 30 e 60 minutos. O cartão acompanha o prazo que o Windows mantém após fechar e reabrir o Callas.
