@@ -1050,7 +1050,7 @@ class MainWindow(QMainWindow):
                                      lambda: self.open_windows_settings("windowsupdate-optionalupdates"),
                                      compact=True), alignment=Qt.AlignmentFlag.AlignLeft)
         col.addWidget(CompactGrid([nvidia, windows]))
-        col.addStretch()
+        col.addStretch(1)
 
     def _show_nvidia_card(self):
         self.goto("programs")
@@ -1069,7 +1069,7 @@ class MainWindow(QMainWindow):
         col.addWidget(CompactGrid(cards))
         col.addWidget(action_button("Ver registros", lambda: self.goto("logs"), compact=True),
                       alignment=Qt.AlignmentFlag.AlignLeft)
-        col.addStretch()
+        col.addStretch(1)
 
     def refresh_native_actions(self):
         edge = "edge_uninstall"
@@ -1279,7 +1279,7 @@ class MainWindow(QMainWindow):
         self.extensions_status.setTextFormat(Qt.TextFormat.PlainText)
         box.addWidget(self.extensions_status)
         col.addWidget(CompactGrid([lab_card, openai_card, c]))
-        col.addStretch()
+        col.addStretch(1)
         self.refresh_program_cards()
 
     def _update_page(self):

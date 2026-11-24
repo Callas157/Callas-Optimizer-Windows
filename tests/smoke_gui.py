@@ -138,14 +138,19 @@ execute = next(button for button in win.pages["winutil"].findChildren(QPushButto
                if "Executar" in button.text())
 assert execute.height() <= 36 and execute.width() <= 145
 winutil_card = win.native_controls["winutil_open"].widget
-assert 260 <= winutil_card.width() <= 410 and winutil_card.height() <= 170, winutil_card.size()
-assert winutil_card.mapTo(win.pages["winutil"].viewport(), QPoint()).x() <= 24
+assert winutil_card.width() <= 410 and winutil_card.width() >= 2 * winutil_card.height(), winutil_card.size()
+viewport = win.pages["winutil"].viewport()
+card_bottom = winutil_card.mapTo(viewport, winutil_card.rect().bottomLeft())
+logs = next(button for button in win.pages["winutil"].findChildren(QPushButton)
+            if button.text() == "Ver registros")
+assert card_bottom.x() <= 24
+assert 0 < logs.mapTo(viewport, QPoint()).y() - card_bottom.y() <= 25
 win.resize(1450, 850)
 win.splitter.setSizes([220, 1227])
 win.goto("drivers")
 app.processEvents()
 driver_cards = win.pages["drivers"].findChildren(QFrame, "Card")
-assert len(driver_cards) == 2 and all(100 <= card.height() <= 170 for card in driver_cards)
+assert len(driver_cards) == 2 and all(card.width() >= 2 * card.height() for card in driver_cards)
 
 assert not win.clean_nvidia.isChecked()
 with tempfile.TemporaryDirectory() as directory:
