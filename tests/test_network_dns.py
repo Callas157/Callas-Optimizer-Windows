@@ -7,7 +7,7 @@ import sys
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-from network_dns import DnsInterface, change_dns, configured_providers, read_interfaces
+from network_dns import DnsInterface, change_dns, provider_status, read_interfaces
 
 
 class NetworkDnsTest(unittest.TestCase):
@@ -40,13 +40,13 @@ class NetworkDnsTest(unittest.TestCase):
 
     def test_cloudflare_then_google_replaces_it_and_google_reverts_to_automatic(self):
         self.change("dns_cloudflare")
-        self.assertEqual(configured_providers(self.read()), {"dns_cloudflare"})
+        self.assertEqual(provider_status(self.read()), {"dns_cloudflare": False})
         self.change("dns_google")
         self.assertEqual(self.adapters["ethernet"].static, ("8.8.8.8", "8.8.4.4"))
-        self.assertEqual(configured_providers(self.read()), {"dns_google"})
+        self.assertEqual(provider_status(self.read()), {"dns_google": False})
         self.change("dns_google_auto")
         self.assertEqual(self.adapters["ethernet"].static, ())
-        self.assertEqual(configured_providers(self.read()), set())
+        self.assertEqual(provider_status(self.read()), {})
         self.assertTrue(all("name=14" not in command for command in self.commands))
         self.assertEqual(self.adapters["virtual"].static, ("9.9.9.9",))
 
@@ -63,9 +63,18 @@ class NetworkDnsTest(unittest.TestCase):
     def test_revert_removes_provider_from_a_disconnected_adapter(self):
         self.change("dns_cloudflare")
         self.adapters["ethernet"] = replace(self.adapters["ethernet"], eligible=False)
-        self.assertEqual(configured_providers(self.read()), {"dns_cloudflare"})
+        self.assertEqual(provider_status(self.read()), {"dns_cloudflare": False})
         self.change("dns_cloudflare_auto")
         self.assertEqual(self.adapters["ethernet"].static, ())
+
+    def test_disconnected_provider_stays_reversible_with_a_different_active_provider(self):
+        self.change("dns_cloudflare")
+        self.adapters["ethernet"] = replace(self.adapters["ethernet"], eligible=False)
+        self.adapters["virtual"] = replace(self.adapters["virtual"], eligible=True)
+        self.change("dns_google")
+        self.assertEqual(provider_status(self.read()), {"dns_cloudflare": True, "dns_google": False})
+        self.change("dns_cloudflare_auto")
+        self.assertEqual(provider_status(self.read()), {"dns_google": False})
 
     def test_failed_secondary_rolls_back_previous_interfaces_and_the_partial_write(self):
         self.adapters["virtual"] = replace(self.adapters["virtual"], eligible=True)
@@ -74,11 +83,11 @@ class NetworkDnsTest(unittest.TestCase):
             self.change("dns_google")
         self.assertEqual(self.adapters["ethernet"].static, ())
         self.assertEqual(self.adapters["virtual"].static, ("9.9.9.9",))
-        self.assertEqual(configured_providers(self.read()), set())
+        self.assertEqual(provider_status(self.read()), {})
 
     def test_dhcp_provider_addresses_do_not_count_as_static_configuration(self):
         self.adapters["ethernet"] = replace(self.adapters["ethernet"], effective=("1.1.1.1", "1.0.0.1"))
-        self.assertEqual(configured_providers(self.read()), set())
+        self.assertEqual(provider_status(self.read()), {})
 
     def test_missing_eligible_interface_explains_problem_without_mutation(self):
         del self.adapters["ethernet"]
@@ -125,7 +134,7 @@ class NetworkDnsTest(unittest.TestCase):
 
         interfaces = read_interfaces(ps)
         self.assertEqual([adapter.index for adapter in interfaces if adapter.eligible], [7])
-        self.assertEqual(configured_providers(interfaces), {"dns_cloudflare"})
+        self.assertEqual(provider_status(interfaces), {"dns_cloudflare": False})
 
     @unittest.skipUnless(sys.platform == "win32", "Windows network inventory required")
     def test_windows_dns_inventory_and_netsh_accept_current_interface(self):

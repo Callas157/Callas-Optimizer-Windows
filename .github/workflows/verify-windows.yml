@@ -47,7 +47,7 @@ jobs:
           import sys
 
           sys.path.insert(0, str(Path("src").resolve()))
-          from network_dns import _configure, change_dns, configured_providers
+          from network_dns import _configure, change_dns, provider_status
           from windows_actions import cmd, dns_interfaces
 
           initial = next(adapter for adapter in dns_interfaces() if adapter.eligible and adapter.effective)
@@ -59,11 +59,11 @@ jobs:
           # mesmo após uma falha de teste. As verificações usam consultas locais.
           try:
               change_dns("dns_cloudflare", read_target, cmd)
-              assert configured_providers(read_target()) == {"dns_cloudflare"}
+              assert provider_status(read_target()) == {"dns_cloudflare": False}
               change_dns("dns_google", read_target, cmd)
-              assert configured_providers(read_target()) == {"dns_google"}
+              assert provider_status(read_target()) == {"dns_google": False}
               change_dns("dns_cloudflare", read_target, cmd)
-              assert configured_providers(read_target()) == {"dns_cloudflare"}
+              assert provider_status(read_target()) == {"dns_cloudflare": False}
               change_dns("dns_cloudflare_auto", read_target, cmd)
               assert read_target()[0].static == ()
           finally:

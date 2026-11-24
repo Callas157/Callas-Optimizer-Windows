@@ -85,13 +85,13 @@ def _uses_provider(adapter: DnsInterface, addresses: tuple[str, ...]) -> bool:
     return bool(adapter.static) and set(adapter.static).issubset(addresses)
 
 
-def configured_providers(interfaces: list[DnsInterface]) -> set[str]:
-    configured = set()
-    for provider, addresses in DNS_PROVIDERS.items():
-        if any(adapter.eligible and _uses_provider(adapter, addresses) for adapter in interfaces):
-            configured.add(provider)
-    return configured or {provider for provider, addresses in DNS_PROVIDERS.items()
-                          if any(_uses_provider(adapter, addresses) for adapter in interfaces)}
+def provider_status(interfaces: list[DnsInterface]) -> dict[str, bool]:
+    """Map each configured provider to whether it can be applied on more active interfaces."""
+    return {
+        provider: any(adapter.eligible and adapter.static != addresses for adapter in interfaces)
+        for provider, addresses in DNS_PROVIDERS.items()
+        if any(_uses_provider(adapter, addresses) for adapter in interfaces)
+    }
 
 
 def _configure(cmd, index: int, addresses: tuple[str, ...]):

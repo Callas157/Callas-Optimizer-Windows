@@ -316,8 +316,8 @@ with tempfile.TemporaryDirectory() as directory:
         worker.poll_native_action()
         assert card.button.text() == "Remover" and card.execution.currentWidget() is card.button
 
-    provider = set()
-    with patch("app.active_dns_providers", side_effect=lambda: set(provider)), \
+    provider = {}
+    with patch("app.dns_provider_status", side_effect=lambda: dict(provider)), \
             patch("app.ACTION_HOME", local), patch("app.os", SimpleNamespace(name="nt")), \
             patch("app.confirmar", return_value=True), patch("app.ElevatedAction") as elevate:
         cloudflare = worker.native_controls["dns_cloudflare"]
@@ -333,7 +333,7 @@ with tempfile.TemporaryDirectory() as directory:
         def finish_dns(selected):
             provider.clear()
             if selected:
-                provider.add(selected)
+                provider[selected] = False
             worker.native_report.write_text('{"ok": true, "message": "DNS confirmado."}', encoding="utf-8")
             worker.poll_native_action()
             wait_dns()
@@ -360,7 +360,7 @@ with tempfile.TemporaryDirectory() as directory:
         finish_dns(None)
         assert cloudflare.button.text() == google.button.text() == "Aplicar"
         assert google.status.text().startswith("Concluído.")
-        worker.update_dns_actions(worker.dns_status_request, {"dns_cloudflare", "dns_google"})
+        worker.update_dns_actions(worker.dns_status_request, {"dns_cloudflare": True, "dns_google": True})
         assert cloudflare.button.text() == google.button.text() == "Reverter"
         assert not worker.dns_apply_buttons["dns_google"].isHidden()
         worker.dns_apply_buttons["dns_google"].click()

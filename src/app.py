@@ -30,7 +30,7 @@ from cleaner import (
 )
 from windows_actions import (
     ACTIONS, BY_ROUTE, HOME as ACTION_HOME, MAX_SHUTDOWN_MINUTES, PROFILE_MISMATCH, ElevatedAction,
-    active_dns_providers, applied_action_backups, edge_installed, remaining_shutdown_minutes, worker as run_windows_action,
+    applied_action_backups, dns_provider_status, edge_installed, remaining_shutdown_minutes, worker as run_windows_action,
 )
 from extra_installers import (
     CATALOG as EXTRA_APPS, available_upgrades, download_and_open, installed_program,
@@ -1185,7 +1185,7 @@ class MainWindow(QMainWindow):
 
         def check():
             try:
-                active = active_dns_providers()
+                active = dns_provider_status()
             except (OSError, RuntimeError, subprocess.SubprocessError):
                 active = None
             try:
@@ -1208,7 +1208,7 @@ class MainWindow(QMainWindow):
                 card.set_action(card.reversal[0] if code in active else code)
             card.button.setEnabled(available)
             apply_button = self.dns_apply_buttons[code]
-            apply_button.setVisible(active is not None and len(active) > 1)
+            apply_button.setVisible(available and active.get(code, False))
             apply_button.setEnabled(available)
 
     def _clean_page(self):

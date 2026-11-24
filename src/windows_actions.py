@@ -30,7 +30,7 @@ from extra_installers import (
     verify_authenticode, winget_path,
 )
 
-from network_dns import DNS_PROVIDERS, DNS_REVERSALS, change_dns, configured_providers, read_interfaces
+from network_dns import DNS_PROVIDERS, DNS_REVERSALS, change_dns, provider_status, read_interfaces
 
 HOME = Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "CallasTeck"
 BACKUP = HOME / "actions_backup.json"
@@ -264,8 +264,8 @@ def dns_interfaces():
     return read_interfaces(lambda source: ps(source, timeout=20))
 
 
-def active_dns_providers() -> set[str]:
-    return configured_providers(dns_interfaces())
+def dns_provider_status() -> dict[str, bool]:
+    return provider_status(dns_interfaces())
 
 
 def load():
