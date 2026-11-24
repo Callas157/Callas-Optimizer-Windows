@@ -20,6 +20,7 @@ ROOT = Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "CallasTeck" / "
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 SUCCESS_CODES = {0, 1641, 3010}
 CHATGPT_PACKAGE = "OpenAI.Codex_2p2nqsd0c76g0"
+CHATGPT_STORE_ID = "9PLM9XGG6VKS"
 
 CATALOG = {
     "brave": {
@@ -105,7 +106,7 @@ CATALOG = {
     },
     "chatgpt": {
         "name": "ChatGPT com Codex",
-        "url": "https://get.microsoft.com/installer/download/9PLM9XGG6VKS?cid=website_cta_psi",
+        "url": f"https://get.microsoft.com/installer/download/{CHATGPT_STORE_ID}?cid=website_cta_psi",
         "website": "https://chatgpt.com/download/",
         "hosts": {"get.microsoft.com"},
         "publisher": r"Microsoft Corporation",
@@ -287,17 +288,33 @@ def available_upgrades() -> set[str] | None:
     return _upgrade_ids(result.stdout) if result.returncode == 0 else None
 
 
-def upgrade_program(app_id: str, notify) -> None:
-    notify("Atualizando pelo WinGet…", -1)
-    result = subprocess.run(
-        [str(winget_path()), "upgrade", "--id", WINGET_IDS[app_id], "--exact",
-         "--source", "winget", "--interactive", "--disable-interactivity"],
-        stdin=subprocess.DEVNULL, creationflags=NO_WINDOW,
-    )
-    if result.returncode & 0xFFFFFFFF == 0x8A15002B:
-        # O programa pode ter recebido a atualização sozinho entre a consulta e o clique.
-        return
-    _check_setup_exit(result.returncode)
+def upgrade_program(app_id: str, notify) -> str:
+    app_id = program_key(app_id)
+    if app_id == "chatgpt":
+        open_program(f"ms-windows-store://pdp/?ProductId={CHATGPT_STORE_ID}")
+        return "Página do ChatGPT aberta na Microsoft Store para verificar a atualização."
+
+    package_id = WINGET_IDS.get(app_id)
+    if package_id:
+        notify("Consultando atualização pelo WinGet…", -1)
+        try:
+            result = subprocess.run(
+                [str(winget_path()), "upgrade", "--id", package_id, "--exact",
+                 "--source", "winget", "--interactive", "--disable-interactivity"],
+                stdin=subprocess.DEVNULL, creationflags=NO_WINDOW,
+            )
+        except FileNotFoundError:
+            pass  # Without WinGet, use the manufacturer's signed installer.
+        else:
+            code = result.returncode & 0xFFFFFFFF
+            if code == 0x8A15002B:
+                return "Você já está com a versão mais recente disponível no WinGet."
+            if code != 0x8A150014:
+                _check_setup_exit(result.returncode)
+                return "Atualização pelo WinGet concluída."
+
+    download_and_open(app_id, notify)
+    return "Instalador oficial concluído."
 
 
 class _ShellExecuteInfo(ctypes.Structure):
@@ -434,6 +451,27 @@ def resolve_virtualbox_release() -> tuple[str, str]:
     return parse_virtualbox_release(version, directory, sums)
 
 
+def resolve_nvidia_release() -> str:
+    hosts = {"www.nvidia.com"}
+    url = official_website("nvidia")
+    request = urllib.request.Request(url, headers={"User-Agent": "CallasOptima"})
+    with official_https_opener(hosts).open(request, timeout=30) as response:
+        if not _safe_https(response.geturl(), hosts):
+            raise RuntimeError("Redirecionamento inesperado da NVIDIA.")
+        limit = 2 * 1024 * 1024
+        page = response.read(limit + 1)
+    if len(page) > limit:
+        raise RuntimeError("Página oficial da NVIDIA maior que o esperado.")
+    pattern = (
+        r"https://us\.download\.nvidia\.com/nvapp/client/(\d+(?:\.\d+){3})/x64/"
+        r"NVIDIA_app_v\1_x64\.exe(?=[\"'])"
+    )
+    match = re.search(pattern, page.decode("utf-8", errors="replace"))
+    if not match:
+        raise RuntimeError("Instalador x64 não encontrado na página oficial da NVIDIA.")
+    return match[0]
+
+
 def download_and_open(app_id: str, notify) -> None:
     """Executa apenas o instalador oficial verificado e espera a conclusão."""
     if os.name != "nt":
@@ -444,6 +482,9 @@ def download_and_open(app_id: str, notify) -> None:
         _check_nvidia_gpu()
     app = CATALOG[app_id].copy()
     expected_sha256 = None
+    if app_id == "nvidia":
+        notify("Consultando a versão oficial da NVIDIA…", -1)
+        app["url"] = resolve_nvidia_release()
     if app_id == "virtualbox":
         notify("Consultando a versão estável oficial da Oracle…", -1)
         app["url"], expected_sha256 = resolve_virtualbox_release()

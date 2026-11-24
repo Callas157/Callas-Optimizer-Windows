@@ -65,6 +65,37 @@ class ProgramLifecycleTest(unittest.TestCase):
         )
         self.assertEqual(installers._upgrade_ids(output), {"discord", "brave"})
 
+    def test_spotify_update_attempts_exact_winget_package_without_a_scan(self):
+        with patch.object(installers.subprocess, "run", return_value=Mock(returncode=0x8A15002B)) as run:
+            message = installers.upgrade_program("spotify", lambda *_: None)
+        command = run.call_args.args[0]
+        self.assertEqual(command[1:5], ["upgrade", "--id", "Spotify.Spotify", "--exact"])
+        self.assertIn("versão mais recente", message)
+
+    def test_package_missing_uses_verified_manufacturer_installer(self):
+        with patch.object(installers.subprocess, "run", return_value=Mock(returncode=0x8A150014)), \
+                patch.object(installers, "download_and_open") as official:
+            installers.upgrade_program("spotify", lambda *_: None)
+        self.assertEqual(official.call_args.args[0], "spotify")
+
+    def test_codex_update_opens_the_shared_store_listing(self):
+        with patch.object(installers, "open_program") as open_program:
+            message = installers.upgrade_program("codex", lambda *_: None)
+        open_program.assert_called_once_with("ms-windows-store://pdp/?ProductId=9PLM9XGG6VKS")
+        self.assertIn("Microsoft Store", message)
+
+    def test_nvidia_update_resolves_the_current_x64_installer_from_the_vendor(self):
+        base = "https://us.download.nvidia.com/nvapp/client/"
+        official = base + "11.1.0.123/x64/NVIDIA_app_v11.1.0.123_x64.exe"
+        with patch.object(installers, "official_https_opener") as opener:
+            response = opener.return_value.open.return_value.__enter__.return_value
+            response.geturl.return_value = "https://www.nvidia.com/pt-br/software/nvidia-app/"
+            response.read.return_value = (
+                f'<a href="{base}11.1.0.125/arm64/NVIDIA_app_v11.1.0.125_arm64.exe">'
+                f'<a href="{official}">'
+            ).encode()
+            self.assertEqual(installers.resolve_nvidia_release(), official)
+
     def test_download_sources_have_explicit_security_boundaries(self):
         self.assertFalse(installers._safe_https("https://user@discord.com/test", {"discord.com"}))
         self.assertFalse(installers._safe_https("https://discord.com:444/test", {"discord.com"}))

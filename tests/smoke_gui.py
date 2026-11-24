@@ -11,7 +11,8 @@ root = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(root / 'src'))
 os.environ['QT_QPA_PLATFORM'] = 'offscreen'
 os.environ['CALLAS_SMOKE'] = '1'
-from PySide6.QtWidgets import QApplication, QPushButton
+from PySide6.QtCore import QPoint
+from PySide6.QtWidgets import QApplication, QFrame, QLabel, QPushButton
 from app import MainWindow, STYLE
 
 app = QApplication(sys.argv)
@@ -66,9 +67,12 @@ with patch("app.installed_program", return_value=None):
     assert status.text() == "Baixando…"
 with patch("app.installed_program", return_value=Path("Discord.exe")):
     win.extra_installer_done(True, "", "discord")
-    assert primary.text() == "Abrir" and not bar.isHidden() and bar.value() == 100 and not bar.running
-    win.program_updates_done({"discord"}, False)
+    assert primary.text() == "Abrir" and bar.isHidden() and bar.value() == 100 and not bar.running
+    win.program_updates_done(set(), False)
     assert not upgrade.isHidden() and upgrade.text() == "Atualizar"
+    assert all(not control[1].isHidden() for control in win.program_controls.values())
+    assert primary.size() == upgrade.size() and primary.width() > 2 * primary.height()
+    assert primary.y() == upgrade.y() and primary.x() < upgrade.x()
 medal = Path(r"C:\Medal\current\Medal.exe")
 with patch("app.installed_program", return_value=medal), patch("app.open_program") as launch:
     win.refresh_program_cards()
@@ -86,13 +90,62 @@ with patch("app.installed_program", return_value="shell:AppsFolder\\ChatGPT!App"
     win.extra_installer_done(True, "", "chatgpt")
     for key in ("chatgpt", "codex"):
         primary, _, bar, _ = win.program_controls[key]
-        assert not bar.isHidden() and bar.value() == 100 and primary.text() == "Abrir"
+        assert bar.isHidden() and bar.value() == 100 and primary.text() == "Abrir"
 for route in ("home", "clean", "gamer", "repair", "programs", "drivers", "updates"):
     win.goto(route)
     assert win.stack.currentWidget() is win.pages[route]
 for route, button in win.nav_buttons.items():
     button.click()
     assert win.stack.currentWidget() is win.pages[route], route
+
+# A grade usa a largura do painel, inclusive após mover a divisória.
+win.resize(1450, 850)
+for route, titles in (("repair", ("Reparar imagem com DISM", "Reparar arquivos com SFC", "Examinar disco do sistema")),
+                      ("restore", ("Restaurar ajustes do Registro", "Restaurar serviços", "Restaurar ajustes salvos"))):
+    win.goto(route)
+    app.processEvents()
+    page = win.pages[route]
+    headings = {item.text(): item for item in page.findChildren(QLabel)}
+    positions = [headings[title].mapTo(page.viewport(), QPoint()) for title in titles]
+    assert len({point.y() for point in positions}) == 1, (route, positions)
+    assert positions[0].x() < positions[1].x() < positions[2].x(), (route, positions)
+win.goto("programs")
+app.processEvents()
+first, second, third, fourth = win.all_program_cards[:4]
+assert first.y() == second.y() == third.y() < fourth.y()
+win.resize(1050, 750)
+win.splitter.setSizes([245, 802])
+app.processEvents()
+assert first.y() == second.y() < third.y() == fourth.y()
+win.goto("repair")
+win.resize(810, 680)
+win.splitter.setSizes([365, 442])
+win.goto("programs")
+app.processEvents()
+assert first.mapTo(win.pages["programs"].viewport(), QPoint()).y() < 260
+assert first.x() == second.x() and first.y() < second.y()
+assert first.height() >= 100, first.size()
+for card in win.all_program_cards:
+    for item in card.findChildren(QLabel):
+        if not item.isHidden():
+            assert item.height() >= item.heightForWidth(item.width()), (item.text(), item.size())
+    for button in card.findChildren(QPushButton):
+        if not button.isHidden():
+            assert card.rect().contains(button.mapTo(card, QPoint()) + button.rect().bottomRight())
+win.goto("winutil")
+app.processEvents()
+execute = next(button for button in win.pages["winutil"].findChildren(QPushButton)
+               if "Executar" in button.text())
+assert execute.height() <= 36 and execute.width() <= 145
+winutil_card = win.native_controls["winutil_open"].widget
+assert 260 <= winutil_card.width() <= 410 and winutil_card.height() <= 170, winutil_card.size()
+assert winutil_card.mapTo(win.pages["winutil"].viewport(), QPoint()).x() <= 24
+win.resize(1450, 850)
+win.splitter.setSizes([220, 1227])
+win.goto("drivers")
+app.processEvents()
+driver_cards = win.pages["drivers"].findChildren(QFrame, "Card")
+assert len(driver_cards) == 2 and all(100 <= card.height() <= 170 for card in driver_cards)
 
 assert not win.clean_nvidia.isChecked()
 with tempfile.TemporaryDirectory() as directory:
@@ -136,7 +189,8 @@ with tempfile.TemporaryDirectory() as directory:
     with patch('app.ACTION_HOME', local), patch('app.os', SimpleNamespace(name='nt')), \
             patch('app.confirmar', return_value=True), patch('app.ElevatedAction') as elevate, \
             patch('app.QMessageBox.warning') as warning, patch('app.QMessageBox.information') as info:
-        run, progress, stack, status, repeat = worker.native_controls['repair_disk']
+        card = worker.native_controls['repair_disk']
+        run, progress, stack, status = card.button, card.progress, card.execution, card.status
         worker.goto('repair')
         worker.show()
         elevate.return_value.poll.side_effect = [None, None, 0, None, 7]
@@ -162,15 +216,69 @@ with tempfile.TemporaryDirectory() as directory:
         assert worker.native_timer is None and not intermediate.exists()
         assert progress.value() == 100 and not progress.running
         assert 'não encontrou problemas' in status.text() and len(status.text()) < 450
-        assert not repeat.isHidden()
-        repeat.click()
+        assert stack.currentWidget() is run and run.isEnabled()
+        run.click()
         worker.native_report.with_suffix('.progress').write_text('{"percent": 30}', encoding='utf-8')
         worker.poll_native_action()
         worker.poll_native_action()
         assert worker.native_timer is None and progress.value() == 30 and not progress.running
-        assert '7' in status.text()
+        assert '7' in status.text() and stack.currentWidget() is run
         warning.assert_not_called()
         info.assert_not_called()
+
+    backup_path = local / "actions_backup.json"
+    game_mode = "CU|Software\\Microsoft\\GameBar|AutoGameModeEnabled"
+    with patch("windows_actions.BACKUP", backup_path), patch("app.ACTION_HOME", local), \
+            patch("app.os", SimpleNamespace(name="nt")), patch("app.confirmar", return_value=True), \
+            patch("app.subprocess.Popen") as spawn:
+        worker.goto("gamer")
+        card = worker.native_controls["gamer_on"]
+        assert card.button.text() == "Aplicar"
+        assert "gamer_off" not in worker.native_controls
+        spawn.return_value.poll.return_value = 0
+        card.button.click()
+        assert worker.native_code == "gamer_on" and card.execution.currentWidget() is card.progress
+        backup_path.write_text(json.dumps({"reg": {game_mode: {"found": False}}}), encoding="utf-8")
+        worker.native_report.write_text('{"ok": true, "message": "Salvo."}', encoding="utf-8")
+        worker.poll_native_action()
+        assert card.button.text() == "Reverter" and card.execution.currentWidget() is card.button
+
+        with patch("app.os", os):
+            reopened = MainWindow()
+        assert reopened.native_controls["gamer_on"].button.text() == "Reverter"
+        reopened.close()
+        card.button.click()
+        assert worker.native_code == "gamer_off" and card.execution.currentWidget() is card.progress
+        worker.native_report.write_text('{"ok": false, "message": "Falhou."}', encoding="utf-8")
+        worker.poll_native_action()
+        assert card.button.text() == "Reverter" and card.execution.currentWidget() is card.button
+        card.button.click()
+        backup_path.unlink()
+        worker.native_report.write_text('{"ok": true, "message": "Restaurado."}', encoding="utf-8")
+        worker.poll_native_action()
+        assert card.button.text() == "Aplicar" and card.execution.currentWidget() is card.button
+
+    with patch("app.ACTION_HOME", local), patch("app.os", SimpleNamespace(name="nt")), \
+            patch("app.confirmar", return_value=True), patch("app.edge_installed") as edge_installed, \
+            patch("app.ElevatedAction") as elevate, patch("app.subprocess.Popen") as spawn:
+        edge_installed.return_value = True
+        elevate.return_value.poll.return_value = 0
+        spawn.return_value.poll.return_value = 0
+        worker.goto("edge")
+        card = worker.native_controls["edge_uninstall"]
+        assert card.button.text() == "Remover"
+        card.button.click()
+        assert worker.native_code == "edge_uninstall"
+        edge_installed.return_value = False
+        worker.native_report.write_text('{"ok": true, "message": "Removido."}', encoding="utf-8")
+        worker.poll_native_action()
+        assert card.button.text() == "Restaurar" and card.execution.currentWidget() is card.button
+        card.button.click()
+        assert worker.native_code == "edge_restore"
+        edge_installed.return_value = True
+        worker.native_report.write_text('{"ok": true, "message": "Restaurado."}', encoding="utf-8")
+        worker.poll_native_action()
+        assert card.button.text() == "Remover" and card.execution.currentWidget() is card.button
 
     worker.update_mode = 'install'
     worker.update_timer = Mock()
