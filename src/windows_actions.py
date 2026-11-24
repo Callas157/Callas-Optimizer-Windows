@@ -5,6 +5,7 @@ netsh, PowerShell, Registro) são executados sem shell=True.
 """
 from __future__ import annotations
 import base64
+import codecs
 import ctypes
 from ctypes import wintypes
 import hashlib
@@ -14,6 +15,8 @@ from pathlib import Path
 import re
 import subprocess
 import sys
+from tempfile import NamedTemporaryFile
+from threading import Event, Timer
 import time
 import urllib.request
 import webbrowser
@@ -30,6 +33,7 @@ from extra_installers import (
 HOME = Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "CallasTeck"
 BACKUP = HOME / "actions_backup.json"
 LOG = HOME / "acoes.log"
+REPORT_MESSAGE_LIMIT = 5000
 PROFILE_MISMATCH = 3
 WINUTIL_VERSION = "26.11.13"
 WINUTIL_URL = f"https://github.com/ChrisTitusTech/winutil/releases/download/{WINUTIL_VERSION}/winutil.ps1"
@@ -41,6 +45,11 @@ DATA_COLLECTION = r"SOFTWARE\Policies\Microsoft\Windows\DataCollection"
 CLASSIC_MENU = r"Software\Classes\CLSID\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}\InprocServer32"
 GAME_SERVICES = ("SysMain", "WSearch")
 UPDATE_SERVICES = ("wuauserv", "BITS", "DoSvc", "UsoSvc")
+REPAIR_PROGRESS = {
+    "chkdsk.exe": re.compile(r"\btotal\s*:\s*([0-9]{1,3})\s*%", re.IGNORECASE),
+    "dism.exe": re.compile(r"\[[= ]*([0-9]{1,3}(?:[.,][0-9]+)?)\s*%"),
+    "sfc.exe": re.compile(r"(?<![0-9.,])([0-9]{1,3})\s*%"),
+}
 
 # (id, rota, título, descrição, administrador, alerta)
 ROWS = [
@@ -137,26 +146,95 @@ class ElevatedAction:
             self.close_handle(self.handle)
 
 
-def _decode_output(data, encoding):
-    if data.startswith((b"\xff\xfe", b"\xfe\xff")):
-        encoding = "utf-16"
-    elif data and len(data) % 2 == 0 and b"\0" in data[1::2]:
+def _output_encoding(data, fallback):
+    if data.startswith((codecs.BOM_UTF16_LE, codecs.BOM_UTF16_BE)):
+        return "utf-16"
+    if data.startswith(codecs.BOM_UTF8):
+        return "utf-8-sig"
+    if len(data) % 2 == 0 and b"\0" in data[1::2]:
         # O SFC pode escrever UTF-16LE sem marca de ordem dos bytes.
-        encoding = "utf-16le"
-    return data.decode(encoding, errors="replace").replace("\r\n", "\n")
+        return "utf-16le"
+    return fallback
 
 
-def cmd(*argv, optional=False, env=None, timeout=1800, success_codes=(0,), encoding=None):
+def _decode_output(data, encoding):
+    return data.decode(_output_encoding(data, encoding), errors="replace")
+
+
+def _stream_output(argv, options, timeout, encoding, pattern, progress):
+    # Uma só saída evita que o produtor bloqueie enquanto o outro canal é lido.
+    with subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, **options) as proc:
+        timed_out = Event()
+
+        def expire():
+            if proc.poll() is None:
+                timed_out.set()
+                proc.kill()
+
+        timer = Timer(timeout, expire) if timeout is not None else None
+        if timer is not None:
+            timer.start()
+        try:
+            chunk = proc.stdout.read(4)
+            decoder = codecs.getincrementaldecoder(_output_encoding(chunk, encoding))(errors="replace")
+            output = []
+            pending = ""
+            last_percent = 0
+            while chunk:
+                decoded = decoder.decode(chunk)
+                output.append(decoded)
+                lines = re.split(r"[\r\n]", pending + decoded)
+                pending = lines[-1]
+                for line in lines:
+                    match = pattern.search(line)
+                    if match is None:
+                        continue
+                    value = float(match[1].replace(",", "."))
+                    percent = min(int(value), 99)
+                    if value <= 100 and percent > last_percent:
+                        last_percent = percent
+                        progress(percent)
+                chunk = proc.stdout.read1(8192)
+            output.append(decoder.decode(b"", final=True))
+            code = proc.wait()
+        except BaseException:
+            if proc.poll() is None:
+                proc.kill()
+            raise
+        finally:
+            if timer is not None:
+                timer.cancel()
+                timer.join()
+    text = "".join(output)
+    if timed_out.is_set():
+        raise subprocess.TimeoutExpired(argv, timeout, output=text)
+    return code, text
+
+
+def cmd(*argv, optional=False, env=None, timeout=1800, success_codes=(0,), encoding=None, progress=None):
     if os.name!="nt": raise OSError("Ação exclusiva do Windows.")
+    program = Path(argv[0]).name.lower()
     if not Path(argv[0]).is_absolute():
         argv = (str(_system_program(argv[0])), *argv[1:])
-    proc = subprocess.run(argv, shell=False, capture_output=True, stdin=subprocess.DEVNULL, env=env,
-                          timeout=timeout, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
-    encoding = encoding or ("oem" if sys.platform == "win32" else "utf-8")
-    output = "\n".join(_decode_output(part, encoding) for part in (proc.stdout, proc.stderr)).strip()
-    if proc.returncode not in success_codes and not optional:
-        raise RuntimeError(f"{argv[0]} retornou {proc.returncode}.\n{output[-900:]}")
-    return output or f"Concluído (código {proc.returncode})."
+    if encoding is None:
+        if program == "chkdsk.exe":
+            # A saída redirecionada do CHKDSK usa a página de código ANSI do Windows.
+            encoding = "mbcs" if sys.platform == "win32" else "cp1252"
+        else:
+            encoding = "oem" if sys.platform == "win32" else "utf-8"
+    options = dict(shell=False, stdin=subprocess.DEVNULL, env=env,
+                   creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    pattern = REPAIR_PROGRESS.get(program)
+    if progress is not None and pattern is not None:
+        code, output = _stream_output(argv, options, timeout, encoding, pattern, progress)
+    else:
+        proc = subprocess.run(argv, capture_output=True, timeout=timeout, **options)
+        code = proc.returncode
+        output = "\n".join(_decode_output(part, encoding) for part in (proc.stdout, proc.stderr))
+    output = output.replace("\r\n", "\n").strip()
+    if code not in success_codes and not optional:
+        raise RuntimeError(f"{argv[0]} retornou {code}.\n{output[-900:]}")
+    return output or f"Concluído (código {code})."
 
 
 def ps(source):
@@ -392,16 +470,16 @@ def shutdown(minutes):
     return cmd("shutdown.exe","/s","/t",str(minutes*60))
 
 
-def repair_disk():
+def repair_disk(progress=None):
     volume = os.environ.get("SystemDrive", "").strip().rstrip("\\/")
     if not re.fullmatch(r"[A-Za-z]:", volume):
         raise RuntimeError("Não foi possível identificar o volume em que o Windows está instalado.")
-    return cmd("chkdsk.exe", volume, "/scan", timeout=None, success_codes=(0, 1, 2))
+    return cmd("chkdsk.exe", volume, "/scan", timeout=None, success_codes=(0, 1, 2), progress=progress)
 
 
-def repair_image():
+def repair_image(progress=None):
     return cmd("dism.exe", "/Online", "/Cleanup-Image", "/RestoreHealth", "/NoRestart",
-               timeout=None, success_codes=(0, 3010))
+               timeout=None, success_codes=(0, 3010), progress=progress)
 
 
 def restore_all():
@@ -422,12 +500,12 @@ def log_action(action_id, result):
     try:
         HOME.mkdir(exist_ok=True, parents=True)
         with LOG.open("a", encoding="utf-8") as f:
-            f.write(time.strftime("[%Y-%m-%d %H:%M:%S] ") + action_id + " " + result[-2000:] + "\n")
+            f.write(time.strftime("[%Y-%m-%d %H:%M:%S] ") + action_id + " " + result[-REPORT_MESSAGE_LIMIT:] + "\n")
     except OSError:
         pass
 
 
-def execute(action_id):
+def execute(action_id, *, progress=None):
     if action_id not in ACTIONS:raise ValueError("Ação inexistente.")
     if os.name!="nt":raise OSError("Requer Windows.")
     if ACTIONS[action_id]["admin"] and not admin():
@@ -452,9 +530,9 @@ def execute(action_id):
         "dns_auto":lambda:ps("$a=Get-NetAdapter | Where-Object {$_.Status -eq 'Up'}; if(!$a){throw 'Sem adaptador ativo'}; $a | ForEach-Object {Set-DnsClientServerAddress -InterfaceIndex $_.ifIndex -ResetServerAddresses -ErrorAction Stop}"),
         "telemetry_reduce":lambda:setreg("LM",dc,"AllowTelemetry",0),
         "telemetry_restore":lambda:restore_reg("LM|"+dc),
-        "repair_dism":repair_image,
-        "repair_sfc":lambda:cmd("sfc.exe","/scannow",timeout=None),
-        "repair_disk":repair_disk,
+        "repair_dism":lambda:repair_image(progress),
+        "repair_sfc":lambda:cmd("sfc.exe","/scannow",timeout=None,progress=progress),
+        "repair_disk":lambda:repair_disk(progress),
         "classic_on":lambda:setreg("CU",cl,"","",winreg.REG_SZ),
         "classic_off":lambda:restore_reg("CU|"+cl),
         "shutdown_15":lambda:shutdown(15),"shutdown_30":lambda:shutdown(30),
@@ -475,6 +553,17 @@ def execute(action_id):
     return result
 
 
+def _write_report(path, payload):
+    temporary = NamedTemporaryFile(mode="w", dir=path.parent, suffix=".tmp", encoding="utf-8", delete=False)
+    tmp = Path(temporary.name)
+    try:
+        with temporary:
+            json.dump(payload, temporary, ensure_ascii=False)
+        tmp.replace(path)
+    finally:
+        tmp.unlink(missing_ok=True)
+
+
 def worker(action_id, filename, report_home=None):
     if not re.fullmatch(r"acao-[a-f0-9]{32}\.json",filename):return 2
     # O valor informado pela interface só serve para comparação. O trabalhador
@@ -482,6 +571,16 @@ def worker(action_id, filename, report_home=None):
     if report_home is not None and Path(report_home) != HOME:
         return PROFILE_MISMATCH
     HOME.mkdir(exist_ok=True,parents=True)
+    report = HOME / filename
+    progress_report = report.with_suffix(".progress")
+
+    def publish_progress(percent):
+        try:
+            _write_report(progress_report, {"percent": percent})
+        except OSError:
+            # A interface pode estar lendo o relatório quando ele é substituído.
+            pass
+
     try:
         if sys.platform != "win32":
             raise OSError("Requer Windows.")
@@ -491,10 +590,9 @@ def worker(action_id, filename, report_home=None):
                 msvcrt.locking(lock.fileno(), msvcrt.LK_NBLCK, 1)
             except OSError as exc:
                 raise RuntimeError("Outra ferramenta de manutenção está em execução neste perfil.") from exc
-            result = {"ok": True, "message": execute(action_id)[-5000:]}
+            publish_progress(0)
+            result = {"ok": True, "message": execute(action_id, progress=publish_progress)[-REPORT_MESSAGE_LIMIT:]}
     except Exception as e:
-        result = {"ok": False, "message": str(e)[-5000:]}
-    dest=HOME/filename;tmp=dest.with_suffix(".tmp")
-    tmp.write_text(json.dumps(result,ensure_ascii=False),encoding="utf-8")
-    os.replace(tmp,dest)
+        result = {"ok": False, "message": str(e)[-REPORT_MESSAGE_LIMIT:]}
+    _write_report(report, result)
     return 0 if result["ok"] else 1

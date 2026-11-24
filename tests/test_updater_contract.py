@@ -1,4 +1,5 @@
 """Contratos estruturais de atualizacao; nao substituem teste Windows real."""
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 import ast
 import os
@@ -6,6 +7,8 @@ import re
 import shutil
 import subprocess
 import tempfile
+import threading
+import time
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -82,6 +85,9 @@ class UpdateContract(unittest.TestCase):
                    'CALLAS_TEST_UPDATER': str(ROOT / 'src/updater.ps1')}
             script = """
 function Invoke-RestMethod($Uri, $Headers, $TimeoutSec) {
+    if (Test-Path -LiteralPath $env:CALLAS_TEST_STATUS) {
+        Write-Host (Get-Content -LiteralPath $env:CALLAS_TEST_STATUS -Raw)
+    }
     return @{
         tag_name = 'v8.9.25'
         draft = $false
@@ -105,6 +111,80 @@ exit $LASTEXITCODE
             )
             self.assertEqual(status.read_text(encoding='ascii'), 'AVAILABLE|v8.9.25')
             self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertRegex(result.stdout, r'^PROGRESS\|\d{1,2}\|[^|\n]+\n$')
+
+    @unittest.skipUnless(POWERSHELL, 'PowerShell indisponível')
+    def test_download_reports_bytes_before_rejecting_bad_digest(self):
+        with tempfile.TemporaryDirectory() as folder:
+            status = Path(folder) / 'updater.status'
+            payload = b'\0' * (512 * 1024)
+            intermediate = []
+            unavailable = threading.Event()
+
+            class AssetHandler(BaseHTTPRequestHandler):
+                def do_GET(self):
+                    if not unavailable.is_set():
+                        unavailable.set()
+                        self.send_error(503)
+                        return
+                    self.send_response(200)
+                    self.send_header('Content-Length', str(len(payload)))
+                    self.end_headers()
+                    halfway = len(payload) // 2
+                    self.wfile.write(payload[:halfway])
+                    deadline = time.monotonic() + 5
+                    while time.monotonic() < deadline:
+                        try:
+                            progress = status.read_text(encoding='ascii')
+                        except OSError:
+                            progress = ''
+                        match = re.fullmatch(r'PROGRESS\|(\d{1,2})\|[^|\n]+', progress)
+                        if match and 35 <= int(match[1]) <= 65:
+                            intermediate.append(progress)
+                            break
+                        time.sleep(0.05)
+                    self.wfile.write(payload[halfway:])
+
+                def log_message(self, *args):
+                    pass
+
+            with ThreadingHTTPServer(('127.0.0.1', 0), AssetHandler) as server:
+                worker = threading.Thread(target=server.serve_forever, daemon=True)
+                worker.start()
+                try:
+                    env = {**os.environ, 'LOCALAPPDATA': folder,
+                           'CALLAS_TEST_STATUS': str(status),
+                           'CALLAS_TEST_URL': f'http://127.0.0.1:{server.server_port}/asset.exe',
+                           'CALLAS_TEST_UPDATER': str(ROOT / 'src/updater.ps1')}
+                    script = """
+$ErrorActionPreference = 'Stop'
+$ProgressPreference = 'SilentlyContinue'
+$StatusFile = $env:CALLAS_TEST_STATUS
+$LogPath = Join-Path $env:LOCALAPPDATA 'atualizacoes.log'
+$ast = [System.Management.Automation.Language.Parser]::ParseFile($env:CALLAS_TEST_UPDATER, [ref]$null, [ref]$null)
+foreach ($statement in $ast.EndBlock.Statements) {
+    if ($statement -is [System.Management.Automation.Language.FunctionDefinitionAst]) {
+        . ([scriptblock]::Create($statement.Extent.Text))
+    }
+}
+$latest = @{Url=$env:CALLAS_TEST_URL; Size=524288; SHA256=('A' * 64); Tag='v8.9.25'}
+Download-Verified $latest (Join-Path $env:LOCALAPPDATA 'asset.exe')
+"""
+                    result = subprocess.run(
+                        [POWERSHELL, '-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
+                         '-Command', script],
+                        env=env, capture_output=True, text=True, timeout=30,
+                    )
+                finally:
+                    server.shutdown()
+                    worker.join()
+
+            self.assertNotEqual(result.returncode, 0, result.stdout)
+            self.assertIn('Falha na validacao SHA-256.', result.stderr)
+            self.assertTrue(intermediate, 'Nenhum progresso observado com metade do arquivo recebido.')
+            log = (Path(folder) / 'atualizacoes.log').read_text(encoding='utf-8-sig')
+            self.assertIn('Download tentativa 1:', log)
+            self.assertNotIn('Download tentativa 2:', log)
 
     def test_update_prepares_before_exit(self):
         wait_for_captured_process = 'Wait-Process -InputObject $process'

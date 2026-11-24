@@ -103,8 +103,15 @@ def _rollback_new_vm(vboxmanage: Path, vm_id: str, disk: Path, disk_output: str)
         return "Não foi possível reverter a VM incompleta: " + str(exc)
 
 
-def create_test_vms(base_folder: Path, notify: Callable[[str], None]) -> str:
-    """Cria templates vazios em pasta escolhida pelo usuário; já existentes são preservados."""
+def create_test_vms(
+    base_folder: Path,
+    notify: Callable[[str], None],
+    *,
+    report_progress: Callable[[int], None] | None = None,
+) -> str:
+    """Prepara VMs e relata etapas concluídas até 99%, reservando 100% para o chamador."""
+    if report_progress is not None:
+        report_progress(0)
     vbox = get_vboxmanage()
     base = Path(base_folder).expanduser().resolve(strict=True)
     if not base.is_dir():
@@ -117,6 +124,22 @@ def create_test_vms(base_folder: Path, notify: Callable[[str], None]) -> str:
                 "O local escolhido tem menos de 40 GB livres. "
                 "Selecione um disco com espaço para duas instalações de Windows 11."
             )
+
+    # Validação inicial, tratamento de cada VM existente, 10 comandos e registro de cada nova.
+    total_steps = 1 + sum(1 if name in existing else 11 for name in VM_NAMES)
+    completed_steps = 0
+
+    def step_completed() -> None:
+        nonlocal completed_steps
+        completed_steps += 1
+        if report_progress is not None:
+            report_progress(min(99, completed_steps * 100 // total_steps))
+
+    def run_step(*args: str) -> None:
+        _run(vbox, *args)
+        step_completed()
+
+    step_completed()
     created: list[str] = []
     updated: list[str] = []
     not_off: list[str] = []
@@ -126,10 +149,11 @@ def create_test_vms(base_folder: Path, notify: Callable[[str], None]) -> str:
             if state != "poweroff":
                 not_off.append(name)
                 notify(f"VM {name} está {state}; desligue completamente e tente novamente.")
-                continue
-            _update_existing_vm(vbox, name)
-            updated.append(name)
-            notify(f"Configurações atualizadas: {name}. Discos e dados preservados.")
+            else:
+                _update_existing_vm(vbox, name)
+                updated.append(name)
+                notify(f"Configurações atualizadas: {name}. Discos e dados preservados.")
+            step_completed()
             continue
         vm_dir = base / name
         if vm_dir.exists():
@@ -146,33 +170,36 @@ def create_test_vms(base_folder: Path, notify: Callable[[str], None]) -> str:
                  "--ostype", "Windows11_64",
                  "--basefolder", str(base), "--register")
             registered = True
-            _run(vbox, "modifyvm", vm_id,
-                 "--memory", str(RAM_MB), "--cpus", str(CPUS),
-                 "--vram", str(VRAM_MB), "--firmware", "efi",
-                 "--tpm-type", "2.0", "--graphicscontroller", "vboxsvga",
-                 "--ioapic", "on", "--nic1", "nat",
-                 "--boot1", "dvd", "--boot2", "disk", *VM_ACCESS_FLAGS)
+            step_completed()
+            run_step("modifyvm", vm_id,
+                     "--memory", str(RAM_MB), "--cpus", str(CPUS),
+                     "--vram", str(VRAM_MB), "--firmware", "efi",
+                     "--tpm-type", "2.0", "--graphicscontroller", "vboxsvga",
+                     "--ioapic", "on", "--nic1", "nat",
+                     "--boot1", "dvd", "--boot2", "disk", *VM_ACCESS_FLAGS)
             # UEFI Secure Boot configurado apenas na nova VM; nunca reinicializa NVRAM existente.
-            _run(vbox, "modifynvram", vm_id, "inituefivarstore")
-            _run(vbox, "modifynvram", vm_id, "enrollmssignatures")
-            _run(vbox, "modifynvram", vm_id, "enrollorclpk")
-            _run(vbox, "modifynvram", vm_id, "secureboot", "--enable")
+            run_step("modifynvram", vm_id, "inituefivarstore")
+            run_step("modifynvram", vm_id, "enrollmssignatures")
+            run_step("modifynvram", vm_id, "enrollorclpk")
+            run_step("modifynvram", vm_id, "secureboot", "--enable")
             controller = "SATA Controller"
-            _run(vbox, "storagectl", vm_id, "--name", controller,
-                 "--add", "sata", "--controller", "IntelAhci", "--portcount", "2")
+            run_step("storagectl", vm_id, "--name", controller,
+                     "--add", "sata", "--controller", "IntelAhci", "--portcount", "2")
             disk_output = _run(
                 vbox, "createmedium", "disk", "--filename", str(disk),
                 "--size", str(DISK_MB), "--format", "VDI", "--variant", "Standard", timeout=300,
             )
-            _run(vbox, "storageattach", vm_id, "--storagectl", controller,
-                 "--port", "0", "--device", "0", "--type", "hdd", "--medium", str(disk))
-            _run(vbox, "storageattach", vm_id, "--storagectl", controller,
-                 "--port", "1", "--device", "0", "--type", "dvddrive", "--medium", "emptydrive")
+            step_completed()
+            run_step("storageattach", vm_id, "--storagectl", controller,
+                     "--port", "0", "--device", "0", "--type", "hdd", "--medium", str(disk))
+            run_step("storageattach", vm_id, "--storagectl", controller,
+                     "--port", "1", "--device", "0", "--type", "dvddrive", "--medium", "emptydrive")
             # Confere se a VM ficou registrada (não basta um comando ter retornado 0).
             if name not in _registered_names(vbox):
                 raise RuntimeError("O VirtualBox não registrou a máquina virtual.")
             created.append(name)
             notify(f"Preparada: {name}. Falta anexar a ISO do Windows.")
+            step_completed()
         except Exception as exc:
             suffix = _rollback_new_vm(vbox, vm_id, disk, disk_output) if registered else (
                 "Nenhuma VM existente foi alterada."

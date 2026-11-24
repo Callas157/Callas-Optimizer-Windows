@@ -85,6 +85,40 @@ class VirtualBoxTemplatesTest(unittest.TestCase):
             self.assertNotIn("delete", call)
 
     @patch.object(v, "get_vboxmanage", return_value=Path("VBoxManage.exe"))
+    @patch.object(v.shutil, "disk_usage")
+    @patch.object(v, "_run")
+    def test_progress_tracks_completed_steps_for_existing_and_new_templates(self, command, usage, finder):
+        usage.return_value.free = 100 * 1024**3
+        existing, new = v.VM_NAMES
+        registered = {existing: "0540db47-c805-45a1-b055-ec2c066d028d"}
+        events = []
+
+        def vboxmanage(executable, action, *args, **options):
+            events.append(action)
+            if action == "list":
+                if args == ("ostypes",):
+                    return "ID: Windows11_64\n"
+                return "\n".join(f'"{name}" {{{vm_id}}}' for name, vm_id in registered.items())
+            if action == "showvminfo":
+                return 'VMState="poweroff"\n'
+            if action == "createvm":
+                registered[new] = args[args.index("--uuid") + 1]
+            return ""
+
+        command.side_effect = vboxmanage
+        with TemporaryDirectory() as folder:
+            v.create_test_vms(Path(folder), lambda msg: None, report_progress=events.append)
+
+        progress = [event for event in events if isinstance(event, int)]
+        self.assertEqual(progress, sorted(set(progress)))
+        self.assertEqual(progress[0], 0)
+        existing_update = events.index("modifyvm")
+        self.assertGreater(events[existing_update + 1], 0)
+        disk_creation = events.index("createmedium")
+        self.assertGreater(events[disk_creation + 1], events[disk_creation - 1])
+        self.assertEqual(events[-2:], ["list", 99])
+
+    @patch.object(v, "get_vboxmanage", return_value=Path("VBoxManage.exe"))
     @patch.object(v, "_verify_guest_profile")
     @patch.object(v, "_registered_names", return_value=set())
     @patch.object(v.shutil, "disk_usage")
@@ -92,6 +126,8 @@ class VirtualBoxTemplatesTest(unittest.TestCase):
     def test_failed_disk_attachment_removes_detached_disk(self, command, usage, names, profile, finder):
         usage.return_value.free = 100 * 1024**3
         disk_id = "0540db47-c805-45a1-b055-ec2c066d028d"
+        progress = []
+        progress_at_failure = []
         with TemporaryDirectory() as folder:
             vm_dir = Path(folder) / v.VM_NAMES[0]
             config = vm_dir / f"{vm_dir.name}.vbox"
@@ -105,6 +141,7 @@ class VirtualBoxTemplatesTest(unittest.TestCase):
                     disk.touch()
                     return f"Medium created. UUID: {disk_id}\n"
                 elif action == "storageattach":
+                    progress_at_failure.extend(progress)
                     raise RuntimeError("Falha ao anexar disco")
                 elif action == "unregistervm":
                     config.unlink()
@@ -114,8 +151,10 @@ class VirtualBoxTemplatesTest(unittest.TestCase):
 
             command.side_effect = vboxmanage
             with self.assertRaisesRegex(RuntimeError, "Falha ao anexar disco"):
-                v.create_test_vms(Path(folder), lambda msg: None)
+                v.create_test_vms(Path(folder), lambda msg: None, report_progress=progress.append)
             self.assertFalse(vm_dir.exists())
+        self.assertEqual(progress, progress_at_failure)
+        self.assertLess(progress[-1], 99)
 
     @patch.object(v, "get_vboxmanage", return_value=Path("VBoxManage.exe"))
     @patch.object(v, "_verify_guest_profile")

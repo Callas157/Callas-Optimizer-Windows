@@ -152,6 +152,32 @@ class CleanerTests(unittest.TestCase):
             self.assertEqual(stats.bytes_freed, 8)
             self.assertTrue(root.exists())
             self.assertEqual(list(root.iterdir()), [])
+
+    def test_reports_progress_after_processing_or_skipping_each_root(self):
+        with tempfile.TemporaryDirectory() as parent:
+            fixture = Path(parent).resolve()
+            cleaned = fixture / "Temp"
+            cleaned.mkdir()
+            removed_file = cleaned / "remove.tmp"
+            removed_file.write_bytes(b"data")
+            unapproved = fixture / "Documents"
+            unapproved.mkdir()
+            kept_file = unapproved / "keep.txt"
+            kept_file.write_bytes(b"data")
+            missing = fixture / "missing" / "Temp"
+            completed = []
+
+            def record_root(root: Path):
+                completed.append((root, removed_file.exists(), kept_file.exists()))
+
+            clean_folders([unapproved, cleaned, missing], threading.Event(), root_finished=record_root)
+
+            self.assertEqual(completed, [
+                (unapproved, True, True),
+                (cleaned, False, True),
+                (missing, False, True),
+            ])
+
     def test_protects_arbitrary_directory(self):
         with tempfile.TemporaryDirectory() as parent:
             root = Path(parent) / 'Documents'
@@ -180,15 +206,17 @@ class CleanerTests(unittest.TestCase):
             for index in range(35):
                 (nested / f"{index}.tmp").write_bytes(b"data")
             cancellation = threading.Event()
+            completed = []
 
             def cancel_after_progress(message: str):
                 if message.startswith("35 arquivos removidos"):
                     cancellation.set()
 
-            stats = clean_folders([root], cancellation, cancel_after_progress)
+            stats = clean_folders([root], cancellation, cancel_after_progress, root_finished=completed.append)
             self.assertTrue(stats.cancelled)
             self.assertEqual(stats.files, 35)
             self.assertTrue(nested.is_dir())
+            self.assertEqual(completed, [])
 
     def test_size_format(self):
         self.assertEqual(format_size(1024), '1.0 KB')

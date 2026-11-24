@@ -15,7 +15,7 @@ import threading
 import uuid
 import webbrowser
 
-from PySide6.QtCore import QByteArray, QFileInfo, QRectF, QSettings, QSize, Qt, QThread, QTimer, Signal
+from PySide6.QtCore import QByteArray, QFileInfo, QRectF, QSettings, QSize, Qt, QThread, QTimer, Signal, Slot
 from PySide6.QtGui import QBrush, QColor, QConicalGradient, QIcon, QLinearGradient, QPainter, QPainterPath, QPen, QPixmap
 from PySide6.QtSvg import QSvgRenderer
 from PySide6.QtWidgets import (
@@ -35,9 +35,10 @@ from extra_installers import (
     CATALOG as EXTRA_APPS, available_upgrades, download_and_open, installed_program,
     official_website, open_program, powershell_env, powershell_path, program_key, upgrade_program,
 )
+from task_progress import TaskProgressBar
 from virtualbox_templates import create_test_vms, VM_NAMES, get_vboxmanage
 
-APP_VERSION = "8.9.26"
+APP_VERSION = "8.9.27"
 REPO = "Callas157/Callas-Optimizer-Windows"
 PROJECT_URL = f"https://github.com/{REPO}"
 DATA_DIR = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "CallasTeck"
@@ -243,6 +244,7 @@ class ExtraInstallerThread(QThread):
 
 class VirtualBoxTemplateThread(QThread):
     progress = Signal(str)
+    percent = Signal(int)
     result = Signal(bool, str)
 
     def __init__(self, folder: Path):
@@ -251,7 +253,7 @@ class VirtualBoxTemplateThread(QThread):
 
     def run(self):
         try:
-            message = create_test_vms(self.folder, self.progress.emit)
+            message = create_test_vms(self.folder, self.progress.emit, report_progress=self.percent.emit)
             self.result.emit(True, message)
         except Exception as exc:
             self.result.emit(False, str(exc))
@@ -282,7 +284,9 @@ class BraveExtensionsThread(QThread):
 
 class CleanerThread(QThread):
     progress = Signal(str)
+    percent = Signal(int)
     complete = Signal(object)
+    failed = Signal(str)
 
     def __init__(self, roots: list[Path], recycle: bool, icons: bool):
         super().__init__()
@@ -292,7 +296,23 @@ class CleanerThread(QThread):
         self.cancel_flag = threading.Event()
 
     def run(self):
-        stats = clean_folders(self.roots, self.cancel_flag, self.progress.emit)
+        try:
+            self.complete.emit(self.clean())
+        except Exception as exc:
+            self.failed.emit(str(exc))
+
+    def clean(self):
+        total_steps = len(self.roots) + int(self.recycle) + int(self.icons)
+        completed = 0
+
+        def complete_step():
+            nonlocal completed
+            if not self.cancel_flag.is_set():
+                completed += 1
+                self.percent.emit(100 * completed // total_steps)
+
+        stats = clean_folders(self.roots, self.cancel_flag, self.progress.emit,
+                              root_finished=lambda _: complete_step())
         if self.recycle:
             if self.cancel_flag.is_set():
                 stats.recycle_bin = "etapa cancelada"
@@ -301,6 +321,7 @@ class CleanerThread(QThread):
                 try:
                     stats.recycle_bin = empty_recycle_bin()
                     self.progress.emit(f"Lixeira: {stats.recycle_bin}.")
+                    complete_step()
                 except (OSError, RuntimeError) as exc:
                     stats.recycle_bin = "falhou"
                     stats.recycle_error = str(exc)
@@ -314,10 +335,12 @@ class CleanerThread(QThread):
                     removed, skipped = clear_icon_cache()
                     stats.icon_cache = f"{removed} removido(s), {skipped} preservado(s)"
                     self.progress.emit("O Windows recebeu o pedido para reconstruir os ícones.")
+                    complete_step()
                 except OSError as exc:
                     stats.icon_cache = "falhou"
                     self.progress.emit(f"Cache de ícones: {exc}")
-        self.complete.emit(stats)
+        stats.cancelled = stats.cancelled or self.cancel_flag.is_set()
+        return stats
 
 
 NAV_ICONS = {
@@ -485,6 +508,7 @@ class MainWindow(QMainWindow):
         self.settings = QSettings("Callas", "OptimizerWindows")
         self.cleaner: CleanerThread | None = None
         self.native_timer: QTimer | None = None
+        self.native_controls = {}
         self.extra_installer: ExtraInstallerThread | None = None
         self.vm_template_thread: VirtualBoxTemplateThread | None = None
         self.checking_program_updates = False
@@ -493,6 +517,7 @@ class MainWindow(QMainWindow):
         self.extensions_job: BraveExtensionsThread | None = None
         self.installing_program: str | None = None
         self.program_controls = {}
+        self.program_support_links = {}
         self.program_icons: dict[str, QLabel] = {}
         self.program_icon_sources: dict[str, Path | None] = {}
         self.program_icon_provider = QFileIconProvider()
@@ -916,8 +941,20 @@ class MainWindow(QMainWindow):
             if action["warning"]:
                 contents.addWidget(label("Atenção: " + action["warning"]))
             text = "EXECUTAR (ADMINISTRADOR)" if action["admin"] else "EXECUTAR"
-            contents.addWidget(action_button(text,
-                lambda _=False, code=action["id"]: self.native_action(code), True))
+            run = action_button(text, lambda _=False, code=action["id"]: self.native_action(code), True)
+            progress = TaskProgressBar(f"Progresso de {action['name']}")
+            execution = QStackedWidget()
+            execution.addWidget(run)
+            execution.addWidget(progress)
+            contents.addWidget(execution)
+            status = label("")
+            status.setTextFormat(Qt.TextFormat.PlainText)
+            status.hide()
+            contents.addWidget(status)
+            repeat = action_button("EXECUTAR NOVAMENTE", lambda _=False, code=action["id"]: self.native_action(code))
+            repeat.hide()
+            contents.addWidget(repeat, alignment=Qt.AlignmentFlag.AlignLeft)
+            self.native_controls[action["id"]] = run, progress, execution, status, repeat
             col.addWidget(card)
         col.addWidget(action_button("VER REGISTROS", lambda: self.goto("logs")))
         col.addStretch()
@@ -947,9 +984,7 @@ class MainWindow(QMainWindow):
         col.addWidget(settings)
         progress, panel = card_layout()
         panel.addWidget(label("PROGRESSO E RESULTADO", "Section"))
-        self.clean_progress = QProgressBar()
-        self.clean_progress.setRange(0, 100)
-        self.clean_progress.setValue(0)
+        self.clean_progress = TaskProgressBar("Progresso da limpeza")
         panel.addWidget(self.clean_progress)
         self.clean_output = QPlainTextEdit()
         self.clean_output.setReadOnly(True)
@@ -998,21 +1033,30 @@ class MainWindow(QMainWindow):
         upgrade.hide()
         actions.addWidget(upgrade)
         content.addLayout(actions)
-        progress = QProgressBar()
-        progress.setAccessibleName(f"Progresso de {name}")
+        progress = TaskProgressBar(f"Progresso de {name}")
         progress.hide()
         content.addWidget(progress)
         status = label("")
         status.setTextFormat(Qt.TextFormat.PlainText)
         status.hide()
         content.addWidget(status)
+        support = action_button("ABRIR SITE OFICIAL", lambda: webbrowser.open(official_website(program_key(icon))))
+        support.hide()
+        content.addWidget(support, alignment=Qt.AlignmentFlag.AlignLeft)
+        self.program_support_links[icon] = support
         self.program_controls[icon] = primary, upgrade, progress, status
         return outer
 
     def _program_page(self):
         col = self._page("programs", "Central de aplicativos", "Instale, abra e atualize seus aplicativos.")
-        col.addWidget(action_button("VERIFICAR ATUALIZAÇÕES DOS APPS", self.check_program_updates),
-                      alignment=Qt.AlignmentFlag.AlignLeft)
+        self.program_update_button = action_button("VERIFICAR ATUALIZAÇÕES DOS APPS", self.check_program_updates)
+        col.addWidget(self.program_update_button, alignment=Qt.AlignmentFlag.AlignLeft)
+        self.program_updates_progress = TaskProgressBar("Progresso da verificação pelo WinGet")
+        self.program_updates_progress.hide()
+        col.addWidget(self.program_updates_progress)
+        self.program_updates_status = label("")
+        self.program_updates_status.hide()
+        col.addWidget(self.program_updates_status)
         self.program_grid = QGridLayout()
         self.program_grid.setSpacing(16)
         self.brave_card = self._program_card(
@@ -1075,8 +1119,7 @@ class MainWindow(QMainWindow):
         self.vm_template_button = action_button(
             "PREPARAR / AJUSTAR 2 VMS", self.prepare_virtualbox_templates, True)
         lab.addWidget(self.vm_template_button, alignment=Qt.AlignmentFlag.AlignLeft)
-        self.vm_template_progress = QProgressBar()
-        self.vm_template_progress.setRange(0, 0)
+        self.vm_template_progress = TaskProgressBar("Progresso da preparação das VMs")
         self.vm_template_progress.hide()
         lab.addWidget(self.vm_template_progress)
         self.vm_template_status = label("")
@@ -1084,9 +1127,6 @@ class MainWindow(QMainWindow):
         self.vm_template_status.hide()
         lab.addWidget(self.vm_template_status)
         col.addWidget(lab_card)
-        self.program_updates_status = label("")
-        self.program_updates_status.hide()
-        col.addWidget(self.program_updates_status)
         openai_card, openai_box = card_layout()
         openai_box.addWidget(label("CHATGPT + CODEX NO WINDOWS", "Section"))
         openai_box.addWidget(label(
@@ -1104,9 +1144,16 @@ class MainWindow(QMainWindow):
         box.addWidget(label("EXTENSÕES DO BRAVE", "Section"))
         box.addWidget(label("SteamDB e Bonjourr podem ser configurados por política local. Isso faz o Brave exibir 'Gerenciado pela organização'."))
         row = QHBoxLayout()
-        row.addWidget(action_button("CONFIGURAR EXTENSÕES", lambda: self.configure_brave_extensions(False), True))
-        row.addWidget(action_button("DESFAZER POLÍTICAS", lambda: self.configure_brave_extensions(True)))
+        self.extension_buttons = (
+            action_button("CONFIGURAR EXTENSÕES", lambda: self.configure_brave_extensions(False), True),
+            action_button("DESFAZER POLÍTICAS", lambda: self.configure_brave_extensions(True)),
+        )
+        for button in self.extension_buttons:
+            row.addWidget(button)
         box.addLayout(row)
+        self.extensions_progress = TaskProgressBar("Progresso das políticas do Brave")
+        self.extensions_progress.hide()
+        box.addWidget(self.extensions_progress)
         self.extensions_status = label("")
         self.extensions_status.setTextFormat(Qt.TextFormat.PlainText)
         box.addWidget(self.extensions_status)
@@ -1121,13 +1168,13 @@ class MainWindow(QMainWindow):
         inner.addWidget(label("Versão atual: " + APP_VERSION, "CardTitle"))
         inner.addWidget(label("Instalado em Program Files" if installed_mode() else "Edição portátil — instalador em Sobre"))
         self.update_note = label("Pronto para consultar as Releases oficiais.")
+        self.update_note.setTextFormat(Qt.TextFormat.PlainText)
         inner.addWidget(self.update_note)
-        self.update_progress = QProgressBar()
-        self.update_progress.setRange(0, 100)
-        self.update_progress.setValue(0)
+        self.update_progress = TaskProgressBar("Progresso da atualização do Callas")
         inner.addWidget(self.update_progress)
         row = QHBoxLayout()
-        row.addWidget(action_button("VERIFICAR AGORA", lambda: self.check_update(True), True))
+        self.update_check = action_button("VERIFICAR AGORA", lambda: self.check_update(True), True)
+        row.addWidget(self.update_check)
         row.addWidget(action_button("VER RELEASES", lambda: webbrowser.open(PROJECT_URL + "/releases")))
         inner.addLayout(row)
         col.addWidget(c)
@@ -1210,11 +1257,22 @@ class MainWindow(QMainWindow):
             return
         if self.update_mode == "install" or self.native_timer is not None:
             return
-        if os.name != "nt":
-            QMessageBox.warning(self, "Indisponível", "Esta opção exige Windows.")
-            return
         self.native_report = ACTION_HOME / ("acao-" + uuid.uuid4().hex + ".json")
+        self.native_progress_file = self.native_report.with_suffix(".progress")
+        self.native_code = code
         self.native_task_name = task["name"]
+        _, progress, execution, status, repeat = self.native_controls[code]
+        repeat.hide()
+        progress.begin()
+        execution.setCurrentWidget(progress)
+        status.setText("Aguardando permissão do Windows…" if task["admin"] else "Executando…")
+        status.show()
+        for run, _, _, _, retry in self.native_controls.values():
+            run.setEnabled(False)
+            retry.setEnabled(False)
+        if os.name != "nt":
+            self.finish_native_action(False, "Esta opção exige Windows.")
+            return
         script_args = [] if getattr(sys, "frozen", False) else [str(Path(__file__).resolve())]
         args = [*script_args, "--callas-task", code, "--callas-report", self.native_report.name,
                 "--callas-profile", str(ACTION_HOME)]
@@ -1229,17 +1287,25 @@ class MainWindow(QMainWindow):
                     creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
         except Exception as exc:
             detail = "Permissão UAC cancelada." if getattr(exc, "winerror", None) == 1223 else str(exc)
-            self.status_message("Operação não iniciada: " + self.native_task_name)
-            QMessageBox.critical(self, "Falha", detail)
+            self.finish_native_action(False, detail)
             return
-        self.status_message("Executando: " + self.native_task_name)
+        status.setText("Executando…")
+        self.status_message(self.native_task_name + " em execução")
         self.native_timer = QTimer(self)
         self.native_timer.timeout.connect(self.poll_native_action)
-        self.native_timer.start(800)
+        self.native_timer.start(230)
 
     def poll_native_action(self):
         if self.native_timer is None:
             return
+        try:
+            pending = json.loads(self.native_progress_file.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            pending = None
+        percent = pending.get("percent") if isinstance(pending, dict) else None
+        if type(percent) is int and 0 <= percent <= 99:
+            progress = self.native_controls[self.native_code][1]
+            progress.advance(max(progress.value(), percent))
         try:
             code = self.native_process.poll()
             if code is None:
@@ -1261,19 +1327,40 @@ class MainWindow(QMainWindow):
         except (OSError, ValueError) as exc:
             ok = False
             message = f"Não foi possível obter o resultado: {exc}"
-        try:
-            self.native_report.unlink(missing_ok=True)
-        except OSError:
-            pass
+        for path in (self.native_report, self.native_progress_file):
+            try:
+                path.unlink(missing_ok=True)
+            except OSError:
+                pass
         self.native_timer.stop()
         self.native_timer.deleteLater()
         self.native_timer = None
         self.native_process = None
-        self.status_message(("Concluído: " if ok else "Falhou: ") + self.native_task_name)
-        if ok:
-            QMessageBox.information(self, "Operação concluída", message)
-        else:
-            QMessageBox.warning(self, "Operação não concluída", message)
+        self.finish_native_action(ok, message)
+
+    def finish_native_action(self, ok: bool, message: str):
+        _, progress, _, status, repeat = self.native_controls[self.native_code]
+        progress.finish(ok)
+        outcome = "Concluído." if ok else "Falhou."
+        lines = [line.strip() for line in message.splitlines() if line.strip()]
+        detail = "\n".join(lines)
+        if len(detail) > 360 or len(lines) > 4:
+            summary_prefixes = (
+                "o windows verificou", "o windows examinou", "windows has scanned",
+                "a proteção de recursos", "windows resource protection",
+                "the restore operation", "a operação de restauração",
+            )
+            summary = next((line for line in reversed(lines) if line.casefold().startswith(summary_prefixes)), "")
+            if not ok:
+                summary = " ".join(lines[:2])
+            detail = (summary[:260] + "\n" if summary else "") + "Saída em Registros."
+        status.setText(outcome + ("\n" + detail if detail else ""))
+        status.show()
+        repeat.show()
+        for run, _, _, _, retry in self.native_controls.values():
+            run.setEnabled(True)
+            retry.setEnabled(True)
+        self.status_message(self.native_task_name + (" concluído" if ok else " falhou"))
 
     def configure_brave_extensions(self, undo: bool):
         if self.update_mode == "install" or (self.extensions_job and self.extensions_job.isRunning()):
@@ -1289,11 +1376,19 @@ class MainWindow(QMainWindow):
         if self.update_mode == "install":
             return
         self.extensions_status.setText("Aplicando alteração…")
+        self.extensions_progress.begin()
+        self.extensions_progress.show()
+        for button in self.extension_buttons:
+            button.setEnabled(False)
         self.extensions_job = BraveExtensionsThread(undo)
         self.extensions_job.result.connect(self.brave_extensions_done)
         self.extensions_job.start()
 
+    @Slot(bool, str)
     def brave_extensions_done(self, ok: bool, message: str):
+        self.extensions_progress.finish(ok)
+        for button in self.extension_buttons:
+            button.setEnabled(True)
         self.extensions_status.setText(message)
         self.status_message("Extensões do Brave: concluído." if ok else "Extensões do Brave: falha.")
 
@@ -1316,12 +1411,17 @@ class MainWindow(QMainWindow):
             return
         self.checking_program_updates = True
         self.program_updates_checked = True
-        if not automatic:
-            self.program_updates_status.setText("Verificando atualizações pelo WinGet…")
-            self.program_updates_status.show()
+        self.program_update_button.setEnabled(False)
+        self.program_updates_progress.begin()
+        self.program_updates_progress.show()
+        self.program_updates_status.setText("Verificando atualizações pelo WinGet…")
+        self.program_updates_status.show()
 
         def check():
-            upgrades = available_upgrades()
+            try:
+                upgrades = available_upgrades()
+            except (OSError, RuntimeError, subprocess.SubprocessError):
+                upgrades = None
             try:
                 self.program_updates_result.emit(upgrades, automatic)
             except RuntimeError:
@@ -1329,19 +1429,21 @@ class MainWindow(QMainWindow):
 
         threading.Thread(target=check, daemon=True).start()
 
+    @Slot(object, bool)
     def program_updates_done(self, upgrades, automatic: bool):
         self.checking_program_updates = False
+        self.program_update_button.setEnabled(True)
         self.upgradeable_programs = upgrades or set()
         self.refresh_program_cards()
-        if not automatic or self.upgradeable_programs:
-            if upgrades is None:
-                message = "Consulta indisponível. Os apps podem ser atualizados pelo próprio fabricante."
-            elif upgrades:
-                message = "Atualizações disponíveis nos cartões dos aplicativos."
-            else:
-                message = "O WinGet não encontrou atualizações para os aplicativos do catálogo."
-            self.program_updates_status.setText(message)
-            self.program_updates_status.show()
+        self.program_updates_progress.finish(upgrades is not None)
+        if upgrades is None:
+            message = "Consulta indisponível. Os apps podem ser atualizados pelo próprio fabricante."
+        elif upgrades:
+            message = "Atualizações disponíveis nos cartões dos aplicativos."
+        else:
+            message = "O WinGet não encontrou atualizações para os aplicativos do catálogo."
+        self.program_updates_status.setText(message)
+        self.program_updates_status.show()
 
     def prepare_virtualbox_templates(self):
         if self.update_mode == "install" or (self.vm_template_thread and self.vm_template_thread.isRunning()):
@@ -1349,7 +1451,8 @@ class MainWindow(QMainWindow):
         try:
             get_vboxmanage()
         except Exception as exc:
-            QMessageBox.warning(self, "VirtualBox necessário", str(exc))
+            self.vm_template_status.setText(str(exc))
+            self.vm_template_status.show()
             return
         folder = QFileDialog.getExistingDirectory(
             self, "Escolha o disco ou pasta para as duas VMs",
@@ -1373,23 +1476,22 @@ class MainWindow(QMainWindow):
         if self.update_mode == "install":
             return
         self.vm_template_button.setEnabled(False)
+        self.vm_template_progress.begin()
         self.vm_template_progress.show()
         self.vm_template_status.setText("Preparando as máquinas no VirtualBox…")
         self.vm_template_status.show()
         self.vm_template_thread = VirtualBoxTemplateThread(Path(folder))
         self.vm_template_thread.progress.connect(self.vm_template_status.setText)
+        self.vm_template_thread.percent.connect(self.vm_template_progress.advance)
         self.vm_template_thread.result.connect(self.virtualbox_templates_finished)
         self.vm_template_thread.start()
 
+    @Slot(bool, str)
     def virtualbox_templates_finished(self, ok: bool, message: str):
-        self.vm_template_progress.hide()
+        self.vm_template_progress.finish(ok)
         self.vm_template_button.setEnabled(True)
         self.vm_template_status.setText(message)
         self.status_message("Máquinas de teste preparadas." if ok else "Erro ao preparar VMs.")
-        if ok:
-            QMessageBox.information(self, "Máquinas preparadas", message)
-        else:
-            QMessageBox.warning(self, "Máquinas virtuais", message)
 
     def install_extra(self, app_id: str, upgrade: bool = False):
         app_id = program_key(app_id)
@@ -1400,11 +1502,21 @@ class MainWindow(QMainWindow):
             return
         name = EXTRA_APPS[app_id]["name"]
         if not upgrade and (installed := installed_program(app_id)):
+            opened = False
             try:
                 open_program(installed)
-                self.status_message(f"{name} aberto.")
+                message = f"{name} aberto."
+                opened = True
             except OSError as exc:
-                QMessageBox.warning(self, "Falha ao abrir", str(exc))
+                message = f"Falha ao abrir {name}: {exc}"
+            for card, (_, _, progress, status) in self.program_controls.items():
+                if program_key(card) == app_id:
+                    progress.begin()
+                    progress.finish(opened)
+                    progress.show()
+                    status.setText(message)
+                    status.show()
+            self.status_message(message)
             return
         if upgrade and app_id not in self.upgradeable_programs:
             return
@@ -1422,6 +1534,7 @@ class MainWindow(QMainWindow):
         self.extra_installer.result.connect(self.extra_installer_done)
         self.extra_installer.start()
 
+    @Slot(str, int)
     def show_program_progress(self, message: str, percent: int):
         if self.installing_program is None:
             return
@@ -1430,13 +1543,15 @@ class MainWindow(QMainWindow):
                 continue
             primary.hide()
             upgrade.hide()
-            progress.setRange(0, 0 if percent < 0 else 100)
-            if percent >= 0:
-                progress.setValue(percent)
+            if not progress.running:
+                progress.begin()
+                self.program_support_links[card].hide()
+            progress.advance(percent)
             progress.show()
             status.setText(message)
             status.show()
 
+    @Slot(bool, str, str)
     def extra_installer_done(self, ok: bool, message: str, app_id: str):
         name = EXTRA_APPS[app_id]["name"]
         self.installing_program = None
@@ -1448,9 +1563,10 @@ class MainWindow(QMainWindow):
                 "revise a instalação do fabricante.")
         for card, (_, _, progress, status) in self.program_controls.items():
             if program_key(card) == app_id:
-                progress.hide()
+                progress.finish(ok)
                 status.setText(message)
                 status.show()
+                self.program_support_links[card].setVisible(not ok)
         self.refresh_program_cards()
         self.status_message(f"{name}: {message}")
         try:
@@ -1458,18 +1574,6 @@ class MainWindow(QMainWindow):
                 log.write(f"[{datetime.now():%Y-%m-%d %H:%M:%S}] {name}: {message}\n")
         except OSError:
             pass
-        if not ok:
-            caixa = QMessageBox(self)
-            caixa.setWindowTitle("Instalação interrompida")
-            caixa.setTextFormat(Qt.TextFormat.PlainText)
-            caixa.setText(f"{name}\n\n{message}")
-            caixa.setIcon(QMessageBox.Icon.Warning)
-            website = caixa.addButton("Abrir site oficial", QMessageBox.ButtonRole.ActionRole)
-            caixa.addButton("Fechar", QMessageBox.ButtonRole.RejectRole)
-            caixa.exec()
-            if caixa.clickedButton() is website:
-                webbrowser.open(official_website(app_id))
-
     def start_clean(self):
         if self.update_mode == "install":
             return
@@ -1477,7 +1581,7 @@ class MainWindow(QMainWindow):
             return
         if not any(check.isChecked() for check in
                    (self.clean_user, self.clean_windows, self.clean_recycle, self.clean_icons, self.clean_nvidia)):
-            QMessageBox.information(self, "Limpeza", "Selecione ao menos uma opção.")
+            self.clean_output.setPlainText("Selecione ao menos uma opção.")
             return
         selection = []
         unavailable = []
@@ -1486,7 +1590,7 @@ class MainWindow(QMainWindow):
             selection.extend(user_temp)
             if not user_temp:
                 unavailable.append("Pasta temporária do usuário indisponível.")
-        if self.clean_windows.isChecked() and os.name == "nt":
+        if self.clean_windows.isChecked():
             system_temp = windows_temp_folder()
             if system_temp is None:
                 unavailable.append("Pasta temporária do Windows indisponível.")
@@ -1498,6 +1602,9 @@ class MainWindow(QMainWindow):
             if not dxcache:
                 unavailable.append("Cache NVIDIA DXCache não localizado neste perfil.")
         selection = list(dict.fromkeys(selection))
+        if unavailable and not selection and not (self.clean_recycle.isChecked() or self.clean_icons.isChecked()):
+            self.clean_output.setPlainText("\n".join(unavailable))
+            return
         if not confirmar(self, "Confirmar limpeza", "Executar as opções selecionadas?\nArquivos protegidos ou em uso serão preservados."):
             return
         if self.update_mode == "install":
@@ -1506,12 +1613,14 @@ class MainWindow(QMainWindow):
         self.clean_output.appendPlainText("Iniciando limpeza...")
         for message in unavailable:
             self.clean_output.appendPlainText(message)
-        self.clean_progress.setRange(0, 0)
+        self.clean_progress.begin()
         self.clean_start.setEnabled(False)
         self.clean_stop.setEnabled(True)
         self.cleaner = CleanerThread(selection, self.clean_recycle.isChecked(), self.clean_icons.isChecked())
         self.cleaner.progress.connect(self.clean_output.appendPlainText)
+        self.cleaner.percent.connect(self.clean_progress.advance)
         self.cleaner.complete.connect(self.clean_finished)
+        self.cleaner.failed.connect(self.clean_failed)
         self.cleaner.finished.connect(self.clean_thread_finished)
         self.cleaner.start()
         self.status_message("Limpeza em andamento...")
@@ -1521,15 +1630,16 @@ class MainWindow(QMainWindow):
             self.cleaner.cancel_flag.set()
             self.clean_output.appendPlainText("Cancelamento solicitado. Finalizando item atual...")
 
+    @Slot(object)
     def clean_finished(self, stats):
-        self.clean_progress.setRange(0, 100)
-        self.clean_progress.setValue(100 if not stats.cancelled else 0)
+        failed = stats.recycle_bin == "falhou" or stats.icon_cache == "falhou"
+        self.clean_progress.finish(not (stats.cancelled or failed))
         self.clean_stop.setEnabled(False)
         final = (f"Arquivos removidos: {stats.files} | Pastas vazias: {stats.folders} | "
                  f"Espaço liberado: {format_size(stats.bytes_freed)} | Ignorados: {stats.skipped} | "
                  f"Lixeira: {stats.recycle_bin}"
                  f" | Cache de ícones: {stats.icon_cache}"
-                 + (" | Cancelada" if stats.cancelled else ""))
+                 + (" | Cancelada" if stats.cancelled else " | Concluída com falhas" if failed else ""))
         self.clean_output.appendPlainText("\n" + final)
         self.status_message(final)
         try:
@@ -1540,6 +1650,13 @@ class MainWindow(QMainWindow):
                     log.write(stats.recycle_error + "\n")
         except OSError:
             pass
+
+    @Slot(str)
+    def clean_failed(self, message: str):
+        self.clean_progress.finish(False)
+        self.clean_stop.setEnabled(False)
+        self.clean_output.appendPlainText("A limpeza falhou. " + message)
+        self.status_message("A limpeza falhou.")
 
     def clean_thread_finished(self):
         thread = self.cleaner
@@ -1554,14 +1671,16 @@ class MainWindow(QMainWindow):
             return
         if not (runtime_dir() / "updater.ps1").is_file():
             if manual:
-                QMessageBox.warning(self, "Atualização", "O atualizador ainda não está disponível.")
+                self.goto("updates")
+                self.update_failed("O atualizador ainda não está disponível.")
             return
         self.update_mode = "check"
         self.update_elapsed = 0
         self.update_status = DATA_DIR / ("updater-" + uuid.uuid4().hex + ".status")
         self.top_check.setEnabled(False)
+        self.update_check.setEnabled(False)
         self.update_note.setText("Consultando a última Release estável...")
-        self.update_progress.setRange(0, 0)
+        self.update_progress.begin()
         try:
             args = ["-Check", "-CurrentVersion", APP_VERSION, "-StatusFile", str(self.update_status)]
             if installed_mode():
@@ -1592,18 +1711,23 @@ class MainWindow(QMainWindow):
         if not self.update_mode:
             return
         self.update_elapsed += 1
+        process_exit = self.updater_process.poll() if self.updater_process is not None else None
         if self.update_status.is_file():
             try:
-                status = self.update_status.read_text(encoding="ascii").strip()
+                status = self.update_status.read_text(encoding="utf-8-sig").strip()
             except (OSError, UnicodeError):
                 status = ""
-            if self.update_mode == "install" and status == "READY":
+            if status.startswith("PROGRESS|"):
+                parts = status.split("|", 2)
+                if len(parts) == 3 and parts[1].isascii() and parts[1].isdecimal() and len(parts[1]) <= 2:
+                    self.update_progress.advance(int(parts[1]))
+                    self.update_note.setText(parts[2])
+            if self.update_mode == "install" and status == "READY" and process_exit is None:
                 self.update_timer.stop()
                 self.status_message("Atualização verificada. Fechando para instalar...")
-                if self.close():
-                    QApplication.quit()
-                else:
-                    self.update_timer.start()
+                self.update_note.setText("Instalador verificado. Abrindo a instalação…")
+                self.update_progress.finish(True)
+                QTimer.singleShot(350, self.close_to_update)
                 return
             if status == "ERROR":
                 self.update_failed("A atualização falhou. Consulte atualizacoes.log.")
@@ -1628,11 +1752,19 @@ class MainWindow(QMainWindow):
                              f"Nova versão encontrada: {release}\nVersão em uso: {APP_VERSION}\n\n{question}", True):
                     self.install_update()
                 return
-        if self.updater_process and self.updater_process.poll() is not None:
+        if process_exit is not None:
             self.update_failed("Atualizador encerrou sem informar o resultado. Consulte os logs.")
             return
         if self.update_elapsed > 900:
             self.update_failed("Tempo limite da atualização. Confira a conexão e os logs.")
+
+    def close_to_update(self):
+        if self.update_mode != "install" or self.update_timer is None:
+            return
+        if self.close():
+            QApplication.quit()
+        else:
+            self.update_timer.start()
 
     def stop_update_timer(self, success: bool = True):
         if self.update_timer is not None:
@@ -1646,14 +1778,13 @@ class MainWindow(QMainWindow):
         self.updater_process = None
         self.update_mode = ""
         self.top_check.setEnabled(True)
-        self.update_progress.setRange(0, 100)
-        self.update_progress.setValue(100 if success else 0)
+        self.update_check.setEnabled(True)
+        self.update_progress.finish(success)
 
     def update_failed(self, message: str):
         self.stop_update_timer(False)
         self.update_note.setText(message)
         self.status_message(message)
-        QMessageBox.warning(self, "Atualização", message)
 
     def install_update(self):
         if (self.installing_program or (self.cleaner and self.cleaner.isRunning()) or
@@ -1671,7 +1802,8 @@ class MainWindow(QMainWindow):
         self.update_elapsed = 0
         self.update_status = DATA_DIR / ("updater-" + uuid.uuid4().hex + ".status")
         self.top_check.setEnabled(False)
-        self.update_progress.setRange(0, 0)
+        self.update_check.setEnabled(False)
+        self.update_progress.begin()
         self.update_note.setText("Baixando, validando e preparando a nova versão. Mantenha o aplicativo aberto.")
         try:
             args = ["-Install", "-CurrentVersion", APP_VERSION, "-StatusFile", str(self.update_status),

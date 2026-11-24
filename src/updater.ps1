@@ -28,8 +28,29 @@ function Status([string]$value) {
     $dir=Split-Path -Parent $StatusFile
     if (-not (Test-Path -LiteralPath $dir -PathType Container)) { throw 'Pasta do status indisponivel.' }
     $tmp=$StatusFile+'.'+[guid]::NewGuid().ToString('N')+'.tmp'
-    [IO.File]::WriteAllText($tmp,$value,[Text.Encoding]::ASCII)
-    Move-Item -LiteralPath $tmp -Destination $StatusFile -Force
+    try {
+        [IO.File]::WriteAllText($tmp,$value,[Text.Encoding]::ASCII)
+        for ($attempt=1; $attempt -le 5; $attempt++) {
+            try {
+                if ([IO.File]::Exists($StatusFile)) {
+                    [IO.File]::Replace($tmp,$StatusFile,[NullString]::Value)
+                } else {
+                    [IO.File]::Move($tmp,$StatusFile)
+                }
+                return
+            } catch [IO.IOException] {
+                # A leitura do status pela janela pode manter o arquivo aberto por instantes.
+                if ($attempt -eq 5) { throw }
+                Start-Sleep -Milliseconds 40
+            }
+        }
+    } finally {
+        if ([IO.File]::Exists($tmp)) { Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue }
+    }
+}
+function Report-UpdateProgress([int]$percent,[string]$message) {
+    try { Status ('PROGRESS|{0}|{1}' -f $percent,$message) }
+    catch { Log ('Falha ao informar progresso: '+$_.Exception.Message) }
 }
 function Get-Latest {
     $headers=@{'User-Agent'='CallasOptimizer-Updater'; 'Accept'='application/vnd.github+json'}
@@ -94,14 +115,38 @@ function Download-Verified([hashtable]$latest,[string]$staged) {
     for($attempt=1;$attempt -le 3;$attempt++) {
         try {
             if (Test-Path -LiteralPath $staged) { Remove-Item -LiteralPath $staged -Force }
-            Invoke-WebRequest -Uri $latest.Url -Headers @{'User-Agent'='CallasOptimizer-Updater'} -UseBasicParsing -TimeoutSec 120 -OutFile $staged
+            $percent=10
+            Report-UpdateProgress $percent 'Baixando o arquivo...'
+            # Mantenha a requisicao original e observe o tamanho gravado durante a transferencia.
+            $request=[PowerShell]::Create()
+            try {
+                $null=$request.AddCommand('Invoke-WebRequest').AddParameters(@{
+                    Uri=$latest.Url; Headers=@{'User-Agent'='CallasOptimizer-Updater'}
+                    UseBasicParsing=$true; TimeoutSec=120; OutFile=$staged; ErrorAction='Stop'
+                })
+                $pending=$request.BeginInvoke()
+                while (-not $pending.IsCompleted) {
+                    Start-Sleep -Milliseconds 300
+                    $file=Get-Item -LiteralPath $staged -ErrorAction SilentlyContinue
+                    if (-not $file) { continue }
+                    $transferred=[Math]::Min([double]$file.Length / $latest.Size,1.0)
+                    $nextPercent=10+[int][Math]::Floor(79*$transferred)
+                    if ($nextPercent -gt $percent) {
+                        $percent=$nextPercent
+                        Report-UpdateProgress $percent 'Baixando o arquivo...'
+                    }
+                }
+                $request.EndInvoke($pending) | Out-Null
+            } finally { $request.Dispose() }
             break
         } catch {
             Log ('Download tentativa '+$attempt+': '+$_.Exception.Message)
             if ($attempt -eq 3) { throw }
+            Report-UpdateProgress 10 'Tentando baixar novamente...'
             Start-Sleep -Seconds (2*$attempt)
         }
     }
+    Report-UpdateProgress 90 'Verificando o arquivo baixado...'
     $file=Get-Item -LiteralPath $staged
     if ($file.Length -ne $latest.Size) { throw 'Tamanho baixado diferente da Release.' }
     $hash=(Get-FileHash -LiteralPath $staged -Algorithm SHA256).Hash.ToUpperInvariant()
@@ -117,6 +162,7 @@ function Start-TargetIfClosed([string]$path) {
 }
 try {
     if ($CurrentVersion -cnotmatch '^[0-9]+\.[0-9]+\.[0-9]+$') { throw 'Versao local invalida.' }
+    Report-UpdateProgress 0 'Consultando o GitHub...'
     $latest=Get-Latest
     if ($latest.Version -le [version]$CurrentVersion) {
         Log ('Atualizado: '+$CurrentVersion+', ultima release '+$latest.Tag)
@@ -128,6 +174,7 @@ try {
         Status ('AVAILABLE|'+$latest.Tag)
         exit 0
     }
+    Report-UpdateProgress 5 'Preparando o download...'
     $fullTarget=[IO.Path]::GetFullPath($Target)
     if (([IO.Path]::GetExtension($fullTarget) -ine '.exe') -or -not (Test-Path -LiteralPath $fullTarget -PathType Leaf)) { throw 'Executavel original nao encontrado.' }
     $targetDir=Split-Path -Parent $fullTarget
@@ -149,6 +196,7 @@ try {
                 throw 'Instalacao nao reconhecida pelo Setup.'
             }
             Download-Verified $latest $staged
+            Report-UpdateProgress 96 'Preparando o instalador...'
             Confirm-StagedSetupIdentity $staged
             Status 'READY'
             Log ('Setup validado; aguardando fechamento do PID '+$WaitPid)
@@ -182,6 +230,7 @@ try {
     $ready=$false
     try {
         Download-Verified $latest $staged
+        Report-UpdateProgress 96 'Preparando a troca de arquivos...'
         # Copiar para a mesma unidade antes de solicitar o encerramento.
         # Se nao houver permissao de escrita, o programa antigo fica aberto.
         Copy-Item -LiteralPath $staged -Destination $neighbor -ErrorAction Stop
