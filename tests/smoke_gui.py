@@ -9,26 +9,35 @@ from types import SimpleNamespace
 from unittest.mock import Mock, patch
 root = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(root / 'src'))
-os.environ['QT_QPA_PLATFORM'] = 'offscreen'
+os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
 os.environ['CALLAS_SMOKE'] = '1'
 from PySide6.QtCore import QPoint, Qt, QTimer
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication, QDialog, QFrame, QLabel, QPushButton, QSpinBox
+from PySide6.QtWidgets import QApplication, QDialog, QFrame, QLabel, QProgressBar, QPushButton, QSpinBox, QSplitter
 from app import MainWindow, STYLE
 import windows_actions
 
 app = QApplication(sys.argv)
 app.setStyleSheet(STYLE)
 win = MainWindow()
+win.program_updates_checked = True  # Evita concorrência com a verificação simulada mais abaixo.
 win.show()
 app.processEvents()
 assert win.isVisible()
 assert win.minimumWidth() <= 810
 assert len(win.pages) == 18, len(win.pages)
-assert len(win.home_tiles) == 6
-assert len(win.home_panels) == 5
-assert hasattr(win, "home_detail_grid")
-assert callable(win.open_windows_settings)
+assert not win.findChildren(QSplitter)
+home = win.pages["home"]
+storage = home.findChild(QFrame, "Hero").findChild(QProgressBar)
+disk_usage = SimpleNamespace(total=100 * 1024**3, free=60 * 1024**3)
+with patch("app.shutil.disk_usage", return_value=disk_usage):
+    win.refresh_system_metrics()
+    assert storage.isVisible() and storage.value() == 40
+with patch("app.shutil.disk_usage", side_effect=OSError):
+    win.refresh_system_metrics()
+    assert storage.isHidden()
+win.refresh_system_metrics()
+assert storage.isVisible()
 
 # Navegação por botões laterais e novo percurso depois de retroceder.
 win.goto("clean")
@@ -37,7 +46,7 @@ win.goto("gamer")
 win.goto("repair")
 QTest.mouseClick(win.pages["repair"].viewport(), Qt.MouseButton.BackButton)
 assert win.stack.currentWidget() is win.pages["gamer"]
-QTest.mouseClick(win.nav_buttons["gamer"], Qt.MouseButton.ForwardButton)
+QTest.mouseClick(win.pages["gamer"].viewport(), Qt.MouseButton.ForwardButton)
 assert win.stack.currentWidget() is win.pages["repair"]
 QTest.keyClick(win.pages["repair"].viewport(), Qt.Key.Key_Back)
 assert win.stack.currentWidget() is win.pages["gamer"]
@@ -50,17 +59,70 @@ win.goto("shutdown")
 QTest.mouseClick(win.pages["shutdown"].viewport(), Qt.MouseButton.ForwardButton)
 assert win.stack.currentWidget() is win.pages["shutdown"]
 
-# Testar clique real nos cartões da tela inicial sem nova janela.
-win.goto('home')
-quick = win.pages['home'].findChildren(QPushButton)
-for text, route in (("Clean", "clean"), ("Boost", "gamer"), ("Repair", "repair"),
-                    ("Apps", "programs"), ("Drivers", "drivers"), ("Atualizar", "updates")):
-    win.goto('home')
-    match = next((b for b in quick if text in b.text()), None)
-    assert match is not None, text
-    match.click()
+# Cada aba interna pode ser aberta no Início, e a navegação permanece na mesma janela.
+win.goto("home")
+shortcuts = {button.accessibleName() or button.text(): button
+             for button in win.pages["home"].findChildren(QPushButton)}
+home_button = next(button for button in win.findChildren(QPushButton) if button.text() == "Início")
+assert home_button.isHidden()
+for title, route in (
+    ("Programas", "programs"), ("Limpeza Total", "clean"), ("Modo Gamer", "gamer"),
+    ("Reparar Windows", "repair"), ("Drivers", "drivers"), ("Rede e DNS", "network"),
+    ("Windows Update", "windows_update"), ("Privacidade", "privacy"), ("Desligamento", "shutdown"),
+    ("Microsoft Edge", "edge"), ("Menu clássico", "classic"), ("WinUtil", "winutil"),
+    ("Ponto de restauração", "restore_point"), ("Restaurar padrões", "restore"),
+    ("Atualizações do Callas", "updates"), ("Registros", "logs"), ("Sobre", "about"),
+):
+    assert not shortcuts[title].isHidden(), title
+    button = shortcuts[title]
+    QTest.mouseClick(button, Qt.MouseButton.LeftButton, pos=QPoint(20, 14))
     app.processEvents()
-    assert win.stack.currentWidget() is win.pages[route], (text, route)
+    assert win.stack.currentWidget() is win.pages[route], (title, route)
+    assert home_button.isVisible()
+    home_button.click()
+    assert win.stack.currentWidget() is win.pages["home"] and home_button.isHidden()
+with patch("app.os", SimpleNamespace(name="nt", startfile=Mock())) as windows:
+    shortcuts["Inicialização"].click()
+    windows.startfile.assert_called_once_with("ms-settings:startupapps")
+    assert win.stack.currentWidget() is home
+assert shortcuts["Programas"].mapTo(home.viewport(), QPoint()).x() < (
+    shortcuts["Limpeza Total"].mapTo(home.viewport(), QPoint()).x()
+)
+assert shortcuts["Atualizações do Callas"].x() < shortcuts["Registros"].x() < shortcuts["Sobre"].x()
+home.setFocus()
+for title in (
+    "Programas", "Limpeza Total", "Modo Gamer", "Reparar Windows", "Drivers",
+    "Rede e DNS", "Windows Update", "Inicialização", "Privacidade", "Desligamento",
+    "Microsoft Edge", "Menu clássico", "WinUtil", "Ponto de restauração", "Restaurar padrões",
+    "Atualizações do Callas", "Registros", "Sobre",
+):
+    QTest.keyClick(app.focusWidget(), Qt.Key.Key_Tab)
+    assert app.focusWidget() is shortcuts[title], (title, app.focusWidget())
+
+# Com a janela reduzida, os atalhos continuam no viewport e a Fênix segue no painel.
+win.resize(810, 570)
+app.processEvents()
+app.processEvents()
+assert win.hero_phoenix.isVisible()
+for button in shortcuts.values():
+    left = button.mapTo(home.viewport(), QPoint()).x()
+    right = left + button.width()
+    assert 0 <= left < right <= home.viewport().width(), (button.accessibleName() or button.text(), left, right)
+assert home.verticalScrollBar().maximum() > 0
+
+win.goto("about")
+app.processEvents()
+about_buttons = win.pages["about"].findChildren(QPushButton)
+repo_button = next(button for button in about_buttons if button.text() == "Abrir repositório")
+assert repo_button.height() <= 36 and repo_button.width() < 200, repo_button.size()
+with patch("app.webbrowser.open") as browser:
+    repo_button.click()
+    browser.assert_called_once_with("https://github.com/Callas157/Callas-Optimizer-Windows")
+setup_button = next(button for button in about_buttons if button.text() == "Obter instalador oficial")
+with patch("app.webbrowser.open") as browser:
+    setup_button.click()
+    browser.assert_called_once_with("https://github.com/Callas157/Callas-Optimizer-Windows/releases/latest")
+
 win.goto('clean')
 assert win.stack.currentWidget() is win.pages['clean']
 win.goto('programs')
@@ -116,11 +178,8 @@ with patch("app.installed_program", return_value="shell:AppsFolder\\ChatGPT!App"
 for route in ("home", "clean", "gamer", "repair", "programs", "drivers", "updates"):
     win.goto(route)
     assert win.stack.currentWidget() is win.pages[route]
-for route, button in win.nav_buttons.items():
-    button.click()
-    assert win.stack.currentWidget() is win.pages[route], route
 
-# A grade usa a largura do painel, inclusive após mover a divisória.
+# As ferramentas e a Central usam a largura disponível na janela.
 win.resize(1450, 850)
 for route, titles in (("repair", ("Reparar imagem com DISM", "Reparar arquivos com SFC", "Examinar disco do sistema")),
                       ("restore", ("Restaurar ajustes do Registro", "Restaurar serviços", "Restaurar ajustes salvos"))):
@@ -135,17 +194,24 @@ win.goto("programs")
 app.processEvents()
 first, second, third, fourth = win.all_program_cards[:4]
 assert first.y() == second.y() == third.y() < fourth.y()
-win.resize(1050, 750)
-win.splitter.setSizes([245, 802])
+normal_card_width = first.width()
+win.resize(1920, 850)
 app.processEvents()
-assert first.y() == second.y() < third.y() == fourth.y()
+viewport = win.pages["programs"].viewport()
+left = first.mapTo(viewport, QPoint()).x()
+right = viewport.width() - third.mapTo(viewport, third.rect().topRight()).x() - 1
+heading = win.pages["programs"].findChild(QLabel, "Title")
+assert abs(left - right) <= 3 and left > 22, (left, right)
+assert heading.mapTo(viewport, QPoint()).x() == left
+assert first.y() == second.y() == third.y() < fourth.y()
+assert first.width() == normal_card_width <= 395
+
 win.goto("repair")
 win.resize(810, 680)
-win.splitter.setSizes([365, 442])
 win.goto("programs")
 app.processEvents()
 assert first.mapTo(win.pages["programs"].viewport(), QPoint()).y() < 260
-assert first.x() == second.x() and first.y() < second.y()
+assert first.y() == second.y() < third.y() == fourth.y()
 assert first.height() >= 100, first.size()
 for card in win.all_program_cards:
     for item in card.findChildren(QLabel):
@@ -161,7 +227,7 @@ app.processEvents()
 app.processEvents()
 viewport = win.pages["programs"].viewport()
 assert first.mapTo(viewport, first.rect().topRight()).x() < viewport.width()
-assert first.x() == second.x() and first.y() < second.y()
+assert first.y() == second.y() < third.y()
 status.hide()
 win.goto("winutil")
 app.processEvents()
@@ -177,7 +243,6 @@ logs = next(button for button in win.pages["winutil"].findChildren(QPushButton)
 assert card_bottom.x() <= 24
 assert 0 < logs.mapTo(viewport, QPoint()).y() - card_bottom.y() <= 25
 win.resize(1450, 850)
-win.splitter.setSizes([220, 1227])
 win.goto("drivers")
 app.processEvents()
 driver_cards = win.pages["drivers"].findChildren(QFrame, "Card")
@@ -209,11 +274,22 @@ with tempfile.TemporaryDirectory() as directory:
     output = win.clean_output.toPlainText()
     assert "Lixeira: já vazia" in output and "Cache de ícones: 1 removido" in output
     assert not shader.exists() and not icons.exists() and dxcache.is_dir()
-win.resize(930, 610)
+win.goto("programs")
+win.resize(810, 610)
 app.processEvents()
 win.showMaximized()
 app.processEvents()
 assert win.isMaximized(), 'Nao maximizou'
+viewport = win.pages["programs"].viewport()
+assert first.mapTo(viewport, first.rect().topRight()).x() < viewport.width()
+if viewport.width() >= 900:
+    assert first.y() == second.y() == third.y() < fourth.y()
+    left = first.mapTo(viewport, QPoint()).x()
+    right = viewport.width() - third.mapTo(viewport, third.rect().topRight()).x() - 1
+    assert abs(left - right) <= 3
+win.showNormal()
+app.processEvents()
+assert first.y() == second.y() < third.y()
 win.close()
 print('Navegacao, redimensionamento, maximizar e icones Qt: OK')
 

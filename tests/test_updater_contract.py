@@ -34,19 +34,13 @@ class UpdateContract(unittest.TestCase):
         ast.parse(APP)
         ast.parse((ROOT / 'src/cleaner.py').read_text(encoding='utf-8'))
     def test_supported_features(self):
-        for name in ('QSplitter', 'QStackedWidget', 'QScrollArea', 'resizeEvent', 'QMainWindow',
+        for name in ('QStackedWidget', 'QScrollArea', 'resizeEvent', 'QMainWindow',
                      '"Brave Browser", "brave"', '"NVIDIA App", "nvidia"', 'CleanerThread', 'confirmar(self,'):
             self.assertIn(name, APP)
     def test_version_contract(self):
         ver = (ROOT / 'VERSION').read_text().strip()
         self.assertIn(f'APP_VERSION = "{ver}"', APP)
         self.assertEqual(len(re.findall(r'^APP_VERSION\s*=', APP, re.MULTILINE)), 1)
-    def test_programs_right_after_home(self):
-        section = APP.split("NAV_SECTIONS = [", 1)[1].split("LEGACY = {", 1)[0]
-        self.assertLess(section.index('("home", "Início"'), section.index('("programs", "Programas"'))
-        self.assertLess(section.index('("programs", "Programas"'), section.index('("gamer", "Modo Gamer"'))
-        self.assertNotIn('("APLICATIVOS",', section)
-
     def test_update_stage_filename_readable(self):
         self.assertIn("Join-Path $sessionDir 'Callas Optimizer.exe'", UPDATER)
         self.assertIn('Join-Path $stageDir $latest.Tag', UPDATER)
@@ -201,19 +195,6 @@ Download-Verified $latest (Join-Path $env:LOCALAPPDATA 'asset.exe')
         self.assertLess(UPDATER.index('Download-Verified $latest $staged'), UPDATER.index("Status 'READY'"))
         self.assertLess(UPDATER.index("Status 'READY'"), UPDATER.index(wait_for_captured_process))
         self.assertIn('QApplication.quit()', APP)
-    def test_maintains_13_menu_routes(self):
-        nav = APP.split("NAV_SECTIONS = [", 1)[1].split("TOOL_PAGES = {", 1)[0]
-        for route, title in (
-            ("gamer", "Modo Gamer"), ("edge", "Microsoft Edge"),
-            ("windows_update", "Windows Update"), ("network", "Rede e DNS"),
-            ("privacy", "Privacidade"), ("repair", "Reparar Windows"),
-            ("clean", "Limpeza Total"), ("classic", "Menu clássico"),
-            ("shutdown", "Desligamento"), ("winutil", "WinUtil"),
-            ("updates", "Atualizações"), ("restore_point", "Ponto de restauração"),
-            ("restore", "Restaurar padrões"),
-        ):
-            self.assertIn(f'("{route}", "{title}"', nav)
-        self.assertNotRegex(nav, r'\("[^"]+",\s*"[0-9]+\s')
     def test_source_assets_present(self):
         for p in ('assets/icons/brave.svg', 'assets/icons/nvidia.svg', 'assets/icons/callas.svg',
                   'src/windows_actions.py', 'src/updater.ps1',

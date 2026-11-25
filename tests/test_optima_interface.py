@@ -22,10 +22,6 @@ class OptimaInterfaceContract(unittest.TestCase):
         self.assertIn('startupapps', gui)
         self.assertIn('Armazenamento do sistema', gui)
 
-        for title, route in [('Clean', 'clean'), ('Boost', 'gamer'), ('Repair', 'repair'),
-                             ('Apps', 'programs'), ('Drivers', 'drivers'), ('Atualizar', 'updates')]:
-            self.assertIn(f'"{title}"', gui)
-            self.assertIn(f'"{route}"', gui)
         self.assertNotIn('92% Otimizado', gui)
 
     def test_new_program_cards_and_sources(self):
