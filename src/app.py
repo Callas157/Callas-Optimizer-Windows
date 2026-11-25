@@ -19,9 +19,9 @@ from PySide6.QtCore import QByteArray, QEvent, QFileInfo, QRect, QRectF, QSettin
 from PySide6.QtGui import QBrush, QColor, QConicalGradient, QIcon, QLinearGradient, QPainter, QPainterPath, QPen, QPixmap
 from PySide6.QtSvg import QSvgRenderer
 from PySide6.QtWidgets import (
-    QApplication, QButtonGroup, QCheckBox, QDialog, QFileDialog, QFileIconProvider, QFrame, QGridLayout, QHBoxLayout,
+    QApplication, QCheckBox, QDialog, QFileDialog, QFileIconProvider, QFrame, QGridLayout, QHBoxLayout,
     QLabel, QLayout, QMainWindow, QMessageBox, QPlainTextEdit, QProgressBar, QPushButton,
-    QScrollArea, QSizePolicy, QSpinBox, QSplitter, QStackedWidget, QVBoxLayout, QWidget,
+    QScrollArea, QSizePolicy, QSpinBox, QStackedWidget, QVBoxLayout, QWidget,
 )
 
 from cleaner import (
@@ -40,37 +40,38 @@ from network_dns import DNS_PROVIDERS, DNS_REVERSALS
 from task_progress import TaskProgressBar
 from virtualbox_templates import create_test_vms, VM_NAMES, get_vboxmanage
 
-APP_VERSION = "8.9.30"
+APP_VERSION = "8.9.31"
 REPO = "Callas157/Callas-Optimizer-Windows"
 PROJECT_URL = f"https://github.com/{REPO}"
 DATA_DIR = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "CallasTeck"
 NATIVE_PROGRAM_ICONS = {"steam", "discord", "epic", "medal", "lghub", "wise", "virtualbox"}
 
-# Um id selecionado corresponde a UMA pagina, com conteudo proprio.
-NAV_SECTIONS = [
-    ("", [
-        ("home", "Início", "⌂"),
-        ("programs", "Programas", "▦"),
-        ("clean", "Limpeza Total", "♻"),
-        ("gamer", "Modo Gamer", "⚡"),
-        ("repair", "Reparar Windows", "✚"),
-        ("drivers", "Drivers", "▣"),
-        ("updates", "Atualizações", "↓"),
-        ("logs", "Registros", "≡"),
-        ("about", "Sobre", "ⓘ"),
-    ]),
-    ("FERRAMENTAS DO WINDOWS", [
-        ("edge", "Microsoft Edge", "◇"),
-        ("windows_update", "Windows Update", "↻"),
-        ("network", "Rede e DNS", "◎"),
-        ("privacy", "Privacidade", "◉"),
-        ("classic", "Menu clássico", "▤"),
-        ("shutdown", "Desligamento", "⏻"),
-        ("winutil", "WinUtil", "▣"),
-        ("restore_point", "Ponto de restauração", "✦"),
-        ("restore", "Restaurar padrões", "↩"),
-    ]),
-]
+HOME_SHORTCUTS = (
+    ("programs", "Programas", "Instale e atualize seus aplicativos."),
+    ("clean", "Limpeza Total", "Libere espaço removendo arquivos temporários."),
+    ("gamer", "Modo Gamer", "Ajustes de desempenho e energia para jogos."),
+    ("repair", "Reparar Windows", "Diagnóstico e recuperação do sistema."),
+    ("drivers", "Drivers", "Acesse ferramentas oficiais de atualização."),
+)
+
+WINDOWS_SHORTCUTS = (
+    ("network", "Rede e DNS"),
+    ("windows_update", "Windows Update"),
+    ("startupapps", "Inicialização"),
+    ("privacy", "Privacidade"),
+    ("shutdown", "Desligamento"),
+    ("edge", "Microsoft Edge"),
+    ("classic", "Menu clássico"),
+    ("winutil", "WinUtil"),
+    ("restore_point", "Ponto de restauração"),
+    ("restore", "Restaurar padrões"),
+)
+
+APP_SHORTCUTS = (
+    ("updates", "Atualizações do Callas"),
+    ("logs", "Registros"),
+    ("about", "Sobre"),
+)
 
 TOOL_PAGES = {
     "gamer": ("Modo Gamer", "Ajustes para jogos, Xbox, hibernação e plano de energia."),
@@ -102,13 +103,9 @@ ACTION_CARD_KEYS = {undo: code for code, (undo, _, _) in REVERSIBLE_ACTIONS.item
 STYLE = """
 * { font-family: 'Segoe UI'; font-size: 13px; color: #e8ecff; }
 QMainWindow, QWidget#MainRoot { background: #07091e; }
-QFrame#Sidebar { background: qlineargradient(x1:0,y1:0,x2:0.45,y2:1,stop:0 #101226,stop:.73 #0d1023,stop:1 #191347); border-right: 1px solid #363468; }
 QFrame#Topbar { background: #0a0e24; border-bottom: 1px solid #282449; }
 QFrame#Card { background: #111b37; border: 1px solid #403a71; border-radius: 15px; }
 QFrame#DashboardPanel { background: qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 #15173b,stop:1 #0c1e3f); border: 1px solid #595197; border-radius: 15px; }
-QLabel#Metric { font-size: 19px; font-weight: 700; color: #f2f9ff; }
-QFrame#QuickCard { background: qlineargradient(x1:0,y1:0,x2:.7,y2:1,stop:0 #28134e,stop:.64 #121332,stop:1 #321469); border: 1px solid #a466f1; border-radius: 16px; }
-QFrame#QuickCard[accent="cyan"] { background: qlineargradient(x1:0,y1:0,x2:.7,y2:1,stop:0 #0c2d56,stop:.64 #0e1837,stop:1 #0b3a70); border-color: #4c9bea; }
 QFrame#Hero { background: qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 #171b3b,stop:.5 #0a1028,stop:.77 #171044,stop:1 #0b2148); border: 1px solid #6255ba; border-radius: 18px; }
 QLabel#Header { font-size: 31px; font-weight: 700; color: #f8f7ff; }
 QLabel#Title { font-size: 27px; font-weight: 700; color: #f9f8ff; }
@@ -130,18 +127,16 @@ QPushButton#Primary[compact="true"]:disabled { color: #a8b9d8; background: #1b22
 QDialog#ShutdownDialog { background: #111b37; }
 QSpinBox#ShutdownMinutes { background: #0a1026; border: 1px solid #635e9b; border-radius: 8px; padding: 7px 9px; }
 QLabel#ActionWarning { color: #e6c890; }
-QPushButton#Quick { text-align: left; background: transparent; border: none; padding: 4px 0; color: #ffffff; font-size: 21px; font-weight: 700; }
-QPushButton#Quick:hover { background: #3a2877; }
-QPushButton#Nav { background: transparent; border: none; border-radius: 9px; padding: 9px 12px; text-align: left; color: #d0d7f6; font-size: 13px; }
-QPushButton#Nav:hover { background: #342563; color: white; }
-QPushButton#Nav:checked { background: qlineargradient(x1:0,y1:0,x2:1,y2:0,stop:0 #6829a6,stop:1 #235ec5); border: 1px solid #bb73ff; color: white; }
+QPushButton#QuickCard { background: qlineargradient(x1:0,y1:0,x2:.7,y2:1,stop:0 #28134e,stop:.64 #121332,stop:1 #321469); border: 1px solid #a466f1; border-radius: 16px; padding: 0; }
+QPushButton#QuickCard[accent="cyan"] { background: qlineargradient(x1:0,y1:0,x2:.7,y2:1,stop:0 #0c2d56,stop:.64 #0e1837,stop:1 #0b3a70); border-color: #4c9bea; }
+QPushButton#QuickCard:hover, QPushButton#QuickCard:focus { border: 2px solid #e6aaff; }
+QPushButton#QuickCard[accent="cyan"]:hover, QPushButton#QuickCard[accent="cyan"]:focus { border: 2px solid #8deaff; }
+QPushButton#ToolShortcut { text-align: left; }
 QScrollArea { border: none; background: transparent; }
 QWidget#PageContent { background: #07091e; }
-QWidget#NavContent { background: #101226; }
 QScrollBar:vertical { background: #10142d; width: 9px; }
 QScrollBar::handle:vertical { background: #6154a0; border-radius: 4px; min-height: 35px; }
 QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
-QSplitter::handle { background: #3f295d; width: 3px; }
 QCheckBox { spacing: 11px; font-size: 13px; }
 QCheckBox::indicator { width: 19px; height: 19px; }
 QProgressBar { border: 1px solid #5a4b9e; border-radius: 7px; text-align: center; background: #101631; min-height: 16px; }
@@ -200,6 +195,20 @@ def svg_icon(name: str, pixels: int = 64) -> QIcon:
     renderer.render(painter)
     painter.end()
     return QIcon(result)
+
+
+def header_logo() -> QPixmap:
+    source = svg_icon("callas", 70).pixmap(60, 60)
+    rounded = QPixmap(source.size())
+    rounded.setDevicePixelRatio(source.devicePixelRatio())
+    rounded.fill(Qt.GlobalColor.transparent)
+    bounds = QRectF(0, 0, source.deviceIndependentSize().width(), source.deviceIndependentSize().height())
+    with QPainter(rounded) as painter:
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QBrush(source))
+        painter.drawRoundedRect(bounds, 11, 11)
+    return rounded
 
 
 def runtime_files() -> None:
@@ -355,15 +364,6 @@ class CleanerThread(QThread):
         return stats
 
 
-NAV_ICONS = {
-    "home": "⌂", "gamer": "⚡", "edge": "◇", "windows_update": "↻",
-    "network": "◎", "privacy": "◈", "repair": "✚", "clean": "♻",
-    "classic": "▤", "shutdown": "⏻", "winutil": "▣",
-    "updates": "↓", "restore_point": "✦", "restore": "↩",
-    "programs": "▦", "drivers": "▣", "logs": "≡", "about": "ⓘ",
-}
-
-
 def menu_icon(route: str, color: str = "#c7cefb") -> QIcon:
     """Ícones vetoriais monocromáticos com traçado consistente."""
     # Ícones com fundo próprio, independentes das fontes de emojis do Windows.
@@ -372,6 +372,7 @@ def menu_icon(route: str, color: str = "#c7cefb") -> QIcon:
         "gamer": '<path d="M5 12h14l2 7-5-2-2-2h-4l-2 2-5 2z"/><path d="M8 12V9m-2 1h4m7 0h.01"/>',
         "edge": '<circle cx="12" cy="12" r="9"/><path d="M5 16c3-7 12-7 14-2M8 19l4-5"/>',
         "windows_update": '<path d="M20 11a8 8 0 0 0-14-5L4 8m0-5v5h5M4 13a8 8 0 0 0 14 5l2-2m0 5v-5h-5"/>',
+        "startupapps": '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="m10 8 6 4-6 4z"/>',
         "network": '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c5 5 5 13 0 18M12 3c-5 5-5 13 0 18"/>',
         "privacy": '<path d="M12 2 4 6v6c0 6 4 9 8 10 4-1 8-4 8-10V6z"/><path d="m9 12 2 2 4-4"/>',
         "repair": '<path d="m4 20 9-9M14 3a5 5 0 0 0 6 6l-6 6-5-5zM3 21l4-1"/>',
@@ -439,14 +440,29 @@ def action_button(text: str, function, primary: bool = False, *, compact: bool =
     return button
 
 
+class ShortcutCard(QPushButton):
+    def sizeHint(self):
+        return self.layout().sizeHint()
+
+    def minimumSizeHint(self):
+        return self.layout().minimumSize()
+
+    def heightForWidth(self, width):
+        return self.layout().heightForWidth(width)
+
+
 class CompactCardLayout(QLayout):
     """Measure and arrange each row using the same width, including wrapped labels."""
+
+    MAX_COLUMNS = 3
+    PREFERRED_CARD_WIDTH = 395
+    GAP = 12
 
     def __init__(self, parent: QWidget):
         super().__init__(parent)
         self.items = []
         self.setContentsMargins(0, 0, 0, 0)
-        self.setSpacing(12)
+        self.setSpacing(self.GAP)
 
     def addItem(self, item):
         self.items.append(item)
@@ -475,13 +491,17 @@ class CompactCardLayout(QLayout):
         return size
 
     def sizeHint(self):
-        columns = min(3, self.count())
-        width = columns * 395 + max(0, columns - 1) * self.spacing()
+        width = self.preferred_width(self.count())
         return QSize(width, self.heightForWidth(width))
+
+    @classmethod
+    def preferred_width(cls, count: int) -> int:
+        columns = min(cls.MAX_COLUMNS, count)
+        return columns * cls.PREFERRED_CARD_WIDTH + max(0, columns - 1) * cls.GAP
 
     def _rows(self, width: int):
         gap = self.spacing()
-        columns = min(3, max(1, (width + gap) // (275 + gap)))
+        columns = min(self.MAX_COLUMNS, max(1, (width + gap) // (275 + gap)))
         card_width = max(0, (width - (columns - 1) * gap) // columns)
         for start in range(0, self.count(), columns):
             items = self.items[start:start + columns]
@@ -561,12 +581,14 @@ class MemoryRing(QWidget):
     def __init__(self):
         super().__init__()
         self.percent = None
+        self.capacity = ""
         self.setFixedSize(146, 146)
         self.setAccessibleName("Uso de memória RAM")
 
-    def set_percent(self, percent):
+    def set_usage(self, percent: int, capacity: str):
         self.percent = percent
-        self.setAccessibleDescription("Indisponível" if percent is None else f"{percent}%")
+        self.capacity = capacity
+        self.setAccessibleDescription(f"{percent}% em uso, {capacity}")
         self.update()
 
     def paintEvent(self, event):
@@ -591,11 +613,12 @@ class MemoryRing(QWidget):
             font.setPixelSize(35)
             painter.setFont(font)
             value = "—" if self.percent is None else f"{self.percent}%"
-            painter.drawText(QRectF(0, 36, 146, 48), Qt.AlignmentFlag.AlignCenter, value)
+            painter.drawText(QRectF(0, 28, 146, 48), Qt.AlignmentFlag.AlignCenter, value)
             font.setBold(False)
             font.setPixelSize(13)
             painter.setFont(font)
-            painter.drawText(QRectF(0, 83, 146, 23), Qt.AlignmentFlag.AlignCenter, "RAM em uso")
+            painter.drawText(QRectF(0, 75, 146, 21), Qt.AlignmentFlag.AlignCenter, "RAM em uso")
+            painter.drawText(QRectF(0, 97, 146, 19), Qt.AlignmentFlag.AlignCenter, self.capacity)
 
 
 class WindowsMemoryStatus(ctypes.Structure):
@@ -674,27 +697,15 @@ class MainWindow(QMainWindow):
         self.update_mode = ""
         self.update_status = DATA_DIR / ("updater-" + uuid.uuid4().hex + ".status")
         self.update_elapsed = 0
-        self.nav_buttons: dict[str, QPushButton] = {}
-        self.pages: dict[str, QWidget] = {}
+        self.pages: dict[str, QScrollArea] = {}
+        self.page_titles: dict[str, str] = {}
         self.navigation_history: list[str] = []
         self.navigation_index = -1
         self.shutdown_countdown = QTimer(self)
         self.shutdown_countdown.setInterval(1000)
         self.shutdown_countdown.timeout.connect(self.refresh_shutdown_timer)
 
-        root = QWidget()
-        root.setObjectName("MainRoot")
-        self.setCentralWidget(root)
-        root_layout = QHBoxLayout(root)
-        root_layout.setContentsMargins(0, 0, 0, 0)
-        root_layout.setSpacing(0)
-        self.splitter = QSplitter(Qt.Orientation.Horizontal)
-        root_layout.addWidget(self.splitter)
-        self._sidebar()
         self._main_area()
-        self.splitter.setSizes([220, 1230])
-        self.splitter.setStretchFactor(0, 0)
-        self.splitter.setStretchFactor(1, 1)
         self.goto("home")
         QApplication.instance().installEventFilter(self)
 
@@ -707,55 +718,10 @@ class MainWindow(QMainWindow):
         if os.environ.get("CALLAS_SMOKE") != "1" and self.settings.value("auto_update", True, type=bool):
             QTimer.singleShot(1800, lambda: self.check_update(False))
 
-    def _sidebar(self):
-        sidebar = QFrame()
-        sidebar.setObjectName("Sidebar")
-        sidebar.setMinimumWidth(205)
-        sidebar.setMaximumWidth(365)
-        shell = QVBoxLayout(sidebar)
-        shell.setContentsMargins(15, 19, 12, 14)
-        shell.setSpacing(14)
-        brand = QVBoxLayout()
-        brand.setSpacing(8)
-        logo = QLabel()
-        logo.setPixmap(svg_icon("callas", 96).pixmap(79, 79))
-        brand.addWidget(logo, alignment=Qt.AlignmentFlag.AlignHCenter)
-        name = label('Callas <span style="color:#c874ff">Optima</span>', "CardTitle")
-        brand.addWidget(name, alignment=Qt.AlignmentFlag.AlignHCenter)
-        shell.addLayout(brand)
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        content = QWidget()
-        content.setObjectName("NavContent")
-        nav = QVBoxLayout(content)
-        nav.setContentsMargins(0, 0, 0, 0)
-        nav.setSpacing(2)
-        self.nav_group = QButtonGroup(self)
-        self.nav_group.setExclusive(True)
-        for section, entries in NAV_SECTIONS:
-            if section:
-                heading = label(section, "Section")
-                heading.setContentsMargins(8, 12, 0, 4)
-                nav.addWidget(heading)
-            for route, title, glyph in entries:
-                btn = action_button(title, lambda _=False, key=route: self.goto(key))
-                btn.setIcon(menu_icon(route))
-                btn.setIconSize(QSize(23, 23))
-                btn.setMinimumHeight(35)
-                btn.setObjectName("Nav")
-                btn.setCheckable(True)
-                self.nav_group.addButton(btn)
-                self.nav_buttons[route] = btn
-                nav.addWidget(btn)
-        nav.addStretch()
-        scroll.setWidget(content)
-        shell.addWidget(scroll, 1)
-        shell.addWidget(label("v" + APP_VERSION + "   •   Windows x64", "Muted"))
-        self.splitter.addWidget(sidebar)
-
     def _main_area(self):
         central = QWidget()
+        central.setObjectName("MainRoot")
+        self.setCentralWidget(central)
         col = QVBoxLayout(central)
         col.setContentsMargins(0, 0, 0, 0)
         col.setSpacing(0)
@@ -764,7 +730,7 @@ class MainWindow(QMainWindow):
         bh = QHBoxLayout(bar)
         bh.setContentsMargins(25, 15, 24, 15)
         logo = QLabel()
-        logo.setPixmap(svg_icon("callas", 70).pixmap(60, 60))
+        logo.setPixmap(header_logo())
         bh.addWidget(logo)
         bh.addSpacing(6)
         titles = QVBoxLayout()
@@ -772,7 +738,10 @@ class MainWindow(QMainWindow):
         titles.addWidget(label('Callas <span style="color:#7ca7ff">Optima</span>', "Header"))
         titles.addWidget(label("Desempenho e renovação"))
         bh.addLayout(titles, 1)
-        self.top_check = action_button("VERIFICAR ATUALIZAÇÃO", lambda: self.check_update(True))
+        self.home_button = action_button("Início", lambda: self.goto("home"), compact=True)
+        self.home_button.setIcon(menu_icon("home"))
+        bh.addWidget(self.home_button)
+        self.top_check = action_button("Verificar atualização", lambda: self.check_update(True), compact=True)
         bh.addWidget(self.top_check)
         bh.addWidget(label("v" + APP_VERSION, "Section"))
         col.addWidget(bar)
@@ -790,22 +759,29 @@ class MainWindow(QMainWindow):
         fh.addWidget(self.status_label, 1)
         fh.addWidget(label("Windows 11 x64", "Section", wrap=False))
         col.addWidget(foot)
-        self.splitter.addWidget(central)
 
-    def _page(self, route: str, title: str, description: str) -> QVBoxLayout:
+    def _page(self, route: str, title: str, description: str = "", *,
+              content_width: int | None = None) -> QVBoxLayout:
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         content = QWidget()
         content.setObjectName("PageContent")
         layout = QVBoxLayout(content)
-        layout.setContentsMargins(22, 18, 22, 22)
+        margin = 22
+        layout.setContentsMargins(margin, 18, margin, margin)
         layout.setSpacing(15)
+        if content_width is not None:
+            content.setMaximumWidth(content_width + 2 * margin)
+            scroll.viewport().setObjectName("PageContent")
+            scroll.setAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop)
         if route != "home":
             layout.addWidget(label(title, "Title"))
-            layout.addWidget(label(description, "Muted"))
+        if description:
+            layout.addWidget(label(description))
         scroll.setWidget(content)
         self.pages[route] = scroll
+        self.page_titles[route] = title
         self.stack.addWidget(scroll)
         return layout
 
@@ -822,175 +798,127 @@ class MainWindow(QMainWindow):
         self.refresh_native_actions()
 
     def _home_page(self):
-        """Painel Fênix interativo; todos os atalhos usam páginas da mesma janela."""
-        col = self._page("home", "Callas Optima", "")
+        col = self._page("home", "Início", content_width=1550)
         hero, hero_box = card_layout("Hero")
-        hero_box.setContentsMargins(23, 12, 18, 12)
+        hero_box.setContentsMargins(22, 14, 22, 14)
         row = QHBoxLayout()
-        row.setSpacing(22)
+        row.setSpacing(20)
 
         self.memory_ring = MemoryRing()
         row.addWidget(self.memory_ring, alignment=Qt.AlignmentFlag.AlignVCenter)
-        text_col = QVBoxLayout()
-        text_col.setSpacing(8)
-        text_col.addStretch()
-        text_col.addWidget(label("Visão geral do sistema", "HeroTitle"))
-        text_col.addWidget(label("Uso atual dos recursos do Windows."))
+        metrics = QVBoxLayout()
+        metrics.setSpacing(7)
+        metrics.addWidget(label("Visão geral do sistema", "HeroTitle"))
         self.live_cpu = label("CPU  —", "SystemMetric")
-        self.live_memory = label("RAM  —", "SystemMetric")
-        self.live_storage = label("Disco  —", "SystemMetric")
-        stats = QHBoxLayout()
-        stats.setSpacing(16)
-        for metric in (self.live_cpu, self.live_memory, self.live_storage):
-            stats.addWidget(metric)
-        text_col.addLayout(stats)
-        text_col.addStretch()
-        row.addLayout(text_col, 2)
+        metrics.addWidget(self.live_cpu)
+        metrics.addSpacing(4)
+        metrics.addWidget(label("Armazenamento do sistema", "SystemMetric"))
+        self.live_storage = label("—")
+        metrics.addWidget(self.live_storage)
+        self.storage_bar = QProgressBar()
+        self.storage_bar.setAccessibleName("Armazenamento do sistema em uso")
+        self.storage_bar.setFormat("%p% usado")
+        metrics.addWidget(self.storage_bar)
+        row.addLayout(metrics, 1)
 
-        art_box = QVBoxLayout()
-        art_box.setSpacing(0)
+        self.hero_art = phoenix_art()
         self.hero_phoenix = QLabel()
-        self.hero_phoenix.setPixmap(phoenix_art().scaled(
-            275, 160, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
         self.hero_phoenix.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.hero_phoenix.setAccessibleName("Fênix Callas Optima")
-        art_box.addWidget(self.hero_phoenix)
-        art_box.addWidget(action_button("Explorar otimização", lambda: self.goto("gamer"), True))
-        row.addLayout(art_box, 1)
+        row.addWidget(self.hero_phoenix, alignment=Qt.AlignmentFlag.AlignVCenter)
         hero_box.addLayout(row)
         col.addWidget(hero)
+
+        col.addWidget(label("Atalhos principais", "CardTitle"))
+        self.home_quick_grid = QGridLayout()
+        self.home_quick_grid.setSpacing(12)
+        self.home_tiles = []
+        for index, (route, title, description) in enumerate(HOME_SHORTCUTS):
+            tile = ShortcutCard()
+            tile.setCursor(Qt.CursorShape.PointingHandCursor)
+            tile.clicked.connect(lambda _=False, key=route: self.goto(key))
+            tile_box = QVBoxLayout(tile)
+            tile_box.setContentsMargins(16, 15, 16, 15)
+            tile_box.setSpacing(8)
+            tile.setObjectName("QuickCard")
+            tile.setAccessibleName(title)
+            tile.setAccessibleDescription(description)
+            policy = QSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
+            policy.setHeightForWidth(True)
+            tile.setSizePolicy(policy)
+            cyan = index % 2 == 1
+            tile.setProperty("accent", "cyan" if cyan else "violet")
+            icon = QLabel()
+            icon_route = "boost" if route == "gamer" else route
+            icon.setPixmap(menu_icon(icon_route, "#37deff" if cyan else "#e6aaff").pixmap(32, 32))
+            for item in (icon, label(title + "  ›", "CardTitle", wrap=False), label(description)):
+                item.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+                tile_box.addWidget(item)
+            tile_box.addStretch()
+            self.home_tiles.append(tile)
+        col.addLayout(self.home_quick_grid)
+
+        tools, tools_box = card_layout("DashboardPanel", compact=True)
+        tools_box.addWidget(label("Ferramentas do Windows", "CardTitle"))
+        self.home_tools_grid = QGridLayout()
+        self.home_tools_grid.setSpacing(8)
+        self.home_tools = tools
+        self.home_tool_buttons = []
+        for route, title in WINDOWS_SHORTCUTS:
+            action = self.open_windows_settings if route == "startupapps" else self.goto
+            button = action_button(title, lambda _=False, run=action, key=route: run(key), compact=True)
+            button.setObjectName("ToolShortcut")
+            button.setIcon(menu_icon(route))
+            self.home_tool_buttons.append(button)
+        tools_box.addLayout(self.home_tools_grid)
+        col.addWidget(tools)
+
+        footer = QHBoxLayout()
+        footer.setSpacing(8)
+        footer_buttons = []
+        for route, title in APP_SHORTCUTS:
+            button = action_button(title, lambda _=False, key=route: self.goto(key), compact=True)
+            button.setIcon(menu_icon(route))
+            footer.addWidget(button)
+            footer_buttons.append(button)
+        footer.addStretch()
+        col.addLayout(footer)
+        col.addStretch()
 
         self._cpu_snapshot = None
         self.home_timer = QTimer(self)
         self.home_timer.setInterval(2500)
         self.home_timer.timeout.connect(self.refresh_system_metrics)
-        self.refresh_system_metrics()
-
-        self.home_quick_grid = QGridLayout()
-        self.home_quick_grid.setSpacing(12)
-        self.home_tiles = []
-        shortcuts = [
-            ("Clean", "Limpeza segura de arquivos temporários", "clean"),
-            ("Boost", "Opções de desempenho e jogos", "gamer"),
-            ("Repair", "Diagnóstico e reparo do Windows", "repair"),
-            ("Apps", "Instalar programas oficiais", "programs"),
-            ("Drivers", "NVIDIA App e Windows Update", "drivers"),
-            ("Atualizar", "Verificar versões do Callas Optima", "updates"),
-        ]
-        for index, (title, description, route) in enumerate(shortcuts):
-            tile, tile_box = card_layout("QuickCard")
-            cyan = index % 2 == 1
-            tile.setProperty("accent", "cyan" if cyan else "violet")
-            tile_box.setContentsMargins(16, 12, 16, 12)
-            tile_box.setSpacing(3)
-            icon = QLabel()
-            icon_route = {"gamer": "boost", "updates": "windows_update"}.get(route, route)
-            icon.setPixmap(menu_icon(icon_route, "#37deff" if cyan else "#e6aaff").pixmap(34, 34))
-            tile_box.addWidget(icon)
-            button = action_button(
-                title + "  ›", lambda _=False, destination=route: self.goto(destination)
-            )
-            button.setObjectName("Quick")
-            tile_box.addWidget(button)
-            tile_box.addWidget(label(description, "Muted"))
-            tile_box.addStretch()
-            self.home_tiles.append(tile)
-        col.addLayout(self.home_quick_grid)
-
-        self.home_detail_grid = QGridLayout()
-        self.home_detail_grid.setSpacing(12)
-        self.home_panels = []
-
-        health, health_box = card_layout("DashboardPanel")
-        health_box.addWidget(label("Saúde do sistema", "CardTitle"))
-        health_box.addWidget(label(
-            "Verifique arquivos do Windows e componentes do sistema usando "
-            "as ferramentas oficiais de diagnóstico.", "Muted"
-        ))
-        health_box.addWidget(label(
-            "A integridade só é confirmada depois que o diagnóstico é executado."
-        ))
-        health_box.addWidget(action_button(
-            "ABRIR DIAGNÓSTICOS", lambda: self.goto("repair"), True
-        ))
-        health_box.addStretch()
-        self.home_panels.append(health)
-
-        startup, startup_box = card_layout("DashboardPanel")
-        startup_box.addWidget(label("Programas de inicialização", "CardTitle"))
-        startup_box.addWidget(label(
-            "Gerencie os aplicativos que iniciam com o Windows na tela oficial "
-            "de Configurações.", "Muted"
-        ))
-        startup_box.addWidget(action_button(
-            "GERENCIAR INICIALIZAÇÃO",
-            lambda: self.open_windows_settings("startupapps")
-        ))
-        self.home_panels.append(startup)
-
-        storage, storage_box = card_layout("DashboardPanel")
-        storage_box.addWidget(label("Armazenamento do sistema", "CardTitle"))
-        try:
-            drive = Path(os.environ.get("SystemDrive", "C:") + "\\") if os.name == "nt" else Path.home()
-            usage = shutil.disk_usage(drive)
-            free_gib = usage.free / (1024 ** 3)
-            total_gib = usage.total / (1024 ** 3)
-            storage_box.addWidget(label(
-                f"{free_gib:.1f} GB livres de {total_gib:.1f} GB", "Metric"
-            ))
-            occupied = int(100 * (usage.total - usage.free) / usage.total)
-            bar = QProgressBar()
-            bar.setValue(occupied)
-            storage_box.addWidget(bar)
-        except (OSError, ZeroDivisionError):
-            storage_box.addWidget(label("Armazenamento indisponível nesta sessão."))
-        storage_box.addWidget(action_button(
-            "ABRIR LIMPEZA", lambda: self.goto("clean")
-        ))
-        self.home_panels.append(storage)
-
-        gaming, gaming_box = card_layout("DashboardPanel")
-        gaming_box.addWidget(label("Modo Jogo", "CardTitle"))
-        gaming_box.addWidget(label(
-            "Acesse ajustes de energia, jogos e serviços. "
-            "Nenhuma mudança é aplicada sem sua confirmação.", "Muted"
-        ))
-        gaming_box.addWidget(action_button(
-            "AJUSTES PARA JOGOS", lambda: self.goto("gamer"), True
-        ))
-        self.home_panels.append(gaming)
-
-        tools, tools_box = card_layout("DashboardPanel")
-        tools_box.addWidget(label("Ferramentas rápidas", "CardTitle"))
-        quick_tools = QGridLayout()
-        for position, (title, route) in enumerate((
-            ("Rede e DNS", "network"),
-            ("Privacidade", "privacy"),
-            ("Restauração", "restore_point"),
-            ("Drivers", "drivers"),
-        )):
-            button = action_button(
-                title, lambda _=False, destination=route: self.goto(destination)
-            )
-            quick_tools.addWidget(button, position // 2, position % 2)
-        tools_box.addLayout(quick_tools)
-        self.home_panels.append(tools)
-
-        col.addLayout(self.home_detail_grid)
-        col.addStretch()
-        self._refresh_home_layout(force=True)
+        self._refresh_home_layout()
+        tab_order = [self.pages["home"], *self.home_tiles, *self.home_tool_buttons, *footer_buttons]
+        for previous, current in zip(tab_order, tab_order[1:]):
+            self.setTabOrder(previous, current)
 
     def refresh_system_metrics(self):
-        if os.name != "nt":
-            return
+        if os.name == "nt":
+            self._refresh_windows_metrics()
+        drive = Path(os.environ.get("SystemDrive", "C:") + "\\") if os.name == "nt" else Path.home()
+        try:
+            usage = shutil.disk_usage(drive)
+            occupied = (usage.total - usage.free) * 100 // usage.total
+        except (OSError, ZeroDivisionError):
+            self.live_storage.setText("Armazenamento indisponível nesta sessão.")
+            self.storage_bar.hide()
+        else:
+            free_gib = usage.free / 1024 ** 3
+            total_gib = usage.total / 1024 ** 3
+            self.live_storage.setText(f"{free_gib:.1f} GB livres de {total_gib:.1f} GB")
+            self.storage_bar.setValue(occupied)
+            self.storage_bar.show()
+
+    def _refresh_windows_metrics(self):
         kernel = ctypes.windll.kernel32
         memory = WindowsMemoryStatus()
         memory.length = ctypes.sizeof(memory)
         if kernel.GlobalMemoryStatusEx(ctypes.byref(memory)):
-            self.memory_ring.set_percent(memory.load)
             total = memory.total / 1024 ** 3
             used = (memory.total - memory.available) / 1024 ** 3
-            self.live_memory.setText(f"RAM\n{used:.1f} / {total:.1f} GB")
+            self.memory_ring.set_usage(memory.load, f"{used:.1f} / {total:.1f} GB")
         idle, system, user = (ctypes.c_ulonglong() for _ in range(3))
         if kernel.GetSystemTimes(ctypes.byref(idle), ctypes.byref(system), ctypes.byref(user)):
             current = idle.value, system.value + user.value
@@ -999,51 +927,50 @@ class MainWindow(QMainWindow):
                 total_delta = current[1] - self._cpu_snapshot[1]
                 if total_delta > 0:
                     usage = max(0, min(100, round(100 * (1 - idle_delta / total_delta))))
-                    self.live_cpu.setText(f"CPU\n{usage}%")
+                    self.live_cpu.setText(f"CPU  {usage}%")
             self._cpu_snapshot = current
-        try:
-            drive = os.environ.get("SystemDrive", "C:")
-            space = shutil.disk_usage(drive + "\\")
-            self.live_storage.setText(f"Disco ({drive})\n{space.free / 1024 ** 3:.0f} GB livres")
-        except OSError:
-            pass
 
-    def _refresh_home_layout(self, force: bool = False):
-        """Mantém os cartões legíveis em janelas pequenas e monitores maiores."""
-        if not hasattr(self, "home_quick_grid"):
+    def _refresh_home_layout(self):
+        if not hasattr(self, "home_tools_grid"):
             return
         width = self.width()
-        profile = "compact" if width < 1120 else ("wide" if width >= 1390 else "medium")
-        if not force and getattr(self, "_home_profile", None) == profile:
+        compact = width < 1050
+        page = self.pages["home"]
+        page_content = page.widget()
+        page_margins = page_content.layout().contentsMargins()
+        tool_margins = self.home_tools.layout().contentsMargins()
+        content_width = min(width - page.verticalScrollBar().sizeHint().width(), page_content.maximumWidth())
+        content_width -= page_margins.left() + page_margins.right()
+        tool_width = content_width - tool_margins.left() - tool_margins.right() - 2 * self.home_tools.frameWidth()
+        quick_columns = self._shortcut_columns(self.home_quick_grid, self.home_tiles, content_width)
+        tool_columns = self._shortcut_columns(self.home_tools_grid, self.home_tool_buttons, tool_width)
+        profile = (compact, quick_columns, tool_columns)
+        if getattr(self, "_home_profile", None) == profile:
             return
         self._home_profile = profile
-        for grid in (self.home_quick_grid, self.home_detail_grid):
+        self.hero_phoenix.setPixmap(self.hero_art.scaled(
+            190 if compact else 275, 120 if compact else 160,
+            Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation,
+        ))
+        for grid, widgets, columns in (
+            (self.home_quick_grid, self.home_tiles, quick_columns),
+            (self.home_tools_grid, self.home_tool_buttons, tool_columns),
+        ):
             while grid.count():
                 grid.takeAt(0)
-        self.hero_phoenix.setVisible(profile != "compact")
-        quick_columns = {"compact": 2, "medium": 3, "wide": 6}[profile]
-        detail_columns = {"compact": 1, "medium": 2, "wide": 3}[profile]
-        for column in range(6):
-            self.home_quick_grid.setColumnStretch(column, int(column < quick_columns))
-            if column < 3:
-                self.home_detail_grid.setColumnStretch(column, int(column < detail_columns))
-        for index, tile in enumerate(self.home_tiles):
-            self.home_quick_grid.addWidget(
-                tile, index // quick_columns, index % quick_columns
-            )
-        if profile == "compact":
-            for index, panel in enumerate(self.home_panels):
-                self.home_detail_grid.addWidget(panel, index, 0)
-        elif profile == "medium":
-            for index, panel in enumerate(self.home_panels):
-                self.home_detail_grid.addWidget(panel, index // 2, index % 2)
-        else:
-            health, startup, storage, gaming, tools = self.home_panels
-            self.home_detail_grid.addWidget(health, 0, 0, 2, 1)
-            self.home_detail_grid.addWidget(startup, 0, 1)
-            self.home_detail_grid.addWidget(gaming, 0, 2)
-            self.home_detail_grid.addWidget(storage, 1, 1)
-            self.home_detail_grid.addWidget(tools, 1, 2)
+            # Dois espaços por cartão permitem centralizar uma última linha incompleta.
+            for column in range(10):
+                grid.setColumnStretch(column, int(column < 2 * columns))
+            for index, widget in enumerate(widgets):
+                row, column = divmod(index, columns)
+                cards_in_row = min(columns, len(widgets) - row * columns)
+                grid.addWidget(widget, row, 2 * column + columns - cards_in_row, 1, 2)
+
+    @staticmethod
+    def _shortcut_columns(grid: QGridLayout, buttons: list[QPushButton], width: int) -> int:
+        gap = grid.spacing()
+        button_width = max(button.minimumSizeHint().width() for button in buttons)
+        return min(5, max(1, (width + gap) // (button_width + gap)))
 
     def open_windows_settings(self, page: str):
         """Abre somente páginas aprovadas do Windows; não altera configurações."""
@@ -1305,7 +1232,10 @@ class MainWindow(QMainWindow):
         return outer
 
     def _program_page(self):
-        col = self._page("programs", "Central de aplicativos", "Instale, abra e atualize seus aplicativos.")
+        col = self._page(
+            "programs", "Central de aplicativos", "Instale, abra e atualize seus aplicativos.",
+            content_width=CompactCardLayout.preferred_width(CompactCardLayout.MAX_COLUMNS),
+        )
         self.program_update_button = action_button("Verificar atualizações dos apps", self.check_program_updates,
                                                    compact=True)
         col.addWidget(self.program_update_button, alignment=Qt.AlignmentFlag.AlignLeft)
@@ -1450,17 +1380,32 @@ class MainWindow(QMainWindow):
         col.addStretch()
 
     def _about_page(self):
-        col = self._page("about", "Sobre o Callas Optimizer", "Aplicativo independente para Windows 11, mantido em repositório próprio.")
-        about, l = card_layout()
-        l.addWidget(label("CALLAS OPTIMIZER  /  WINDOWS EDITION", "CardTitle"))
-        l.addWidget(label(f"Versão {APP_VERSION} · Python + PySide6 / Qt · Windows x64"))
-        l.addWidget(label("Janela com maximização e redimensionamento; telas específicas; ícones oficiais de identificação; atualizações com confirmação."))
-        l.addWidget(label("Todas as ferramentas de manutenção utilizam um executor Python e comandos oficiais do Windows, com UAC quando necessário."))
-        l.addWidget(label("Modo de uso: " + ("Instalado em Program Files" if installed_mode() else "Portátil")))
-        if not installed_mode():
-            l.addWidget(label("Para instalar, criar atalhos e aparecer em Aplicativos Instalados, utilize o Setup oficial."))
-            l.addWidget(action_button("BAIXAR SETUP OFICIAL", lambda: webbrowser.open(PROJECT_URL + "/releases/latest"), True))
-        l.addWidget(action_button("ABRIR REPOSITÓRIO", lambda: webbrowser.open(PROJECT_URL), True))
+        col = self._page("about", "Sobre o Callas Optima")
+        about, body = card_layout(compact=True)
+        about.setMaximumWidth(620)
+        brand = QHBoxLayout()
+        logo = QLabel()
+        logo.setPixmap(svg_icon("callas", 48).pixmap(48, 48))
+        brand.addWidget(logo)
+        details = QVBoxLayout()
+        details.setSpacing(4)
+        details.addWidget(label("Callas Optima", "CardTitle"))
+        details.addWidget(label(f"Versão {APP_VERSION} · Windows 11 x64"))
+        brand.addLayout(details, 1)
+        body.addLayout(brand)
+        body.addWidget(label(
+            "Ferramentas para limpar, reparar e ajustar o Windows 11, além de instalar e atualizar programas."
+        ))
+        installed = installed_mode()
+        body.addWidget(label("Instalado em Program Files" if installed else "Edição portátil"))
+        links = QHBoxLayout()
+        links.addWidget(action_button("Abrir repositório", lambda: webbrowser.open(PROJECT_URL), compact=True))
+        if not installed:
+            links.addWidget(action_button(
+                "Obter instalador oficial", lambda: webbrowser.open(PROJECT_URL + "/releases/latest"), compact=True,
+            ))
+        links.addStretch()
+        body.addLayout(links)
         col.addWidget(about)
         col.addStretch()
 
@@ -1496,10 +1441,10 @@ class MainWindow(QMainWindow):
             self.navigation_history.append(route)
             self.navigation_index += 1
         self.stack.setCurrentWidget(self.pages[route])
-        self.nav_buttons[route].setChecked(True)
+        self.home_button.setVisible(route != "home")
         if route == "logs":
             self.load_logs()
-        self.status_message("Seção aberta: " + self.nav_buttons[route].text().strip())
+        self.status_message("Seção aberta: " + self.page_titles[route])
         if route == "home":
             self.refresh_system_metrics()
             self.home_timer.start()
