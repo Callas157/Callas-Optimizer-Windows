@@ -197,6 +197,20 @@ def svg_icon(name: str, pixels: int = 64) -> QIcon:
     return QIcon(result)
 
 
+def header_logo() -> QPixmap:
+    source = svg_icon("callas", 70).pixmap(60, 60)
+    rounded = QPixmap(source.size())
+    rounded.setDevicePixelRatio(source.devicePixelRatio())
+    rounded.fill(Qt.GlobalColor.transparent)
+    bounds = QRectF(0, 0, source.deviceIndependentSize().width(), source.deviceIndependentSize().height())
+    with QPainter(rounded) as painter:
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QBrush(source))
+        painter.drawRoundedRect(bounds, 11, 11)
+    return rounded
+
+
 def runtime_files() -> None:
     """Prepara a pasta de dados e confere os scripts empacotados."""
     DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -716,7 +730,7 @@ class MainWindow(QMainWindow):
         bh = QHBoxLayout(bar)
         bh.setContentsMargins(25, 15, 24, 15)
         logo = QLabel()
-        logo.setPixmap(svg_icon("callas", 70).pixmap(60, 60))
+        logo.setPixmap(header_logo())
         bh.addWidget(logo)
         bh.addSpacing(6)
         titles = QVBoxLayout()

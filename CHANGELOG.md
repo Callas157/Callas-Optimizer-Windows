@@ -3,6 +3,7 @@
 - O Início reúne os atalhos do Callas e as ferramentas do Windows na mesma tela. Nas páginas internas, o botão Início volta ao painel.
 - A visão geral da Fênix mostra CPU, RAM e armazenamento, com uma barra de espaço ocupado e a capacidade livre do disco no topo.
 - A Central de aplicativos mantém o tamanho compacto dos cartões e centraliza até três colunas em janelas largas. A tela Sobre ganha botões menores para o repositório e o instalador oficial.
+- A marca da Fênix no cabeçalho tem cantos transparentes e arredondados.
 
 ## v8.9.30 — Google, Cloudflare e DNS automático
 

@@ -27,6 +27,12 @@ assert win.isVisible()
 assert win.minimumWidth() <= 810
 assert len(win.pages) == 18, len(win.pages)
 assert not win.findChildren(QSplitter)
+header = win.findChild(QLabel, "Header").parentWidget()
+logo = next(item.pixmap().toImage() for item in header.findChildren(QLabel) if not item.pixmap().isNull())
+last_x, last_y = logo.width() - 1, logo.height() - 1
+for x, y in ((0, 0), (last_x, 0), (0, last_y), (last_x, last_y)):
+    assert logo.pixelColor(x, y).alpha() == 0, (x, y)
+assert logo.pixelColor(last_x // 2, last_y // 2).alpha() == 255
 home = win.pages["home"]
 storage = home.findChild(QFrame, "Hero").findChild(QProgressBar)
 disk_usage = SimpleNamespace(total=100 * 1024**3, free=60 * 1024**3)
