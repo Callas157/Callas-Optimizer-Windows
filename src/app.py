@@ -921,17 +921,15 @@ class MainWindow(QMainWindow):
             return
         width = self.width()
         compact = width < 1050
-        quick_columns = 5 if width >= 1100 else 3
         page = self.pages["home"]
         page_content = page.widget()
         page_margins = page_content.layout().contentsMargins()
         tool_margins = self.home_tools.layout().contentsMargins()
         content_width = min(width - page.verticalScrollBar().sizeHint().width(), page_content.maximumWidth())
-        tool_width = content_width - page_margins.left() - page_margins.right()
-        tool_width -= tool_margins.left() + tool_margins.right() + 2 * self.home_tools.frameWidth()
-        gap = self.home_tools_grid.spacing()
-        button_width = max(button.minimumSizeHint().width() for button in self.home_tool_buttons)
-        tool_columns = min(5, max(1, (tool_width + gap) // (button_width + gap)))
+        content_width -= page_margins.left() + page_margins.right()
+        tool_width = content_width - tool_margins.left() - tool_margins.right() - 2 * self.home_tools.frameWidth()
+        quick_columns = self._shortcut_columns(self.home_quick_grid, self.home_tiles, content_width)
+        tool_columns = self._shortcut_columns(self.home_tools_grid, self.home_tool_buttons, tool_width)
         profile = (compact, quick_columns, tool_columns)
         if getattr(self, "_home_profile", None) == profile:
             return
@@ -953,6 +951,12 @@ class MainWindow(QMainWindow):
                 row, column = divmod(index, columns)
                 cards_in_row = min(columns, len(widgets) - row * columns)
                 grid.addWidget(widget, row, 2 * column + columns - cards_in_row, 1, 2)
+
+    @staticmethod
+    def _shortcut_columns(grid: QGridLayout, buttons: list[QPushButton], width: int) -> int:
+        gap = grid.spacing()
+        button_width = max(button.minimumSizeHint().width() for button in buttons)
+        return min(5, max(1, (width + gap) // (button_width + gap)))
 
     def open_windows_settings(self, page: str):
         """Abre somente páginas aprovadas do Windows; não altera configurações."""
