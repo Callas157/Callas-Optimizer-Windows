@@ -109,6 +109,57 @@ def admin():
     return os.name=="nt" and bool(ctypes.windll.shell32.IsUserAnAdmin())
 
 
+def desktop_user_matches() -> bool:
+    """Confere o SID da sessão antes de usar o perfil de um processo elevado."""
+    user = ctypes.windll.user32
+    kernel = ctypes.windll.kernel32
+    security = ctypes.windll.advapi32
+    user.GetShellWindow.restype = wintypes.HWND
+    shell = user.GetShellWindow()
+    if not shell:
+        return True
+
+    user.GetWindowThreadProcessId.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.DWORD)]
+    kernel.GetCurrentProcess.restype = wintypes.HANDLE
+    kernel.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+    kernel.OpenProcess.restype = wintypes.HANDLE
+    kernel.CloseHandle.argtypes = [wintypes.HANDLE]
+    security.OpenProcessToken.argtypes = [wintypes.HANDLE, wintypes.DWORD, ctypes.POINTER(wintypes.HANDLE)]
+    security.GetTokenInformation.argtypes = [wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p, wintypes.DWORD,
+                                             ctypes.POINTER(wintypes.DWORD)]
+    security.EqualSid.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
+
+    def token_user(process):
+        token = wintypes.HANDLE()
+        if not security.OpenProcessToken(process, 0x0008, ctypes.byref(token)):  # TOKEN_QUERY
+            return None
+        try:
+            length = wintypes.DWORD()
+            security.GetTokenInformation(token, 1, None, 0, ctypes.byref(length))  # TokenUser
+            if length.value:
+                data = ctypes.create_string_buffer(length.value)
+                if security.GetTokenInformation(token, 1, data, length, ctypes.byref(length)):
+                    return data
+            return None
+        finally:
+            kernel.CloseHandle(token)
+
+    pid = wintypes.DWORD()
+    user.GetWindowThreadProcessId(shell, ctypes.byref(pid))
+    process = kernel.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
+    if not process:
+        return False
+    try:
+        own_user = token_user(kernel.GetCurrentProcess())
+        shell_user = token_user(process)
+        sid_pointer = ctypes.POINTER(ctypes.c_void_p)
+        return bool(own_user and shell_user and security.EqualSid(
+            ctypes.cast(own_user, sid_pointer)[0], ctypes.cast(shell_user, sid_pointer)[0],
+        ))
+    finally:
+        kernel.CloseHandle(process)
+
+
 class ElevatedAction:
     """Inicia o trabalhador com UAC e permite consultar sua saída sem bloquear a interface."""
 
@@ -476,9 +527,13 @@ def edge(uninstall):
         if not found:raise RuntimeError("Desinstalador Edge não encontrado ou protegido nesta edição.")
         verify_authenticode(found[0], r"Microsoft Corporation")
         return cmd(str(found[0]),"--uninstall","--system-level","--verbose-logging","--force-uninstall")
-    winget=winget_path()
-    if winget.is_file():return cmd(str(winget),"install","--id","Microsoft.Edge","--exact","--source","winget",
-                         "--accept-package-agreements","--accept-source-agreements")
+    try:
+        winget = winget_path()
+    except FileNotFoundError:
+        pass
+    else:
+        return cmd(str(winget), "install", "--id", "Microsoft.Edge", "--exact", "--source", "winget",
+                   "--accept-package-agreements", "--accept-source-agreements")
     webbrowser.open("https://www.microsoft.com/edge")
     return "Sem WinGet. Página oficial do Edge aberta para instalação."
 

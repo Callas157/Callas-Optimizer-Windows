@@ -262,15 +262,35 @@ def installed_program(app_id: str) -> Path | str | None:
 
 
 def open_program(target: Path | str) -> None:
-    if isinstance(target, str):
-        explorer = _system_program("cmd.exe").parent.parent / "explorer.exe"
-        subprocess.Popen([str(explorer), target], creationflags=NO_WINDOW, shell=False)
-    else:
-        os.startfile(str(target))
+    # O Explorer abre o aplicativo na sessão do usuário da área de trabalho.
+    explorer = _system_program("cmd.exe").parent.parent / "explorer.exe"
+    subprocess.Popen([str(explorer), str(target)], creationflags=NO_WINDOW, shell=False)
+
+
+def program_files_directory() -> Path:
+    import winreg
+
+    with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Windows\CurrentVersion",
+                       access=winreg.KEY_READ | winreg.KEY_WOW64_64KEY) as key:
+        directory = Path(winreg.QueryValueEx(key, "ProgramFilesDir")[0])
+    if not directory.is_absolute():
+        raise OSError("Pasta Program Files indisponível.")
+    return directory
 
 
 def winget_path() -> Path:
-    return ROOT.parent.parent / "Microsoft" / "WindowsApps" / "winget.exe"
+    candidates = []
+    try:
+        packages = program_files_directory() / "WindowsApps"
+        for path in packages.glob("Microsoft.DesktopAppInstaller_*_x64__8wekyb3d8bbwe/winget.exe"):
+            version = path.parent.name.split("_")[1]
+            if re.fullmatch(r"[0-9]+(?:\.[0-9]+){3}", version) and path.is_file():
+                candidates.append((tuple(map(int, version.split("."))), path))
+    except (ImportError, OSError):
+        pass
+    if not candidates:
+        raise FileNotFoundError("WinGet não encontrado no App Installer do Windows.")
+    return max(candidates)[1]
 
 
 def _upgrade_ids(output: str) -> set[str]:

@@ -29,6 +29,10 @@ class InstallerTests(unittest.TestCase):
         self.assertIn("VersionInfoDescription=Callas Optimizer", I)
         self.assertIn("VersionInfoProductName=Callas Optimizer", I)
         self.assertIn("'Callas Optimizer.exe'", U)
+    def test_installed_app_requests_admin_at_startup(self):
+        build = (R/'scripts/build.py').read_text(encoding='utf-8')
+        self.assertIn("'--uac-admin'", build)
+        self.assertIn("Flags: shellexec nowait postinstall skipifsilent", I)
     def test_shortcut_icon_paths(self):
         for value in (
             'Source: "..\\assets\\icons\\callas.ico"',

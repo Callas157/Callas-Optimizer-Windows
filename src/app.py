@@ -20,7 +20,7 @@ from PySide6.QtGui import QBrush, QColor, QConicalGradient, QIcon, QLinearGradie
 from PySide6.QtSvg import QSvgRenderer
 from PySide6.QtWidgets import (
     QApplication, QCheckBox, QDialog, QFileDialog, QFileIconProvider, QFrame, QGridLayout, QHBoxLayout,
-    QLabel, QLayout, QMainWindow, QMessageBox, QPlainTextEdit, QProgressBar, QPushButton,
+    QLabel, QLayout, QMainWindow, QMessageBox, QPlainTextEdit, QPushButton,
     QScrollArea, QSizePolicy, QSpinBox, QStackedWidget, QVBoxLayout, QWidget,
 )
 
@@ -30,17 +30,19 @@ from cleaner import (
 )
 from windows_actions import (
     ACTIONS, BY_ROUTE, HOME as ACTION_HOME, MAX_SHUTDOWN_MINUTES, PROFILE_MISMATCH, ElevatedAction,
-    applied_action_backups, dns_provider_status, edge_installed, remaining_shutdown_minutes, worker as run_windows_action,
+    admin, applied_action_backups, desktop_user_matches, dns_provider_status, edge_installed, remaining_shutdown_minutes,
+    worker as run_windows_action,
 )
 from extra_installers import (
     CATALOG as EXTRA_APPS, available_upgrades, download_and_open, installed_program,
     official_website, open_program, powershell_env, powershell_path, program_key, upgrade_program,
 )
+from gpu_usage import GpuMonitor
 from network_dns import DNS_PROVIDERS, DNS_REVERSALS
 from task_progress import TaskProgressBar
 from virtualbox_templates import create_test_vms, VM_NAMES, get_vboxmanage
 
-APP_VERSION = "8.9.31"
+APP_VERSION = "8.9.32"
 REPO = "Callas157/Callas-Optimizer-Windows"
 PROJECT_URL = f"https://github.com/{REPO}"
 DATA_DIR = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "CallasTeck"
@@ -68,7 +70,6 @@ WINDOWS_SHORTCUTS = (
 )
 
 APP_SHORTCUTS = (
-    ("updates", "Atualizações do Callas"),
     ("logs", "Registros"),
     ("about", "Sobre"),
 )
@@ -110,7 +111,6 @@ QFrame#Hero { background: qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 #171b3b,sto
 QLabel#Header { font-size: 31px; font-weight: 700; color: #f8f7ff; }
 QLabel#Title { font-size: 27px; font-weight: 700; color: #f9f8ff; }
 QLabel#HeroTitle { font-size: 26px; font-weight: 700; color: #fff; }
-QLabel#SystemMetric { color: #e6efff; font-size: 14px; font-weight: 600; }
 QLabel#CardTitle { font-size: 17px; font-weight: 700; color: #f8f8ff; }
 QLabel#ProgramTitle { font-size: 15px; font-weight: 700; color: #f8f8ff; }
 QLabel#Muted { color: #a8b9d8; }
@@ -577,48 +577,58 @@ class NativeActionCard:
         self.warning.setVisible(bool(task["warning"]))
 
 
-class MemoryRing(QWidget):
-    def __init__(self):
+class MetricRing(QWidget):
+    def __init__(self, title: str, accessible_name: str):
         super().__init__()
+        self.title = title
         self.percent = None
-        self.capacity = ""
-        self.setFixedSize(146, 146)
-        self.setAccessibleName("Uso de memória RAM")
+        self.detail = ""
+        self.setFixedSize(130, 146)
+        self.setAccessibleName(accessible_name)
+        self.set_usage(None)
 
-    def set_usage(self, percent: int, capacity: str):
+    def set_usage(self, percent: int | None, detail: str = ""):
         self.percent = percent
-        self.capacity = capacity
-        self.setAccessibleDescription(f"{percent}% em uso, {capacity}")
+        self.detail = detail
+        description = "Sem leitura" if percent is None else f"{percent}% em uso"
+        if detail:
+            description += ", " + detail.replace("\n", " ")
+        self.setAccessibleDescription(description)
+        self.setToolTip(f"{self.accessibleName()} — {description}")
         self.update()
 
     def paintEvent(self, event):
         with QPainter(self) as painter:
             painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-            track = QRectF(10, 10, 126, 126)
-            painter.setPen(QPen(QColor("#273154"), 11))
+            track = QRectF(12, 6, 106, 106)
+            painter.setPen(QPen(QColor("#273154"), 10))
             painter.drawEllipse(track)
             if self.percent is not None and self.percent > 0:
-                spectrum = QConicalGradient(73, 73, 90)
+                spectrum = QConicalGradient(65, 59, 90)
                 spectrum.setColorAt(0, QColor("#46dcf9"))
                 spectrum.setColorAt(.5, QColor("#6a8cff"))
                 spectrum.setColorAt(.86, QColor("#df72fb"))
                 spectrum.setColorAt(1, QColor("#46dcf9"))
-                pen = QPen(QBrush(spectrum), 11)
+                pen = QPen(QBrush(spectrum), 10)
                 pen.setCapStyle(Qt.PenCapStyle.RoundCap)
                 painter.setPen(pen)
                 painter.drawArc(track, 90 * 16, -round(self.percent * 57.6))
             painter.setPen(QColor("#f5f4ff"))
             font = painter.font()
             font.setBold(True)
-            font.setPixelSize(35)
+            font.setPixelSize(30)
             painter.setFont(font)
             value = "—" if self.percent is None else f"{self.percent}%"
-            painter.drawText(QRectF(0, 28, 146, 48), Qt.AlignmentFlag.AlignCenter, value)
-            font.setBold(False)
+            painter.drawText(QRectF(0, 24, 130, 44), Qt.AlignmentFlag.AlignCenter, value)
             font.setPixelSize(13)
             painter.setFont(font)
-            painter.drawText(QRectF(0, 75, 146, 21), Qt.AlignmentFlag.AlignCenter, "RAM em uso")
-            painter.drawText(QRectF(0, 97, 146, 19), Qt.AlignmentFlag.AlignCenter, self.capacity)
+            painter.drawText(QRectF(0, 65, 130, 22), Qt.AlignmentFlag.AlignCenter, self.title)
+            font.setBold(False)
+            font.setPixelSize(12)
+            painter.setFont(font)
+            painter.setPen(QColor("#a8b9d8"))
+            painter.drawText(QRectF(0, 118, 130, 28), Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop,
+                             self.detail)
 
 
 class WindowsMemoryStatus(ctypes.Structure):
@@ -802,23 +812,19 @@ class MainWindow(QMainWindow):
         hero, hero_box = card_layout("Hero")
         hero_box.setContentsMargins(22, 14, 22, 14)
         row = QHBoxLayout()
-        row.setSpacing(20)
-
-        self.memory_ring = MemoryRing()
-        row.addWidget(self.memory_ring, alignment=Qt.AlignmentFlag.AlignVCenter)
+        row.setSpacing(14)
         metrics = QVBoxLayout()
-        metrics.setSpacing(7)
+        metrics.setSpacing(8)
         metrics.addWidget(label("Visão geral do sistema", "HeroTitle"))
-        self.live_cpu = label("CPU  —", "SystemMetric")
-        metrics.addWidget(self.live_cpu)
-        metrics.addSpacing(4)
-        metrics.addWidget(label("Armazenamento do sistema", "SystemMetric"))
-        self.live_storage = label("—")
-        metrics.addWidget(self.live_storage)
-        self.storage_bar = QProgressBar()
-        self.storage_bar.setAccessibleName("Armazenamento do sistema em uso")
-        self.storage_bar.setFormat("%p% usado")
-        metrics.addWidget(self.storage_bar)
+        self.memory_ring = MetricRing("RAM", "Uso de memória RAM")
+        self.cpu_ring = MetricRing("CPU", "Uso da CPU")
+        self.gpu_ring = MetricRing("GPU", "Uso da GPU")
+        self.storage_ring = MetricRing("Disco", "Armazenamento do sistema")
+        metric_row = QHBoxLayout()
+        metric_row.setSpacing(8)
+        for ring in (self.memory_ring, self.cpu_ring, self.gpu_ring, self.storage_ring):
+            metric_row.addWidget(ring, 1, Qt.AlignmentFlag.AlignHCenter)
+        metrics.addLayout(metric_row)
         row.addLayout(metrics, 1)
 
         self.hero_art = phoenix_art()
@@ -886,6 +892,7 @@ class MainWindow(QMainWindow):
         col.addStretch()
 
         self._cpu_snapshot = None
+        self.gpu_monitor = GpuMonitor()
         self.home_timer = QTimer(self)
         self.home_timer.setInterval(2500)
         self.home_timer.timeout.connect(self.refresh_system_metrics)
@@ -897,19 +904,18 @@ class MainWindow(QMainWindow):
     def refresh_system_metrics(self):
         if os.name == "nt":
             self._refresh_windows_metrics()
+        gpu_percent = self.gpu_monitor.sample()
+        self.gpu_ring.set_usage(gpu_percent, "Sem dados" if gpu_percent is None else "")
         drive = Path(os.environ.get("SystemDrive", "C:") + "\\") if os.name == "nt" else Path.home()
         try:
             usage = shutil.disk_usage(drive)
             occupied = (usage.total - usage.free) * 100 // usage.total
         except (OSError, ZeroDivisionError):
-            self.live_storage.setText("Armazenamento indisponível nesta sessão.")
-            self.storage_bar.hide()
+            self.storage_ring.set_usage(None, "Indisponível")
         else:
             free_gib = usage.free / 1024 ** 3
             total_gib = usage.total / 1024 ** 3
-            self.live_storage.setText(f"{free_gib:.1f} GB livres de {total_gib:.1f} GB")
-            self.storage_bar.setValue(occupied)
-            self.storage_bar.show()
+            self.storage_ring.set_usage(occupied, f"{free_gib:.1f} GB livres\nde {total_gib:.1f} GB")
 
     def _refresh_windows_metrics(self):
         kernel = ctypes.windll.kernel32
@@ -927,7 +933,7 @@ class MainWindow(QMainWindow):
                 total_delta = current[1] - self._cpu_snapshot[1]
                 if total_delta > 0:
                     usage = max(0, min(100, round(100 * (1 - idle_delta / total_delta))))
-                    self.live_cpu.setText(f"CPU  {usage}%")
+                    self.cpu_ring.set_usage(usage)
             self._cpu_snapshot = current
 
     def _refresh_home_layout(self):
@@ -949,7 +955,7 @@ class MainWindow(QMainWindow):
             return
         self._home_profile = profile
         self.hero_phoenix.setPixmap(self.hero_art.scaled(
-            190 if compact else 275, 120 if compact else 160,
+            138 if compact else 275, 100 if compact else 160,
             Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation,
         ))
         for grid, widgets, columns in (
@@ -1349,11 +1355,8 @@ class MainWindow(QMainWindow):
         inner.addWidget(self.update_note)
         self.update_progress = TaskProgressBar("Progresso da atualização do Callas")
         inner.addWidget(self.update_progress)
-        row = QHBoxLayout()
-        self.update_check = action_button("VERIFICAR AGORA", lambda: self.check_update(True), True)
-        row.addWidget(self.update_check)
-        row.addWidget(action_button("VER RELEASES", lambda: webbrowser.open(PROJECT_URL + "/releases")))
-        inner.addLayout(row)
+        inner.addWidget(action_button("Ver releases", lambda: webbrowser.open(PROJECT_URL + "/releases"),
+                                      compact=True), alignment=Qt.AlignmentFlag.AlignLeft)
         col.addWidget(c)
         options, controls = card_layout()
         controls.addWidget(label("PREFERÊNCIAS", "Section"))
@@ -1450,6 +1453,8 @@ class MainWindow(QMainWindow):
             self.home_timer.start()
         else:
             self.home_timer.stop()
+            self.gpu_monitor.close()
+            self._cpu_snapshot = None
         if route == "shutdown":
             self.refresh_shutdown_timer()
             self.shutdown_countdown.start()
@@ -1480,7 +1485,8 @@ class MainWindow(QMainWindow):
         message = task["name"] + "\n\n" + task["description"]
         if task["warning"]:
             message += "\n\nATENÇÃO: " + task["warning"]
-        if task["admin"]:
+        needs_elevation = task["admin"] and not admin()
+        if needs_elevation:
             message += "\n\nO Windows solicitará permissão de administrador."
         if code == "shutdown_custom":
             if shutdown_minutes is None:
@@ -1497,7 +1503,7 @@ class MainWindow(QMainWindow):
         self.active_native_card = card
         card.progress.begin()
         card.execution.setCurrentWidget(card.progress)
-        card.status.setText("Aguardando permissão do Windows…" if task["admin"] else "Executando…")
+        card.status.setText("Aguardando permissão do Windows…" if needs_elevation else "Executando…")
         card.status.show()
         for control in self.native_controls.values():
             control.button.setEnabled(False)
@@ -1515,7 +1521,7 @@ class MainWindow(QMainWindow):
             args.extend(("--shutdown-minutes", str(shutdown_minutes)))
         try:
             ACTION_HOME.mkdir(parents=True, exist_ok=True)
-            if task["admin"]:
+            if needs_elevation:
                 self.native_process = ElevatedAction(sys.executable, args)
             else:
                 self.native_process = subprocess.Popen(
@@ -1932,7 +1938,6 @@ class MainWindow(QMainWindow):
         self.update_elapsed = 0
         self.update_status = DATA_DIR / ("updater-" + uuid.uuid4().hex + ".status")
         self.top_check.setEnabled(False)
-        self.update_check.setEnabled(False)
         self.update_note.setText("Consultando a última Release estável...")
         self.update_progress.begin()
         try:
@@ -2032,7 +2037,6 @@ class MainWindow(QMainWindow):
         self.updater_process = None
         self.update_mode = ""
         self.top_check.setEnabled(True)
-        self.update_check.setEnabled(True)
         self.update_progress.finish(success)
 
     def update_failed(self, message: str):
@@ -2056,7 +2060,6 @@ class MainWindow(QMainWindow):
         self.update_elapsed = 0
         self.update_status = DATA_DIR / ("updater-" + uuid.uuid4().hex + ".status")
         self.top_check.setEnabled(False)
-        self.update_check.setEnabled(False)
         self.update_progress.begin()
         self.update_note.setText("Baixando, validando e preparando a nova versão. Mantenha o aplicativo aberto.")
         try:
@@ -2122,6 +2125,8 @@ class MainWindow(QMainWindow):
             event.ignore()
             return
         self.shutdown_countdown.stop()
+        self.home_timer.stop()
+        self.gpu_monitor.close()
         event.accept()
 
 
@@ -2164,6 +2169,10 @@ def main():
     app.setWindowIcon(app_icon())
     app.setStyle("Fusion")
     app.setStyleSheet(STYLE)
+    if os.name == "nt" and not desktop_user_matches():
+        QMessageBox.warning(None, "Conta do Windows",
+                            "Abra o Callas na sessão da mesma conta administradora usada na confirmação do Windows.")
+        return 1
     window = MainWindow()
     window.show()
     return app.exec()

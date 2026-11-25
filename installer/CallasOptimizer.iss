@@ -47,7 +47,7 @@ Name: "{autodesktop}\Callas Optimizer"; Filename: "{app}\{#MyAppExe}"; WorkingDi
 [Registry]
 Root: HKLM; Subkey: "Software\CallasTeck\CallasOptimizer"; ValueType: string; ValueName: "InstallDir"; ValueData: "{app}"; Flags: uninsdeletekey
 [Run]
-Filename: "{app}\{#MyAppExe}"; Description: "Iniciar Callas Optimizer"; Flags: nowait postinstall skipifsilent; Check: not IsCallasUpdate
+Filename: "{app}\{#MyAppExe}"; Description: "Iniciar Callas Optimizer"; Flags: shellexec nowait postinstall skipifsilent; Check: not IsCallasUpdate
 
 [Code]
 var

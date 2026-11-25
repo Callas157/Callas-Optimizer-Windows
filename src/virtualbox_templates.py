@@ -14,7 +14,7 @@ import subprocess
 from collections.abc import Callable
 from uuid import uuid4
 
-from extra_installers import installed_program
+from extra_installers import program_files_directory
 
 VM_NAMES = (
     "Callas - Windows 11 Pro",
@@ -62,12 +62,9 @@ def _run(vboxmanage: Path, *args: str, timeout: int = 150) -> str:
 def get_vboxmanage() -> Path:
     if os.name != "nt":
         raise RuntimeError("As máquinas virtuais só podem ser preparadas no Windows.")
-    executable = installed_program("virtualbox")
-    if not isinstance(executable, Path) or not executable.is_file():
-        raise RuntimeError("Instale o VirtualBox primeiro pela Central de Programas.")
-    command = executable.parent / "VBoxManage.exe"
+    command = program_files_directory() / "Oracle" / "VirtualBox" / "VBoxManage.exe"
     if not command.is_file():
-        raise RuntimeError("VBoxManage.exe não localizado na instalação oficial do VirtualBox.")
+        raise RuntimeError("Instale o VirtualBox em Program Files pela Central de Programas.")
     return command
 
 

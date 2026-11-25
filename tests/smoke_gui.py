@@ -13,7 +13,7 @@ os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
 os.environ['CALLAS_SMOKE'] = '1'
 from PySide6.QtCore import QPoint, Qt, QTimer
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication, QDialog, QFrame, QLabel, QProgressBar, QPushButton, QSpinBox, QSplitter
+from PySide6.QtWidgets import QApplication, QDialog, QFrame, QLabel, QProgressBar, QPushButton, QSpinBox, QSplitter, QWidget
 from app import MainWindow, STYLE
 import windows_actions
 
@@ -34,16 +34,33 @@ for x, y in ((0, 0), (last_x, 0), (0, last_y), (last_x, last_y)):
     assert logo.pixelColor(x, y).alpha() == 0, (x, y)
 assert logo.pixelColor(last_x // 2, last_y // 2).alpha() == 255
 home = win.pages["home"]
-storage = home.findChild(QFrame, "Hero").findChild(QProgressBar)
+hero = home.findChild(QFrame, "Hero")
+rings = {item.accessibleName(): item for item in hero.findChildren(QWidget) if item.accessibleName()}
+assert {"Uso de memória RAM", "Uso da CPU", "Uso da GPU", "Armazenamento do sistema"} <= rings.keys()
+storage = rings["Armazenamento do sistema"]
+assert not hero.findChildren(QProgressBar)
 disk_usage = SimpleNamespace(total=100 * 1024**3, free=60 * 1024**3)
 with patch("app.shutil.disk_usage", return_value=disk_usage):
     win.refresh_system_metrics()
-    assert storage.isVisible() and storage.value() == 40
+    assert storage.isVisible() and storage.percent == 40
+    assert "60.0 GB livres de 100.0 GB" in storage.accessibleDescription()
 with patch("app.shutil.disk_usage", side_effect=OSError):
     win.refresh_system_metrics()
-    assert storage.isHidden()
-win.refresh_system_metrics()
-assert storage.isVisible()
+    assert storage.isVisible() and storage.percent is None
+with patch.object(win.gpu_monitor, "sample", return_value=52), patch("app.os", os), \
+        patch.object(win, "_refresh_windows_metrics"):
+    win.refresh_system_metrics()
+    if os.name == "nt":
+        assert rings["Uso da GPU"].percent == 52
+
+update_buttons = [button for button in win.findChildren(QPushButton)
+                  if button.text() in ("Verificar atualização", "VERIFICAR AGORA", "Atualizações do Callas")]
+assert len(update_buttons) == 1 and update_buttons[0] is win.top_check
+with patch.object(win, "_spawn_update"):
+    win.top_check.click()
+    assert win.stack.currentWidget() is win.pages["updates"]
+    win.stop_update_timer()
+    win.goto("home")
 
 # Navegação por botões laterais e novo percurso depois de retroceder.
 win.goto("clean")
@@ -77,7 +94,7 @@ for title, route in (
     ("Windows Update", "windows_update"), ("Privacidade", "privacy"), ("Desligamento", "shutdown"),
     ("Microsoft Edge", "edge"), ("Menu clássico", "classic"), ("WinUtil", "winutil"),
     ("Ponto de restauração", "restore_point"), ("Restaurar padrões", "restore"),
-    ("Atualizações do Callas", "updates"), ("Registros", "logs"), ("Sobre", "about"),
+    ("Registros", "logs"), ("Sobre", "about"),
 ):
     assert not shortcuts[title].isHidden(), title
     button = shortcuts[title]
@@ -94,13 +111,13 @@ with patch("app.os", SimpleNamespace(name="nt", startfile=Mock())) as windows:
 assert shortcuts["Programas"].mapTo(home.viewport(), QPoint()).x() < (
     shortcuts["Limpeza Total"].mapTo(home.viewport(), QPoint()).x()
 )
-assert shortcuts["Atualizações do Callas"].x() < shortcuts["Registros"].x() < shortcuts["Sobre"].x()
+assert shortcuts["Registros"].x() < shortcuts["Sobre"].x()
 home.setFocus()
 for title in (
     "Programas", "Limpeza Total", "Modo Gamer", "Reparar Windows", "Drivers",
     "Rede e DNS", "Windows Update", "Inicialização", "Privacidade", "Desligamento",
     "Microsoft Edge", "Menu clássico", "WinUtil", "Ponto de restauração", "Restaurar padrões",
-    "Atualizações do Callas", "Registros", "Sobre",
+    "Registros", "Sobre",
 ):
     QTest.keyClick(app.focusWidget(), Qt.Key.Key_Tab)
     assert app.focusWidget() is shortcuts[title], (title, app.focusWidget())
@@ -109,6 +126,9 @@ for title in (
 win.resize(810, 570)
 QTest.qWait(100)  # O Qt recalcula o viewport depois de reorganizar as grades.
 assert win.hero_phoenix.isVisible()
+for ring in (rings["Uso de memória RAM"], rings["Uso da CPU"], rings["Uso da GPU"], storage):
+    left = ring.mapTo(home.viewport(), QPoint()).x()
+    assert ring.isVisible() and 0 <= left <= home.viewport().width() - ring.width()
 for button in shortcuts.values():
     left = button.mapTo(home.viewport(), QPoint()).x()
     right = left + button.width()
@@ -310,7 +330,8 @@ worker = MainWindow()
 with tempfile.TemporaryDirectory() as directory:
     local = Path(directory).resolve()
     with patch('app.ACTION_HOME', local), patch('app.os', SimpleNamespace(name='nt')), \
-            patch('app.confirmar', return_value=True), patch('app.ElevatedAction') as elevate, \
+            patch('app.confirmar', return_value=True), patch('app.admin', return_value=False), \
+            patch('app.ElevatedAction') as elevate, \
             patch('app.QMessageBox.warning') as warning, patch('app.QMessageBox.information') as info:
         card = worker.native_controls['repair_disk']
         run, progress, stack, status = card.button, card.progress, card.execution, card.status
@@ -383,6 +404,7 @@ with tempfile.TemporaryDirectory() as directory:
 
     with patch("app.ACTION_HOME", local), patch("app.os", SimpleNamespace(name="nt")), \
             patch("app.confirmar", return_value=True), patch("app.edge_installed") as edge_installed, \
+            patch("app.admin", return_value=True), \
             patch("app.ElevatedAction") as elevate, patch("app.subprocess.Popen") as spawn:
         edge_installed.return_value = True
         elevate.return_value.poll.return_value = 0
@@ -392,6 +414,8 @@ with tempfile.TemporaryDirectory() as directory:
         assert card.button.text() == "Remover"
         card.button.click()
         assert worker.native_code == "edge_uninstall"
+        elevate.assert_not_called()
+        spawn.assert_called_once()
         edge_installed.return_value = False
         worker.native_report.write_text('{"ok": true, "message": "Removido."}', encoding="utf-8")
         worker.poll_native_action()
@@ -406,7 +430,8 @@ with tempfile.TemporaryDirectory() as directory:
     provider = {}
     with patch("app.dns_provider_status", side_effect=lambda: dict(provider)), \
             patch("app.ACTION_HOME", local), patch("app.os", SimpleNamespace(name="nt")), \
-            patch("app.confirmar", return_value=True), patch("app.ElevatedAction") as elevate:
+            patch("app.confirmar", return_value=True), patch("app.admin", return_value=False), \
+            patch("app.ElevatedAction") as elevate:
         cloudflare = worker.native_controls["dns_cloudflare"]
         google = worker.native_controls["dns_google"]
 

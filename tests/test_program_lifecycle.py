@@ -66,8 +66,31 @@ class ProgramLifecycleTest(unittest.TestCase):
         )
         self.assertEqual(installers._upgrade_ids(output), {"discord", "brave"})
 
+    def test_winget_uses_the_newest_protected_app_installer_package(self):
+        with tempfile.TemporaryDirectory() as directory:
+            installed = Path(directory) / "Program Files"
+            packages = installed / "WindowsApps"
+            pattern = "Microsoft.DesktopAppInstaller_{}_x64__8wekyb3d8bbwe"
+            with patch.object(installers, "program_files_directory", return_value=installed):
+                with self.assertRaises(FileNotFoundError):
+                    installers.winget_path()
+                for version in ("1.9.1.0", "1.10.0.0", "invalida"):
+                    target = packages / pattern.format(version) / "winget.exe"
+                    target.parent.mkdir(parents=True)
+                    target.touch()
+                self.assertEqual(installers.winget_path(), packages / pattern.format("1.10.0.0") / "winget.exe")
+
+    def test_open_program_delegates_to_windows_explorer(self):
+        system = Path("C:/Windows/System32/cmd.exe")
+        target = Path("C:/Users/Conta/AppData/Local/Example.exe")
+        with patch.object(installers, "_system_program", return_value=system), \
+                patch.object(installers.subprocess, "Popen") as launch:
+            installers.open_program(target)
+        self.assertEqual(launch.call_args.args[0], [str(system.parent.parent / "explorer.exe"), str(target)])
+
     def test_spotify_update_attempts_exact_winget_package_without_a_scan(self):
         with patch.object(installers, "installed_program", return_value=Path("Spotify.exe")), \
+                patch.object(installers, "winget_path", return_value=Path("winget.exe")), \
                 patch.object(installers.subprocess, "run", return_value=Mock(returncode=0x8A15002B)) as run:
             message = installers.upgrade_program("spotify", lambda *_: None)
         command = run.call_args.args[0]
@@ -76,6 +99,7 @@ class ProgramLifecycleTest(unittest.TestCase):
 
     def test_package_missing_uses_verified_manufacturer_installer(self):
         with patch.object(installers, "installed_program", return_value=Path("Spotify.exe")), \
+                patch.object(installers, "winget_path", return_value=Path("winget.exe")), \
                 patch.object(installers.subprocess, "run", return_value=Mock(returncode=0x8A150014)), \
                 patch.object(installers, "download_and_open") as official:
             installers.upgrade_program("spotify", lambda *_: None)
@@ -83,6 +107,7 @@ class ProgramLifecycleTest(unittest.TestCase):
 
     def test_unavailable_winget_source_uses_manufacturer_installer(self):
         with patch.object(installers, "installed_program", return_value=Path("Spotify.exe")), \
+                patch.object(installers, "winget_path", return_value=Path("winget.exe")), \
                 patch.object(installers.subprocess, "run", return_value=Mock(returncode=0x8A15004B)), \
                 patch.object(installers, "download_and_open") as official:
             installers.upgrade_program("spotify", lambda *_: None)

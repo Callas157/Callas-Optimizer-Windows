@@ -23,7 +23,7 @@ assert icon_file.read_bytes()[:4] == b'\x00\x00\x01\x00', 'Arquivo ICO invalido'
 
 source = ROOT / 'src'
 args = [sys.executable, '-m', 'PyInstaller', '--noconfirm', '--clean',
-        '--onedir', '--contents-directory', '_internal', '--windowed', '--noupx',
+        '--onedir', '--contents-directory', '_internal', '--windowed', '--noupx', '--uac-admin',
         '--name', 'Callas_Optimizer_Windows_x64', '--icon', str(icon_file),
         '--hidden-import', 'PySide6.QtSvg',
         '--distpath', str(ROOT / 'dist'),

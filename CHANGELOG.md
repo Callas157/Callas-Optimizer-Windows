@@ -1,3 +1,9 @@
+## v8.9.32 — Indicadores do sistema e permissão ao abrir
+
+- O Início exibe quatro indicadores circulares para RAM, CPU, GPU e disco. O disco mostra o espaço livre e total. A GPU usa os contadores do Windows e indica quando o driver não fornece dados.
+- A verificação de atualização do Callas fica no botão do cabeçalho. A página de Atualizações continua mostrando progresso e preferências.
+- O Windows solicita permissão de administrador ao abrir o Callas. As ferramentas que precisam dessa permissão usam a sessão já elevada, após a confirmação de cada operação.
+
 ## v8.9.31 — Início reorganizado e cartões responsivos
 
 - O Início reúne os atalhos do Callas e as ferramentas do Windows na mesma tela. Nas páginas internas, o botão Início volta ao painel.

@@ -20,6 +20,8 @@ for path, installer in ((app, False), (setup, True)):
     assert data[pos:pos+4] == b'PE\0\0', path
     machine = struct.unpack_from('<H', data, pos+4)[0]
     assert machine in ({0x8664, 0x14C} if installer else {0x8664}), path
+    if not installer:
+        assert b'<requestedExecutionLevel level="requireAdministrator"' in data, 'Manifesto UAC ausente no Callas'
 
 sha = hashlib.sha256(setup.read_bytes()).hexdigest()
 (dist / 'SHA256SUMS.txt').write_text(f'{sha}  {setup.name}\n', encoding='ascii')
