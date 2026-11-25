@@ -109,6 +109,8 @@ for button in shortcuts.values():
     assert 0 <= left < right <= home.viewport().width(), (
         button.accessibleName() or button.text(), left, right,
         win.width(), home.viewport().width(), home.widget().width(), home.widget().minimumSizeHint().width(),
+        win._home_profile, win.home_quick_grid.minimumSize(), win.home_tools_grid.minimumSize(),
+        [item.minimumSizeHint().width() for item in win.home_tool_buttons],
     )
 assert home.verticalScrollBar().maximum() > 0
 

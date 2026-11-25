@@ -848,6 +848,7 @@ class MainWindow(QMainWindow):
         tools_box.addWidget(label("Ferramentas do Windows", "CardTitle"))
         self.home_tools_grid = QGridLayout()
         self.home_tools_grid.setSpacing(8)
+        self.home_tools = tools
         self.home_tool_buttons = []
         for route, title in WINDOWS_SHORTCUTS:
             action = self.open_windows_settings if route == "startupapps" else self.goto
@@ -921,8 +922,17 @@ class MainWindow(QMainWindow):
         width = self.width()
         compact = width < 1050
         quick_columns = 5 if width >= 1100 else 3
-        tool_columns = 4 if compact else 5
-        profile = (quick_columns, tool_columns)
+        page = self.pages["home"]
+        page_content = page.widget()
+        page_margins = page_content.layout().contentsMargins()
+        tool_margins = self.home_tools.layout().contentsMargins()
+        content_width = min(width - page.verticalScrollBar().sizeHint().width(), page_content.maximumWidth())
+        tool_width = content_width - page_margins.left() - page_margins.right()
+        tool_width -= tool_margins.left() + tool_margins.right() + 2 * self.home_tools.frameWidth()
+        gap = self.home_tools_grid.spacing()
+        button_width = max(button.minimumSizeHint().width() for button in self.home_tool_buttons)
+        tool_columns = min(5, max(1, (tool_width + gap) // (button_width + gap)))
+        profile = (compact, quick_columns, tool_columns)
         if getattr(self, "_home_profile", None) == profile:
             return
         self._home_profile = profile
