@@ -101,13 +101,15 @@ for title in (
 
 # Com a janela reduzida, os atalhos continuam no viewport e a Fênix segue no painel.
 win.resize(810, 570)
-app.processEvents()
-app.processEvents()
+QTest.qWait(100)  # O Qt recalcula o viewport depois de reorganizar as grades.
 assert win.hero_phoenix.isVisible()
 for button in shortcuts.values():
     left = button.mapTo(home.viewport(), QPoint()).x()
     right = left + button.width()
-    assert 0 <= left < right <= home.viewport().width(), (button.accessibleName() or button.text(), left, right)
+    assert 0 <= left < right <= home.viewport().width(), (
+        button.accessibleName() or button.text(), left, right,
+        win.width(), home.viewport().width(), home.widget().width(), home.widget().minimumSizeHint().width(),
+    )
 assert home.verticalScrollBar().maximum() > 0
 
 win.goto("about")
