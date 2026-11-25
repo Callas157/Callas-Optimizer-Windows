@@ -118,7 +118,8 @@ win.goto("about")
 app.processEvents()
 about_buttons = win.pages["about"].findChildren(QPushButton)
 repo_button = next(button for button in about_buttons if button.text() == "Abrir repositório")
-assert repo_button.height() <= 36 and repo_button.width() < 200, repo_button.size()
+assert repo_button.height() <= 36 and repo_button.width() <= repo_button.sizeHint().width(), repo_button.size()
+assert repo_button.width() < repo_button.parentWidget().width() // 2
 with patch("app.webbrowser.open") as browser:
     repo_button.click()
     browser.assert_called_once_with("https://github.com/Callas157/Callas-Optimizer-Windows")
