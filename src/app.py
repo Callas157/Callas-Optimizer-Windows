@@ -42,7 +42,7 @@ from network_dns import DNS_PROVIDERS, DNS_REVERSALS
 from task_progress import TaskProgressBar
 from virtualbox_templates import create_test_vms, VM_NAMES, get_vboxmanage
 
-APP_VERSION = "8.9.32"
+APP_VERSION = "8.9.33"
 REPO = "Callas157/Callas-Optimizer-Windows"
 PROJECT_URL = f"https://github.com/{REPO}"
 DATA_DIR = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "CallasTeck"
@@ -2130,6 +2130,39 @@ class MainWindow(QMainWindow):
         event.accept()
 
 
+def bring_startup_to_front(window):
+    """Apresenta a janela uma vez, sem mantê-la sempre no topo."""
+    if not window.isVisible():
+        return
+    if window.isMinimized():
+        window.showNormal()
+    window.raise_()
+    window.activateWindow()
+    if os.name != "nt" or QApplication.platformName() != "windows":
+        return
+    try:
+        user32 = ctypes.WinDLL("user32", use_last_error=True)
+        user32.GetForegroundWindow.restype = wintypes.HWND
+        user32.SetForegroundWindow.argtypes = [wintypes.HWND]
+        user32.SetForegroundWindow.restype = wintypes.BOOL
+        user32.SetWindowPos.argtypes = [wintypes.HWND, wintypes.HWND, ctypes.c_int,
+                                       ctypes.c_int, ctypes.c_int, ctypes.c_int, wintypes.UINT]
+        user32.SetWindowPos.restype = wintypes.BOOL
+        hwnd = int(window.winId())
+        if user32.GetForegroundWindow() == hwnd or user32.SetForegroundWindow(hwnd):
+            return
+        # Após o UAC, o Windows pode negar o foco. Eleva só a ordem Z e a restaura.
+        flags = 0x0001 | 0x0002 | 0x0010  # NOSIZE | NOMOVE | NOACTIVATE
+        if user32.SetWindowPos(hwnd, -1, 0, 0, 0, 0, flags):  # HWND_TOPMOST
+            try:
+                user32.SetForegroundWindow(hwnd)
+            finally:
+                user32.SetWindowPos(hwnd, -2, 0, 0, 0, 0, flags)  # HWND_NOTOPMOST
+    except (OSError, AttributeError):
+        # O comportamento padrão do Qt permanece disponível.
+        pass
+
+
 def main():
     if "--callas-task" in sys.argv:
         try:
@@ -2175,6 +2208,7 @@ def main():
         return 1
     window = MainWindow()
     window.show()
+    QTimer.singleShot(0, lambda: bring_startup_to_front(window))
     return app.exec()
 
 

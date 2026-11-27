@@ -1,3 +1,7 @@
+## v8.9.33 — Janela em primeiro plano ao abrir
+
+- Ao abrir o Callas e confirmar a permissão do Windows, a janela solicita o primeiro plano uma única vez, sem permanecer sempre por cima.
+
 ## v8.9.32 — Indicadores do sistema e permissão ao abrir
 
 - O Início exibe quatro indicadores circulares para RAM, CPU, GPU e disco. O disco mostra o espaço livre e total. A GPU usa os contadores do Windows e indica quando o driver não fornece dados.
